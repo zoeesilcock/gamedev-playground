@@ -2,11 +2,14 @@ const std = @import("std");
 const r = @import("dependencies/raylib.zig");
 
 const DEBUG = @import("builtin").mode == std.builtin.OptimizeMode.Debug;
+const PLATFORM = @import("builtin").os.tag;
 
 const WINDOW_WIDTH = 800;
 const WINDOW_HEIGHT = 600;
 const TARGET_FPS = 120;
-const LIB_PATH = "zig-out/lib/libplayground.dylib";
+const LIB_OUTPUT_DIR = if (PLATFORM == .windows) "zig-out/bin/" else "zig-out/lib/";
+const LIB_PATH = if (PLATFORM == .windows) "zig-out/bin/playground.dll" else "zig-out/lib/libplayground.dylib";
+const LIB_PATH_RUNTIME = if (PLATFORM == .windows) "zig-out/bin/playground_temp.dll" else LIB_PATH;
 
 const GameStatePtr = *anyopaque;
 
@@ -75,7 +78,13 @@ pub fn main() !void {
 
 fn loadDll() !void {
     if (opt_dyn_lib != null) return error.AlreadyLoaded;
-    var dyn_lib = std.DynLib.open(LIB_PATH) catch {
+
+    if (PLATFORM == .windows) {
+        var output = try std.fs.cwd().openDir(LIB_OUTPUT_DIR, .{});
+        try output.copyFile("playground.dll", output, "playground_temp.dll", .{});
+    }
+
+    var dyn_lib = std.DynLib.open(LIB_PATH_RUNTIME) catch {
         return error.OpenFail;
     };
 
