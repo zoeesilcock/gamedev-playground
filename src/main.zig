@@ -14,6 +14,7 @@ var opt_dyn_lib: ?std.DynLib = null;
 var build_process: ?std.process.Child = null;
 var dyn_lib_last_modified: i128 = 0;
 var src_last_modified: i128 = 0;
+var assets_last_modified: i128 = 0;
 
 var gameInit: *const fn(u32, u32) GameStatePtr = undefined;
 var gameReload: *const fn(GameStatePtr) void = undefined;
@@ -28,14 +29,15 @@ pub fn main() !void {
     }
 
     loadDll() catch @panic("Failed to load the game lib.");
-    _ = dllHasChanged();
-    _ = srcHasChanged();
-
     const allocator = std.heap.c_allocator;
     const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT);
 
+    _ = dllHasChanged();
+    _ = srcHasChanged(allocator);
+    _ = assetsHaveChanged(allocator);
+
     while (!r.WindowShouldClose()) {
-        if (r.IsKeyPressed(r.KEY_F5) or srcHasChanged()) {
+        if (r.IsKeyPressed(r.KEY_F5) or srcHasChanged(allocator)) {
             try recompileDll(allocator);
         }
 
@@ -48,6 +50,9 @@ pub fn main() !void {
 
             unloadDll() catch unreachable;
             loadDll() catch @panic("Failed to load the game lib.");
+            gameReload(state);
+            _ = assetsHaveChanged(allocator);
+        } else if (assetsHaveChanged(allocator)) {
             gameReload(state);
         }
 
@@ -86,22 +91,36 @@ fn loadDll() !void {
 fn dllHasChanged() bool {
     var result = false;
     const stat = std.fs.cwd().statFile(LIB_PATH) catch return false;
-
     if (stat.mtime > dyn_lib_last_modified) {
         dyn_lib_last_modified = stat.mtime;
         result = true;
     }
-
     return result;
 }
 
-fn srcHasChanged() bool {
-    var result = false;
-    const stat = std.fs.cwd().statFile("src") catch return false;
+fn srcHasChanged(allocator: std.mem.Allocator) bool {
+    return checkForChangesInDirectory(allocator, "src", &src_last_modified) catch false;
+}
 
-    if (stat.mtime > src_last_modified) {
-        src_last_modified = stat.mtime;
-        result = true;
+fn assetsHaveChanged(allocator: std.mem.Allocator) bool {
+    return checkForChangesInDirectory(allocator, "assets", &assets_last_modified) catch false;
+}
+
+fn checkForChangesInDirectory(allocator: std.mem.Allocator, path: []const u8, last_change: *i128) !bool {
+    var result = false;
+
+    var assets = try std.fs.cwd().openDir(path, .{ .access_sub_paths = true, .iterate = true });
+    defer assets.close();
+
+    var walker = try assets.walk(allocator);
+    defer walker.deinit();
+
+    while (try walker.next()) |entry| {
+        const stat = try assets.statFile(entry.path);
+        if (stat.mtime > last_change.*) {
+            last_change.* = stat.mtime;
+            result = true;
+        }
     }
 
     return result;
