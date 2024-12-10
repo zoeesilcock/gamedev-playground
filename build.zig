@@ -19,20 +19,7 @@ pub fn build(b: *std.Build) void {
     });
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
-    const raylib_dep = b.dependency("raylib", .{
-        .target = target,
-        .optimize = optimize,
-        .shared = true,
-    });
-    const raygui_dep = b.dependency("raygui", .{
-        .target = target,
-        .optimize = optimize,
-        .shared = true,
-    });
-
-    lib.linkLibrary(raylib_dep.artifact("raylib"));
-    lib.addCSourceFile(.{ .file = b.path("src/dependencies/raygui.c") });
-    lib.addIncludePath(raygui_dep.path("src"));
+    linkLibraries(b, lib, target, optimize);
 
     b.installArtifact(lib);
 
@@ -45,9 +32,7 @@ pub fn build(b: *std.Build) void {
         });
         b.installArtifact(exe);
 
-        exe.linkLibrary(raylib_dep.artifact("raylib"));
-        exe.addCSourceFile(.{ .file = b.path("src/dependencies/raygui.c") });
-        exe.addIncludePath(raygui_dep.path("src"));
+        linkLibraries(b, exe, target, optimize);
 
         const run_cmd = b.addRunArtifact(exe);
         run_cmd.step.dependOn(b.getInstallStep());
@@ -69,4 +54,28 @@ pub fn build(b: *std.Build) void {
         test_step.dependOn(&run_lib_unit_tests.step);
         test_step.dependOn(&run_exe_unit_tests.step);
     }
+}
+
+fn linkLibraries(
+    b: *std.Build,
+    obj: *std.Build.Step.Compile,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) void {
+    const raylib_dep = b.dependency("raylib", .{
+        .target = target,
+        .optimize = optimize,
+        .shared = true,
+    });
+    const raygui_dep = b.dependency("raygui", .{
+        .target = target,
+        .optimize = optimize,
+        .shared = true,
+    });
+
+    obj.linkLibrary(raylib_dep.artifact("raylib"));
+    obj.addCSourceFile(.{ .file = b.path("src/dependencies/raygui.c") });
+    obj.addIncludePath(raygui_dep.path("src"));
+
+    b.installArtifact(raylib_dep.artifact("raylib"));
 }
