@@ -4,12 +4,13 @@ const r = @import("dependencies/raylib.zig");
 const DEBUG = @import("builtin").mode == std.builtin.OptimizeMode.Debug;
 const PLATFORM = @import("builtin").os.tag;
 
-const WINDOW_WIDTH = 800;
-const WINDOW_HEIGHT = 600;
-const TARGET_FPS = 120;
 const LIB_OUTPUT_DIR = if (PLATFORM == .windows) "zig-out/bin/" else "zig-out/lib/";
 const LIB_PATH = if (PLATFORM == .windows) "zig-out/bin/playground.dll" else "zig-out/lib/libplayground.dylib";
 const LIB_PATH_RUNTIME = if (PLATFORM == .windows) "zig-out/bin/playground_temp.dll" else LIB_PATH;
+
+const WINDOW_WIDTH = 800;
+const WINDOW_HEIGHT = 600;
+const TARGET_FPS = 120;
 
 const GameStatePtr = *anyopaque;
 
@@ -35,29 +36,10 @@ pub fn main() !void {
     const allocator = std.heap.c_allocator;
     const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT);
 
-    _ = dllHasChanged();
-    _ = srcHasChanged(allocator);
-    _ = assetsHaveChanged(allocator);
+    initChangeTimes(allocator);
 
     while (!r.WindowShouldClose()) {
-        if (r.IsKeyPressed(r.KEY_F5) or srcHasChanged(allocator)) {
-            try recompileDll(allocator);
-        }
-
-        if (dllHasChanged()) {
-            if (build_process != null) {
-                checkRecompileResult() catch {
-                    std.debug.print("Failed to recompile the game lib.\n", .{});
-                };
-            }
-
-            unloadDll() catch unreachable;
-            loadDll() catch @panic("Failed to load the game lib.");
-            gameReload(state);
-            _ = assetsHaveChanged(allocator);
-        } else if (assetsHaveChanged(allocator)) {
-            gameReload(state);
-        }
+        checkForChanges(state, allocator);
 
         gameTick(state);
 
@@ -76,25 +58,31 @@ pub fn main() !void {
     r.CloseWindow();
 }
 
-fn loadDll() !void {
-    if (opt_dyn_lib != null) return error.AlreadyLoaded;
+fn initChangeTimes(allocator: std.mem.Allocator) void {
+    _ = dllHasChanged();
+    _ = srcHasChanged(allocator);
+    _ = assetsHaveChanged(allocator);
+}
 
-    if (PLATFORM == .windows) {
-        var output = try std.fs.cwd().openDir(LIB_OUTPUT_DIR, .{});
-        try output.copyFile("playground.dll", output, "playground_temp.dll", .{});
+fn checkForChanges(state: GameStatePtr, allocator: std.mem.Allocator) void {
+    if (r.IsKeyPressed(r.KEY_F5) or srcHasChanged(allocator)) {
+        recompileDll(allocator) catch @panic("Failed to recompile the lib.");
     }
 
-    var dyn_lib = std.DynLib.open(LIB_PATH_RUNTIME) catch {
-        return error.OpenFail;
-    };
+    if (dllHasChanged()) {
+        if (build_process != null) {
+            checkRecompileResult() catch {
+                std.debug.print("Failed to recompile the game lib.\n", .{});
+            };
+        }
 
-    opt_dyn_lib = dyn_lib;
-    gameInit = dyn_lib.lookup(@TypeOf(gameInit), "init") orelse return error.LookupFail;
-    gameReload = dyn_lib.lookup(@TypeOf(gameReload), "reload") orelse return error.LookupFail;
-    gameTick = dyn_lib.lookup(@TypeOf(gameTick), "tick") orelse return error.LookupFail;
-    gameDraw = dyn_lib.lookup(@TypeOf(gameDraw), "draw") orelse return error.LookupFail;
-
-    std.debug.print("Game lib loaded.\n", .{});
+        unloadDll() catch unreachable;
+        loadDll() catch @panic("Failed to load the game lib.");
+        gameReload(state);
+        _ = assetsHaveChanged(allocator);
+    } else if (assetsHaveChanged(allocator)) {
+        gameReload(state);
+    }
 }
 
 fn dllHasChanged() bool {
@@ -142,6 +130,27 @@ fn unloadDll() !void {
     } else {
         return error.AlreadyUnloaded;
     }
+}
+
+fn loadDll() !void {
+    if (opt_dyn_lib != null) return error.AlreadyLoaded;
+
+    if (PLATFORM == .windows) {
+        var output = try std.fs.cwd().openDir(LIB_OUTPUT_DIR, .{});
+        try output.copyFile("playground.dll", output, "playground_temp.dll", .{});
+    }
+
+    var dyn_lib = std.DynLib.open(LIB_PATH_RUNTIME) catch {
+        return error.OpenFail;
+    };
+
+    opt_dyn_lib = dyn_lib;
+    gameInit = dyn_lib.lookup(@TypeOf(gameInit), "init") orelse return error.LookupFail;
+    gameReload = dyn_lib.lookup(@TypeOf(gameReload), "reload") orelse return error.LookupFail;
+    gameTick = dyn_lib.lookup(@TypeOf(gameTick), "tick") orelse return error.LookupFail;
+    gameDraw = dyn_lib.lookup(@TypeOf(gameDraw), "draw") orelse return error.LookupFail;
+
+    std.debug.print("Game lib loaded.\n", .{});
 }
 
 fn recompileDll(allocator: std.mem.Allocator) !void {
