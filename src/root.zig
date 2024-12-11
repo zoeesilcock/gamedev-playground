@@ -265,7 +265,7 @@ const AseCelChunk = struct {
         compressedImage: struct {
             width: u16,         //   WORD      Width in pixels
             height: u16,        //   WORD      Height in pixels
-            pixels: []u8        //   PIXEL[]   "Raw Cel" data compressed with ZLIB method (see NOTE.3)
+            pixels: []const u8  //   PIXEL[]   "Raw Cel" data compressed with ZLIB method (see NOTE.3)
         },
         compressedTileMap: struct {
             width: u16,         //   WORD      Width in number of tiles
@@ -281,20 +281,26 @@ const AseCelChunk = struct {
         }
     },
 
-    pub fn headerSize() u32 {
-        return
+    pub fn headerSize(cel_type: AseCelType) u32 {
+        var result: u32 =
             @sizeOf(u16) + 
             @sizeOf(i16) + 
             @sizeOf(i16) + 
             @sizeOf(u8) + 
             @sizeOf(u16) + 
-            @sizeOf(i16);
+            @sizeOf(i16) +
+            5;
+
+        result += switch(cel_type) {
+            .compressedImage => @sizeOf(u16) + @sizeOf(u16),
+            else => 0,
+        };
+
+        return result;
     }
 };
 
 fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: std.mem.Allocator) !void {
-    _ = header;
-
     const chunk: *AseCelChunk = try allocator.create(AseCelChunk);
     chunk.layer_index = try file.reader().readInt(u16, .little);
     chunk.x = try file.reader().readInt(i16, .little);
@@ -316,10 +322,22 @@ fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: s
                     .pixels = undefined,
                 }
             };
+
             std.debug.print("Cel width: {d}, height: {d}\n", .{ chunk.data.compressedImage.width, chunk.data.compressedImage.height });
+
+            const data_size = header.chunkSize() - AseCelChunk.headerSize(chunk.cel_type);
+            std.debug.print("Data size: {d}, chunk size: {d}, header size: {d}\n", .{ data_size, header.chunkSize(), AseCelChunk.headerSize(chunk.cel_type) });
+
+            const data: []u8 = try allocator.alloc(u8, data_size);
+            const bytes_read = try file.reader().read(data);
+
+            std.debug.print("Read: {d}, expected: {d}\n", .{ bytes_read, data_size });
+            std.debug.assert(bytes_read == data_size);
+
+            chunk.data.compressedImage.pixels = data;
         },
         else => {
-            _ = try file.reader().skipBytes(AseCelChunk.headerSize(), .{});
+            _ = try file.reader().skipBytes(AseCelChunk.headerSize(chunk.cel_type), .{});
         },
     }
 }
