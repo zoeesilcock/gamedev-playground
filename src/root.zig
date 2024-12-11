@@ -162,7 +162,6 @@ const AseFrameHeader = packed struct {
 const AseChunkHeader = extern struct {
     size: u32 align(1),                  // DWORD       Chunk size
     chunk_type: AseChunkTypes align(1),  // WORD        Chunk type
-    // bytes: []u8,                      // BYTE[]      Chunk data
 
     pub fn chunkSize(self: *AseChunkHeader) u32 {
         return self.size - @sizeOf(AseChunkHeader);
@@ -187,8 +186,6 @@ const AseChunkTypes = enum(u16) {
 };
 
 fn loadAsepriteFile(path: []const u8, allocator: std.mem.Allocator) !void {
-    _ = allocator;
-
     std.debug.assert(@sizeOf(AseHeader) == 128);
     std.debug.assert(@sizeOf(AseFrameHeader) == 16);
     std.debug.assert(@sizeOf(AseChunkHeader) == 6);
@@ -220,7 +217,7 @@ fn loadAsepriteFile(path: []const u8, allocator: std.mem.Allocator) !void {
 
                 switch (chunk_header.chunk_type) {
                     .Cel => {
-                        _ = try file.reader().skipBytes(chunk_header.chunkSize(), .{});
+                        try parseCelChunk(&file, chunk_header, allocator);
                     },
                     else => {
                         _ = try file.reader().skipBytes(chunk_header.chunkSize(), .{});
@@ -230,5 +227,99 @@ fn loadAsepriteFile(path: []const u8, allocator: std.mem.Allocator) !void {
         }
     } else |err| {
         std.debug.print("Cannot find file '{s}': {s}", .{ path, @errorName(err) });
+    }
+}
+
+const AseCelType = enum(u16) {
+    rawImageData,               // (unused, compressed image is preferred)
+    linkedCel,
+    compressedImage,
+    compressedTileMap,
+};
+
+const AseCelChunk = struct {
+    layer_index: u16,           // WORD        Layer index (see NOTE.2)
+    x: i16,                     // SHORT       X position
+    y: i16,                     // SHORT       Y position
+    opacity: u8,                // BYTE        Opacity level
+    cel_type: AseCelType,       // WORD        Cel Type
+                                //             0 - Raw Image Data (unused, compressed image is preferred)
+                                //             1 - Linked Cel
+                                //             2 - Compressed Image
+                                //             3 - Compressed Tilemap
+    z_index: i16,               // SHORT       Z-Index (see NOTE.5)
+                                //             0 = default layer ordering
+                                //             +N = show this cel N layers later
+                                //             -N = show this cel N layers back
+    //reserved: [5]u8           // BYTE[5]     For future (set to zero)
+    data: union(AseCelType) {
+        rawImageData: struct {
+            width: u16,         //   WORD      Width in pixels
+            height: u16,        //   WORD      Height in pixels
+            pixels: []u8,       //   PIXEL[]   Raw pixel data: row by row from top to bottom,
+                                //             for each scanline read pixels from left to right.
+        },
+        linkedCel: struct {
+            link: u16           //   WORD      Frame position to link with
+        },
+        compressedImage: struct {
+            width: u16,         //   WORD      Width in pixels
+            height: u16,        //   WORD      Height in pixels
+            pixels: []u8        //   PIXEL[]   "Raw Cel" data compressed with ZLIB method (see NOTE.3)
+        },
+        compressedTileMap: struct {
+            width: u16,         //   WORD      Width in number of tiles
+            height: u16,        //   WORD      Height in number of tiles
+            bits_per_tile: u16, //   WORD      Bits per tile (at the moment it's always 32-bit per tile)
+            tile_id: u32,       //   DWORD     Bitmask for tile ID (e.g. 0x1fffffff for 32-bit tiles)
+            x_flip: u32,        //   DWORD     Bitmask for X flip
+            y_flip: u32,        //   DWORD     Bitmask for Y flip
+            diagonal_flip: u32, //   DWORD     Bitmask for diagonal flip (swap X/Y axis)
+                                //   BYTE[10]  Reserved
+            tiles: []u8,        //   TILE[]    Row by row, from top to bottom tile by tile
+                                //             compressed with ZLIB method (see NOTE.3)
+        }
+    },
+
+    pub fn headerSize() u32 {
+        return
+            @sizeOf(u16) + 
+            @sizeOf(i16) + 
+            @sizeOf(i16) + 
+            @sizeOf(u8) + 
+            @sizeOf(u16) + 
+            @sizeOf(i16);
+    }
+};
+
+fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: std.mem.Allocator) !void {
+    _ = header;
+
+    const chunk: *AseCelChunk = try allocator.create(AseCelChunk);
+    chunk.layer_index = try file.reader().readInt(u16, .little);
+    chunk.x = try file.reader().readInt(i16, .little);
+    chunk.y = try file.reader().readInt(i16, .little);
+    chunk.opacity = try file.reader().readInt(u8, .little);
+    chunk.cel_type = @enumFromInt(try file.reader().readInt(u16, .little));
+    chunk.z_index = try file.reader().readInt(i16, .little);
+
+    std.debug.print("Cel x: {d}, y: {d}, type: {}\n", .{ chunk.x, chunk.y, chunk.cel_type });
+
+    _ = try file.reader().skipBytes(5, .{});
+
+    switch (chunk.cel_type) {
+        .compressedImage => {
+            chunk.data = .{
+                .compressedImage = .{
+                    .width = try file.reader().readInt(u16, .little),
+                    .height = try file.reader().readInt(u16, .little),
+                    .pixels = undefined,
+                }
+            };
+            std.debug.print("Cel width: {d}, height: {d}\n", .{ chunk.data.compressedImage.width, chunk.data.compressedImage.height });
+        },
+        else => {
+            _ = try file.reader().skipBytes(AseCelChunk.headerSize(), .{});
+        },
     }
 }
