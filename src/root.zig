@@ -159,13 +159,17 @@ const AseFrameHeader = packed struct {
     }
 };
 
-const AseChunk = extern struct {
-    size: u32,              // DWORD       Chunk size
-    chunk_type: u16,        // WORD        Chunk type
-    bytes: []u8,            // BYTE[]      Chunk data
+const AseChunkHeader = extern struct {
+    size: u32 align(1),                  // DWORD       Chunk size
+    chunk_type: AseChunkTypes align(1),  // WORD        Chunk type
+    // bytes: []u8,                      // BYTE[]      Chunk data
+
+    pub fn chunkSize(self: *AseChunkHeader) u32 {
+        return self.size - @sizeOf(AseChunkHeader);
+    }
 };
 
-const AseChunkTypes = enum(u32) {
+const AseChunkTypes = enum(u16) {
     OldPalette1 = 0x0004,
     OldPalette2 = 0x0011,
     Layer = 0x2004,
@@ -185,10 +189,12 @@ const AseChunkTypes = enum(u32) {
 fn loadAsepriteFile(path: []const u8, allocator: std.mem.Allocator) !void {
     _ = allocator;
 
+    std.debug.assert(@sizeOf(AseHeader) == 128);
+    std.debug.assert(@sizeOf(AseFrameHeader) == 16);
+    std.debug.assert(@sizeOf(AseChunkHeader) == 6);
+
     if (std.fs.cwd().openFile(path, .{ .mode = .read_only })) |file| {
         defer file.close();
-
-        std.debug.print("HeaderSize: {d}, FrameHeaderSize: {d}\n", .{ @sizeOf(AseHeader), @sizeOf(AseFrameHeader) });
 
         var main_buffer: [@sizeOf(AseHeader)]u8 align(@alignOf(AseHeader)) = undefined;
         _ = try file.read(&main_buffer);
@@ -204,6 +210,23 @@ fn loadAsepriteFile(path: []const u8, allocator: std.mem.Allocator) !void {
 
             std.debug.assert(frame_header.magic_number == 0xF1FA);
             std.debug.print("Frame size: {d}, chunks: {d}\n", .{ frame_header.byte_count, frame_header.chunkCount() });
+
+            for (0..frame_header.chunkCount()) |_| {
+                var chunk_header_buffer: [@sizeOf(AseChunkHeader)]u8 align(@alignOf(AseChunkHeader)) = undefined;
+                _ = try file.read(&chunk_header_buffer);
+                const chunk_header: *AseChunkHeader = @ptrCast(&chunk_header_buffer);
+
+                std.debug.print("Chunk size: {d}, chunk_type: {}\n", .{ chunk_header.chunkSize(), chunk_header.chunk_type });
+
+                switch (chunk_header.chunk_type) {
+                    .Cel => {
+                        _ = try file.reader().skipBytes(chunk_header.chunkSize(), .{});
+                    },
+                    else => {
+                        _ = try file.reader().skipBytes(chunk_header.chunkSize(), .{});
+                    }
+                }
+            }
         }
     } else |err| {
         std.debug.print("Cannot find file '{s}': {s}", .{ path, @errorName(err) });
