@@ -90,8 +90,18 @@ fn initializeRenderTexture(state: *State) void {
 }
 
 fn loadAssets(state: *State) void {
-    state.assets.test_texture = r.LoadTexture("assets/test.png");
-    loadAsepriteFile("assets/test.aseprite", state.allocator) catch undefined;
+    // state.assets.test_texture = r.LoadTexture("assets/test.png");
+
+    if (loadAsepriteFile("assets/test.aseprite", state.allocator) catch undefined) |cel| {
+        const image: r.Image = .{
+            .data = @ptrCast(@constCast(cel.data.compressedImage.pixels)),
+            .width = cel.data.compressedImage.width,
+            .height = cel.data.compressedImage.height,
+            .mipmaps = 1,
+            .format = r.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
+        };
+        state.assets.test_texture = r.LoadTextureFromImage(image);
+    }
 }
 
 fn drawWorld(state: *State) void {
@@ -185,7 +195,9 @@ const AseChunkTypes = enum(u16) {
     TileSet = 0x2023
 };
 
-fn loadAsepriteFile(path: []const u8, allocator: std.mem.Allocator) !void {
+fn loadAsepriteFile(path: []const u8, allocator: std.mem.Allocator) !?*AseCelChunk {
+    var result: ?*AseCelChunk = null;
+
     std.debug.assert(@sizeOf(AseHeader) == 128);
     std.debug.assert(@sizeOf(AseFrameHeader) == 16);
     std.debug.assert(@sizeOf(AseChunkHeader) == 6);
@@ -217,7 +229,7 @@ fn loadAsepriteFile(path: []const u8, allocator: std.mem.Allocator) !void {
 
                 switch (chunk_header.chunk_type) {
                     .Cel => {
-                        try parseCelChunk(&file, chunk_header, allocator);
+                        result = try parseCelChunk(&file, chunk_header, allocator);
                     },
                     else => {
                         _ = try file.reader().skipBytes(chunk_header.chunkSize(), .{});
@@ -228,6 +240,8 @@ fn loadAsepriteFile(path: []const u8, allocator: std.mem.Allocator) !void {
     } else |err| {
         std.debug.print("Cannot find file '{s}': {s}", .{ path, @errorName(err) });
     }
+
+    return result;
 }
 
 const AseCelType = enum(u16) {
@@ -300,7 +314,7 @@ const AseCelChunk = struct {
     }
 };
 
-fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: std.mem.Allocator) !void {
+fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: std.mem.Allocator) !?*AseCelChunk {
     const chunk: *AseCelChunk = try allocator.create(AseCelChunk);
     chunk.layer_index = try file.reader().readInt(u16, .little);
     chunk.x = try file.reader().readInt(i16, .little);
@@ -328,16 +342,22 @@ fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: s
             const data_size = header.chunkSize() - AseCelChunk.headerSize(chunk.cel_type);
             std.debug.print("Data size: {d}, chunk size: {d}, header size: {d}\n", .{ data_size, header.chunkSize(), AseCelChunk.headerSize(chunk.cel_type) });
 
-            const data: []u8 = try allocator.alloc(u8, data_size);
-            const bytes_read = try file.reader().read(data);
+            const compressed_data: []u8 = try allocator.alloc(u8, data_size);
+            const bytes_read = try file.reader().read(compressed_data);
 
             std.debug.print("Read: {d}, expected: {d}\n", .{ bytes_read, data_size });
             std.debug.assert(bytes_read == data_size);
 
-            chunk.data.compressedImage.pixels = data;
+            var compressed_stream = std.io.fixedBufferStream(compressed_data);
+            var decompress_stream = std.compress.zlib.decompressor(compressed_stream.reader());
+            chunk.data.compressedImage.pixels = try decompress_stream.reader().readAllAlloc(allocator, std.math.maxInt(usize));
+
+            std.debug.print("Decompressed: {d}\n", .{ chunk.data.compressedImage.pixels.len });
         },
         else => {
             _ = try file.reader().skipBytes(AseCelChunk.headerSize(chunk.cel_type), .{});
         },
     }
+
+    return chunk;
 }
