@@ -33,7 +33,7 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     state.render_texture = null;
     state.source_rect = null;
     state.dest_rect = null;
-    state.world_scale = 4;
+    state.world_scale = 2;
 
     loadAssets(state);
 

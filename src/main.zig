@@ -8,8 +8,10 @@ const LIB_OUTPUT_DIR = if (PLATFORM == .windows) "zig-out/bin/" else "zig-out/li
 const LIB_PATH = if (PLATFORM == .windows) "zig-out/bin/playground.dll" else "zig-out/lib/libplayground.dylib";
 const LIB_PATH_RUNTIME = if (PLATFORM == .windows) "zig-out/bin/playground_temp.dll" else LIB_PATH;
 
-const WINDOW_WIDTH = 800;
-const WINDOW_HEIGHT = 600;
+const WINDOW_WIDTH = if (DEBUG) 400 else 800;
+const WINDOW_HEIGHT = if (DEBUG) 300 else 600;
+const WINDOW_DECORATIONS_WIDTH = if (PLATFORM == .windows) 16 else 0;
+const WINDOW_DECORATIONS_HEIGHT = if (PLATFORM == .windows) 39 else 0;
 const TARGET_FPS = 120;
 
 const GameStatePtr = *anyopaque;
@@ -26,14 +28,25 @@ var gameTick: *const fn(GameStatePtr) void = undefined;
 var gameDraw: *const fn(GameStatePtr) void = undefined;
 
 pub fn main() !void {
+    const allocator = std.heap.c_allocator;
+
+    r.SetConfigFlags(r.FLAG_WINDOW_HIGHDPI);
     r.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Playground");
 
-    if (!DEBUG) {
+    const current_monitor = r.GetCurrentMonitor();
+    const monitor_width = r.GetMonitorWidth(current_monitor);
+
+    if (DEBUG) {
+        const window_offset_x: c_int = 12;
+        const window_offset_y: c_int = 12 + WINDOW_DECORATIONS_HEIGHT;
+
+        r.SetWindowPosition(monitor_width - WINDOW_WIDTH - window_offset_x, window_offset_y);
+        r.SetWindowState(r.FLAG_WINDOW_TOPMOST);
+    } else {
         r.SetTargetFPS(TARGET_FPS);
     }
 
     loadDll() catch @panic("Failed to load the game lib.");
-    const allocator = std.heap.c_allocator;
     const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT);
 
     initChangeTimes(allocator);
@@ -46,7 +59,6 @@ pub fn main() !void {
         r.BeginDrawing();
         {
             gameDraw(state);
-            r.DrawFPS(10, WINDOW_HEIGHT - 30);
 
             if (build_process != null) {
                 r.DrawText("Re-compiling", 10, WINDOW_HEIGHT - 60, 16, r.WHITE);
