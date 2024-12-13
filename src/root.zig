@@ -1,6 +1,10 @@
 const std = @import("std");
 const r = @import("dependencies/raylib.zig");
 
+const PLATFORM = @import("builtin").os.tag;
+
+const DOUBLE_CLICK_THRESHOLD: f32 = 0.3;
+
 pub const State = struct {
     allocator: std.mem.Allocator,
 
@@ -16,6 +20,8 @@ pub const State = struct {
     dest_rect: ?r.Rectangle,
 
     assets: Assets,
+
+    last_left_click_time: f64,
 };
 
 const Assets = struct {
@@ -46,7 +52,15 @@ export fn reload(state_ptr: *anyopaque) void {
 }
 
 export fn tick(state_ptr: *anyopaque) void {
-    _ = state_ptr;
+    const state: *State = @ptrCast(@alignCast(state_ptr));
+
+    if (r.IsMouseButtonPressed(0)) {
+        if (r.GetTime() - state.last_left_click_time < DOUBLE_CLICK_THRESHOLD) {
+            openSprite(state);
+        }
+
+        state.last_left_click_time = r.GetTime();
+    }
 }
 
 export fn draw(state_ptr: *anyopaque) void {
@@ -114,6 +128,22 @@ fn drawWorld(state: *State) void {
 
         r.DrawTextureV(sprite, position, r.WHITE);
     }
+}
+
+fn openSprite(state: *State) void {
+    const process_args = if (PLATFORM == .windows) [_][]const u8{ 
+        // "Aseprite.exe",
+        "explorer.exe",
+        ".\\assets\\test.aseprite",
+    } else [_][]const u8{ 
+        "open",
+        "./assets/test.aseprite",
+    };
+
+    var aseprite_process = std.process.Child.init(&process_args, state.allocator);
+    aseprite_process.spawn() catch |err| {
+        std.debug.print("Error spawning process: {}\n", .{ err });
+    };
 }
 
 const AseHeader = packed struct {
