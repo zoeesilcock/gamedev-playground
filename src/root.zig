@@ -107,7 +107,8 @@ fn initializeRenderTexture(state: *State) void {
 fn loadAssets(state: *State) void {
     // state.assets.test_texture = r.LoadTexture("assets/test.png");
 
-    if (aseprite.loadDocument("assets/test.aseprite", state.allocator) catch undefined) |cel| {
+    if (aseprite.loadDocument("assets/test.aseprite", state.allocator) catch undefined) |doc| {
+        const cel = doc.frames[0].cel_chunk;
         const image: r.Image = .{
             .data = @ptrCast(@constCast(cel.data.compressedImage.pixels)),
             .width = cel.data.compressedImage.width,

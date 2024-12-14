@@ -1,5 +1,27 @@
 const std = @import("std");
 
+const AseDocument = struct {
+    allocator: std.mem.Allocator,
+    header: *const AseHeader,
+    frames: []const AseFrame,
+
+    pub fn deinit(self: AseDocument) void {
+        for (self.frames) |frame| {
+            frame.deinit(self.allocator);
+        }
+    }
+};
+
+const AseFrame = struct {
+    header: AseFrameHeader,
+    cel_chunk: *AseCelChunk,
+
+    pub fn deinit(self: AseFrame, allocator: std.mem.Allocator) void {
+        allocator.free(self.cel_chunk.data.compressedImage.pixels);
+        allocator.destroy(self.cel_chunk);
+    }
+};
+
 const AseHeader = packed struct {
     file_size: u32,         // DWORD       File size
     magic_number: u16,      // WORD        Magic number (0xA5E0)
@@ -149,8 +171,8 @@ const AseCelChunk = struct {
     }
 };
 
-pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?*AseCelChunk {
-    var result: ?*AseCelChunk = null;
+pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocument {
+    var result: ?AseDocument = null;
 
     std.debug.assert(@sizeOf(AseHeader) == 128);
     std.debug.assert(@sizeOf(AseFrameHeader) == 16);
@@ -162,6 +184,8 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?*AseCelChu
         var main_buffer: [@sizeOf(AseHeader)]u8 align(@alignOf(AseHeader)) = undefined;
         _ = try file.read(&main_buffer);
         const header: *const AseHeader = @ptrCast(&main_buffer);
+        var opt_cel_chunk: ?*AseCelChunk = null;
+        var frame_header: *AseFrameHeader = undefined;
 
         std.debug.assert(header.magic_number == 0xA5E0);
         std.debug.print("Frame count: {d}\n", .{ header.frames });
@@ -169,7 +193,7 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?*AseCelChu
         for (0..header.frames) |_| {
             var buffer: [@sizeOf(AseFrameHeader)]u8 align(@alignOf(AseFrameHeader)) = undefined;
             _ = try file.read(&buffer);
-            const frame_header: *AseFrameHeader = @ptrCast(&buffer);
+            frame_header = @ptrCast(&buffer);
 
             std.debug.assert(frame_header.magic_number == 0xF1FA);
             std.debug.print("Frame size: {d}, chunks: {d}\n", .{ frame_header.byte_count, frame_header.chunkCount() });
@@ -183,13 +207,26 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?*AseCelChu
 
                 switch (chunk_header.chunk_type) {
                     .Cel => {
-                        result = try parseCelChunk(&file, chunk_header, allocator);
+                        opt_cel_chunk = try parseCelChunk(&file, chunk_header, allocator);
                     },
                     else => {
                         _ = try file.reader().skipBytes(chunk_header.chunkSize(), .{});
                     }
                 }
             }
+        }
+
+        if (opt_cel_chunk) |cel_chunk| {
+            result = AseDocument{
+                .allocator = allocator,
+                .header = header,
+                .frames = &.{
+                    AseFrame{
+                        .header = frame_header.*,
+                        .cel_chunk = cel_chunk,
+                    },
+                },
+            };
         }
     } else |err| {
         std.debug.print("Cannot find file '{s}': {s}", .{ path, @errorName(err) });
@@ -227,6 +264,7 @@ fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: s
             std.debug.print("Data size: {d}, chunk size: {d}, header size: {d}\n", .{ data_size, header.chunkSize(), AseCelChunk.headerSize(chunk.cel_type) });
 
             const compressed_data: []u8 = try allocator.alloc(u8, data_size);
+            defer allocator.free(compressed_data);
             const bytes_read = try file.reader().read(compressed_data);
 
             std.debug.print("Read: {d}, expected: {d}\n", .{ bytes_read, data_size });
@@ -244,4 +282,21 @@ fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: s
     }
 
     return chunk;
+}
+
+test "load document" {
+    const aseprite_doc: ?AseDocument = try loadDocument("assets/test.aseprite", std.testing.allocator);
+
+    try std.testing.expect(aseprite_doc != null);
+
+    if (aseprite_doc) |doc| {
+        defer doc.deinit();
+
+        const cel_chunk = doc.frames[0].cel_chunk;
+
+        try std.testing.expectEqual(0, cel_chunk.x);
+        try std.testing.expectEqual(0, cel_chunk.y);
+        try std.testing.expectEqual(32, cel_chunk.data.compressedImage.width);
+        try std.testing.expectEqual(32, cel_chunk.data.compressedImage.height);
+    }
 }

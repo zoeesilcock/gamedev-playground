@@ -20,6 +20,7 @@ pub fn build(b: *std.Build) void {
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
     linkLibraries(b, lib, target, optimize);
+    linkLibraries(b, lib_unit_tests, target, optimize);
 
     b.installArtifact(lib);
 
