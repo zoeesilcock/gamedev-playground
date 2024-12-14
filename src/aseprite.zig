@@ -1,5 +1,6 @@
 const std = @import("std");
 
+// Public API.
 const AseDocument = struct {
     allocator: std.mem.Allocator,
     header: *const AseHeader,
@@ -9,20 +10,85 @@ const AseDocument = struct {
         for (self.frames) |frame| {
             frame.deinit(self.allocator);
         }
+
+        self.allocator.destroy(self.header);
     }
 };
 
 const AseFrame = struct {
-    header: AseFrameHeader,
+    header: *AseFrameHeader,
     cel_chunk: *AseCelChunk,
 
     pub fn deinit(self: AseFrame, allocator: std.mem.Allocator) void {
         allocator.free(self.cel_chunk.data.compressedImage.pixels);
+        allocator.destroy(self.header);
         allocator.destroy(self.cel_chunk);
     }
 };
 
-const AseHeader = packed struct {
+pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocument {
+    var result: ?AseDocument = null;
+
+    if (std.fs.cwd().openFile(path, .{ .mode = .read_only })) |file| {
+        defer file.close();
+
+        const opt_header: ?*AseHeader = try parseHeader(&file, allocator);
+        var opt_cel_chunk: ?*AseCelChunk = null;
+        var opt_frame_header: ?*AseFrameHeader = null;
+
+        if (opt_header) |header| {
+            std.debug.assert(header.magic_number == 0xA5E0);
+            std.debug.print("Frame count: {d}\n", .{ header.frames });
+
+            for (0..header.frames) |_| {
+                opt_frame_header = try parseFrameHeader(&file, allocator);
+
+                if (opt_frame_header) |frame_header| {
+                    std.debug.assert(frame_header.magic_number == 0xF1FA);
+                    std.debug.print("Frame size: {d}, chunks: {d}\n", .{ frame_header.byte_count, frame_header.chunkCount() });
+
+                    for (0..frame_header.chunkCount()) |_| {
+                        if (try parseChunkHeader(&file, allocator)) |chunk_header| {
+                            defer allocator.destroy(chunk_header);
+                            std.debug.print("Chunk size: {d}, chunk_type: {}\n", .{ chunk_header.chunkSize(), chunk_header.chunk_type });
+
+                            switch (chunk_header.chunk_type) {
+                                .Cel => {
+                                    opt_cel_chunk = try parseCelChunk(&file, chunk_header, allocator);
+                                },
+                                else => {
+                                    _ = try file.reader().skipBytes(chunk_header.chunkSize(), .{});
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (opt_header) |header| {
+            if (opt_cel_chunk) |cel_chunk| {
+                result = AseDocument{
+                    .allocator = allocator,
+                    .header = header,
+                    .frames = &.{
+                        AseFrame{
+                            .header = opt_frame_header.?,
+                            .cel_chunk = cel_chunk,
+                        },
+                    },
+                };
+            }
+        }
+    } else |err| {
+        std.debug.print("Cannot find file '{s}': {s}", .{ path, @errorName(err) });
+    }
+
+    return result;
+}
+
+// File format structs.
+const AseHeader = struct {
     file_size: u32,         // DWORD       File size
     magic_number: u16,      // WORD        Magic number (0xA5E0)
     frames: u16,            // WORD        Frames
@@ -41,7 +107,7 @@ const AseHeader = packed struct {
     padding2: u32,          // DWORD       Set be 0
     palette_index: u8,      // BYTE        Palette entry (index) which represent transparent color
                             // in all non-background layers (only for Indexed sprites).
-    padding3: u24,          // BYTE[3]     Ignore these bytes
+    //padding3: u24,        // BYTE[3]     Ignore these bytes
     color_count: u16,       // WORD        Number of colors (0 means 256 for old sprites)
     pixel_width: u8,        // BYTE        Pixel width (pixel ratio is "pixel width/pixel height").
                             // If this or pixel height field is zero, pixel ratio is 1:1
@@ -51,10 +117,10 @@ const AseHeader = packed struct {
     grid_width: u16,        // WORD        Grid width (zero if there is no grid, grid size
                             //     is 16x16 on Aseprite by default)
     grid_height: u16,       // WORD        Grid height (zero if there is no grid)
-    reserved: u672,         // BYTE[84]    For future (set to zero)
+    //reserved: u672,       // BYTE[84]    For future (set to zero)
 };
 
-const AseFrameHeader = packed struct {
+const AseFrameHeader = struct {
     byte_count: u32,        // DWORD       Bytes in this frame
     magic_number: u16,      // WORD        Magic number (always 0xF1FA)
     old_chunk_count: u16,   // WORD        Old field which specifies the number of "chunks"
@@ -62,7 +128,7 @@ const AseFrameHeader = packed struct {
                             //             have more chunks to read in this frame
                             //             (so we have to use the new field)
     frame_duration: u16,    // WORD        Frame duration (in milliseconds)
-    reserved: u16,          // BYTE[2]     For future (set to zero)
+    //reserved: u16,        // BYTE[2]     For future (set to zero)
     chunk_count: u32,       // DWORD       New field which specifies the number of "chunks"
                             //             in this frame (if this is 0, use the old field)
 
@@ -75,7 +141,7 @@ const AseFrameHeader = packed struct {
     }
 };
 
-const AseChunkHeader = extern struct {
+const AseChunkHeader = struct {
     size: u32 align(1),                  // DWORD       Chunk size
     chunk_type: AseChunkTypes align(1),  // WORD        Chunk type
 
@@ -171,72 +237,58 @@ const AseCelChunk = struct {
     }
 };
 
-pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocument {
-    var result: ?AseDocument = null;
+fn parseHeader(file: *const std.fs.File, allocator: std.mem.Allocator) !?*AseHeader {
+    const header: *AseHeader = try allocator.create(AseHeader);
 
-    std.debug.assert(@sizeOf(AseHeader) == 128);
-    std.debug.assert(@sizeOf(AseFrameHeader) == 16);
-    std.debug.assert(@sizeOf(AseChunkHeader) == 6);
+    header.file_size = try file.reader().readInt(u32, .little);
+    header.magic_number = try file.reader().readInt(u16, .little);
+    header.frames = try file.reader().readInt(u16, .little);
+    header.width = try file.reader().readInt(u16, .little);
+    header.height = try file.reader().readInt(u16, .little);
+    header.color_depth = try file.reader().readInt(u16, .little);
+    header.flags = try file.reader().readInt(u32, .little);
+    header.speed = try file.reader().readInt(u16, .little);
+    header.padding1 = try file.reader().readInt(u32, .little);
+    header.padding2 = try file.reader().readInt(u32, .little);
+    header.palette_index = try file.reader().readInt(u8, .little);
+    try file.reader().skipBytes(3, .{});
+    header.color_count = try file.reader().readInt(u16, .little);
+    header.pixel_width = try file.reader().readInt(u8, .little);
+    header.pixel_height = try file.reader().readInt(u8, .little);
+    header.grid_y = try file.reader().readInt(i16, .little);
+    header.grid_x = try file.reader().readInt(i16, .little);
+    header.grid_width = try file.reader().readInt(u16, .little);
+    header.grid_height = try file.reader().readInt(u16, .little);
+    try file.reader().skipBytes(84, .{});
 
-    if (std.fs.cwd().openFile(path, .{ .mode = .read_only })) |file| {
-        defer file.close();
+    return header;
+}
 
-        var main_buffer: [@sizeOf(AseHeader)]u8 align(@alignOf(AseHeader)) = undefined;
-        _ = try file.read(&main_buffer);
-        const header: *const AseHeader = @ptrCast(&main_buffer);
-        var opt_cel_chunk: ?*AseCelChunk = null;
-        var frame_header: *AseFrameHeader = undefined;
+fn parseFrameHeader(file: *const std.fs.File, allocator: std.mem.Allocator) !?*AseFrameHeader {
+    const header: *AseFrameHeader = try allocator.create(AseFrameHeader);
 
-        std.debug.assert(header.magic_number == 0xA5E0);
-        std.debug.print("Frame count: {d}\n", .{ header.frames });
+    header.byte_count = try file.reader().readInt(u32, .little);
+    header.magic_number = try file.reader().readInt(u16, .little);
+    header.old_chunk_count = try file.reader().readInt(u16, .little);
+    header.frame_duration = try file.reader().readInt(u16, .little);
+    try file.reader().skipBytes(2, .{});
+    header.chunk_count = try file.reader().readInt(u32, .little);
 
-        for (0..header.frames) |_| {
-            var buffer: [@sizeOf(AseFrameHeader)]u8 align(@alignOf(AseFrameHeader)) = undefined;
-            _ = try file.read(&buffer);
-            frame_header = @ptrCast(&buffer);
+    return header;
+}
 
-            std.debug.assert(frame_header.magic_number == 0xF1FA);
-            std.debug.print("Frame size: {d}, chunks: {d}\n", .{ frame_header.byte_count, frame_header.chunkCount() });
+fn parseChunkHeader(file: *const std.fs.File, allocator: std.mem.Allocator) !?*AseChunkHeader {
+    const header: *AseChunkHeader = try allocator.create(AseChunkHeader);
 
-            for (0..frame_header.chunkCount()) |_| {
-                var chunk_header_buffer: [@sizeOf(AseChunkHeader)]u8 align(@alignOf(AseChunkHeader)) = undefined;
-                _ = try file.read(&chunk_header_buffer);
-                const chunk_header: *AseChunkHeader = @ptrCast(&chunk_header_buffer);
+    header.size = try file.reader().readInt(u32, .little);
+    header.chunk_type = @enumFromInt(try file.reader().readInt(u16, .little));
 
-                std.debug.print("Chunk size: {d}, chunk_type: {}\n", .{ chunk_header.chunkSize(), chunk_header.chunk_type });
-
-                switch (chunk_header.chunk_type) {
-                    .Cel => {
-                        opt_cel_chunk = try parseCelChunk(&file, chunk_header, allocator);
-                    },
-                    else => {
-                        _ = try file.reader().skipBytes(chunk_header.chunkSize(), .{});
-                    }
-                }
-            }
-        }
-
-        if (opt_cel_chunk) |cel_chunk| {
-            result = AseDocument{
-                .allocator = allocator,
-                .header = header,
-                .frames = &.{
-                    AseFrame{
-                        .header = frame_header.*,
-                        .cel_chunk = cel_chunk,
-                    },
-                },
-            };
-        }
-    } else |err| {
-        std.debug.print("Cannot find file '{s}': {s}", .{ path, @errorName(err) });
-    }
-
-    return result;
+    return header;
 }
 
 fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: std.mem.Allocator) !?*AseCelChunk {
     const chunk: *AseCelChunk = try allocator.create(AseCelChunk);
+
     chunk.layer_index = try file.reader().readInt(u16, .little);
     chunk.x = try file.reader().readInt(i16, .little);
     chunk.y = try file.reader().readInt(i16, .little);
@@ -291,6 +343,9 @@ test "load document" {
 
     if (aseprite_doc) |doc| {
         defer doc.deinit();
+
+        try std.testing.expectEqual(0xA5E0, doc.header.magic_number);
+        try std.testing.expectEqual(0xF1FA, doc.frames[0].header.magic_number);
 
         const cel_chunk = doc.frames[0].cel_chunk;
 
