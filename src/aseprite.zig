@@ -11,6 +11,7 @@ const AseDocument = struct {
             frame.deinit(self.allocator);
         }
 
+        self.allocator.free(self.frames);
         self.allocator.destroy(self.header);
     }
 };
@@ -33,19 +34,19 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
         defer file.close();
 
         const opt_header: ?*AseHeader = try parseHeader(&file, allocator);
-        var opt_cel_chunk: ?*AseCelChunk = null;
-        var opt_frame_header: ?*AseFrameHeader = null;
+        var frames: std.ArrayList(AseFrame) = std.ArrayList(AseFrame).init(allocator);
+        defer frames.deinit();
 
         if (opt_header) |header| {
             std.debug.assert(header.magic_number == 0xA5E0);
             std.debug.print("Frame count: {d}\n", .{ header.frames });
 
             for (0..header.frames) |_| {
-                opt_frame_header = try parseFrameHeader(&file, allocator);
-
-                if (opt_frame_header) |frame_header| {
+                if (try parseFrameHeader(&file, allocator)) |frame_header| {
                     std.debug.assert(frame_header.magic_number == 0xF1FA);
                     std.debug.print("Frame size: {d}, chunks: {d}\n", .{ frame_header.byte_count, frame_header.chunkCount() });
+
+                    var opt_cel_chunk: ?*AseCelChunk = null;
 
                     for (0..frame_header.chunkCount()) |_| {
                         if (try parseChunkHeader(&file, allocator)) |chunk_header| {
@@ -62,21 +63,21 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
                             }
                         }
                     }
+
+                    if (opt_cel_chunk) |cel_chunk| {
+                        try frames.append(AseFrame{
+                            .header = frame_header,
+                            .cel_chunk = cel_chunk,
+                        });
+                    }
                 }
             }
-        }
 
-        if (opt_header) |header| {
-            if (opt_cel_chunk) |cel_chunk| {
-                result = AseDocument{
+            if (frames.items.len > 0) {
+                result = .{
                     .allocator = allocator,
                     .header = header,
-                    .frames = &.{
-                        AseFrame{
-                            .header = opt_frame_header.?,
-                            .cel_chunk = cel_chunk,
-                        },
-                    },
+                    .frames = try frames.toOwnedSlice(),
                 };
             }
         }
@@ -336,7 +337,7 @@ fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: s
     return chunk;
 }
 
-test "load document" {
+test "single frame" {
     const aseprite_doc: ?AseDocument = try loadDocument("assets/test.aseprite", std.testing.allocator);
 
     try std.testing.expect(aseprite_doc != null);
@@ -346,6 +347,30 @@ test "load document" {
 
         try std.testing.expectEqual(0xA5E0, doc.header.magic_number);
         try std.testing.expectEqual(0xF1FA, doc.frames[0].header.magic_number);
+
+        try std.testing.expectEqual(1, doc.header.frames);
+
+        const cel_chunk = doc.frames[0].cel_chunk;
+
+        try std.testing.expectEqual(0, cel_chunk.x);
+        try std.testing.expectEqual(0, cel_chunk.y);
+        try std.testing.expectEqual(32, cel_chunk.data.compressedImage.width);
+        try std.testing.expectEqual(32, cel_chunk.data.compressedImage.height);
+    }
+}
+
+test "multple frames" {
+    const aseprite_doc: ?AseDocument = try loadDocument("assets/test_animation.aseprite", std.testing.allocator);
+
+    try std.testing.expect(aseprite_doc != null);
+
+    if (aseprite_doc) |doc| {
+        defer doc.deinit();
+
+        try std.testing.expectEqual(0xA5E0, doc.header.magic_number);
+        try std.testing.expectEqual(0xF1FA, doc.frames[0].header.magic_number);
+
+        try std.testing.expectEqual(12, doc.header.frames);
 
         const cel_chunk = doc.frames[0].cel_chunk;
 
