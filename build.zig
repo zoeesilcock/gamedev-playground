@@ -23,6 +23,16 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(lib);
 
+    const lib_check = b.addSharedLibrary(.{
+        .name = "playground",
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    linkLibraries(b, lib_check, target, optimize);
+    const check = b.step("check", "Check if lib compiles");
+    check.dependOn(&lib_check.step);
+
     if (!lib_only) {
         const exe = b.addExecutable(.{
             .name = "gamedev-playground",
