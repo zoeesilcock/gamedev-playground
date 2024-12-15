@@ -1,7 +1,7 @@
 const std = @import("std");
 
 // Public API.
-const AseDocument = struct {
+pub const AseDocument = struct {
     allocator: std.mem.Allocator,
     header: *const AseHeader,
     frames: []const AseFrame,

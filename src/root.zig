@@ -1,6 +1,7 @@
 const std = @import("std");
 const r = @import("dependencies/raylib.zig");
 const aseprite = @import("aseprite.zig");
+const ecs = @import("ecs.zig");
 
 const PLATFORM = @import("builtin").os.tag;
 
@@ -17,16 +18,25 @@ pub const State = struct {
     world_height: u32,
 
     render_texture: ?r.RenderTexture2D,
-    source_rect: ?r.Rectangle,
-    dest_rect: ?r.Rectangle,
+    source_rect: r.Rectangle,
+    dest_rect: r.Rectangle,
 
     assets: Assets,
 
     last_left_click_time: f64,
+
+    // Components
+    transforms: std.ArrayList(*ecs.TransformComponent),
+    sprites: std.ArrayList(*ecs.SpriteComponent),
 };
 
 const Assets = struct {
-    test_texture: ?r.Texture2D,
+    test_sprite: ?SpriteAsset,
+};
+
+const SpriteAsset = struct {
+    texture: r.Texture,
+    document: aseprite.AseDocument,
 };
 
 export fn init(window_width: u32, window_height: u32) *anyopaque {
@@ -34,15 +44,38 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     var state: *State = allocator.create(State) catch @panic("Out of memory");
 
     state.allocator = allocator;
-
     state.window_width = window_width;
     state.window_height = window_height;
-    state.render_texture = null;
-    state.source_rect = null;
-    state.dest_rect = null;
+
     state.world_scale = 2;
+    state.world_width = @intFromFloat(@divFloor(@as(f32, @floatFromInt(state.window_width)), state.world_scale));
+    state.world_height = @intFromFloat(@divFloor(@as(f32, @floatFromInt(state.window_height)), state.world_scale));
+    state.render_texture = r.LoadRenderTexture(@intCast(state.world_width), @intCast(state.world_height));
+    state.source_rect = r.Rectangle{
+        .x = 0,
+        .y = 0,
+        .width = @floatFromInt(state.render_texture.?.texture.width),
+        .height = -@as(f32, @floatFromInt(state.render_texture.?.texture.height)),
+    };
+    state.dest_rect = r.Rectangle{ 
+        .x = @as(f32, @floatFromInt(state.window_width)) - state.source_rect.width * state.world_scale,
+        .y = 0,
+        .width = state.source_rect.width * state.world_scale,
+        .height = state.source_rect.height * state.world_scale,
+    };
+
+    state.transforms = std.ArrayList(*ecs.TransformComponent).init(allocator);
+    state.sprites = std.ArrayList(*ecs.SpriteComponent).init(allocator);
 
     loadAssets(state);
+
+    if (state.assets.test_sprite) |sprite| {
+        const position = r.Vector2{
+            .x = @as(f32, @floatFromInt(state.world_width)) / 2,
+            .y = @as(f32, @floatFromInt(state.world_height)) / 2,
+        };
+        addSprite(state, sprite, position) catch undefined;
+    }
 
     return state;
 }
@@ -67,10 +100,6 @@ export fn tick(state_ptr: *anyopaque) void {
 export fn draw(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    if (state.render_texture == null) {
-        initializeRenderTexture(state);
-    }
-
     if (state.render_texture) |render_texture| {
         r.BeginTextureMode(render_texture);
         {
@@ -81,27 +110,9 @@ export fn draw(state_ptr: *anyopaque) void {
 
         {
             r.ClearBackground(r.DARKGRAY);
-            r.DrawTexturePro(render_texture.texture, state.source_rect.?, state.dest_rect.?, r.Vector2{}, 0, r.WHITE);
+            r.DrawTexturePro(render_texture.texture, state.source_rect, state.dest_rect, r.Vector2{}, 0, r.WHITE);
         }
     }
-}
-
-fn initializeRenderTexture(state: *State) void {
-    state.world_width = @intFromFloat(@divFloor(@as(f32, @floatFromInt(state.window_width)), state.world_scale));
-    state.world_height = @intFromFloat(@divFloor(@as(f32, @floatFromInt(state.window_height)), state.world_scale));
-    state.render_texture = r.LoadRenderTexture(@intCast(state.world_width), @intCast(state.world_height));
-    state.source_rect = r.Rectangle{
-        .x = 0,
-        .y = 0,
-        .width = @floatFromInt(state.render_texture.?.texture.width),
-        .height = -@as(f32, @floatFromInt(state.render_texture.?.texture.height)),
-    };
-    state.dest_rect = r.Rectangle{ 
-        .x = @as(f32, @floatFromInt(state.window_width)) - state.source_rect.?.width * state.world_scale,
-        .y = 0,
-        .width = state.source_rect.?.width * state.world_scale,
-        .height = state.source_rect.?.height * state.world_scale,
-    };
 }
 
 fn loadAssets(state: *State) void {
@@ -116,20 +127,40 @@ fn loadAssets(state: *State) void {
             .mipmaps = 1,
             .format = r.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
         };
-        state.assets.test_texture = r.LoadTextureFromImage(image);
+        const sprite = SpriteAsset{
+            .document = doc,
+            .texture = r.LoadTextureFromImage(image),
+        };
+        state.assets.test_sprite = sprite;
     }
 }
 
 fn drawWorld(state: *State) void {
-    if (state.assets.test_texture) |sprite| {
-        const size = r.Vector2{ .x = @floatFromInt(sprite.width), .y = @floatFromInt(sprite.height) };
-        const position = r.Vector2{
-            .x = @as(f32, @floatFromInt(state.world_width)) / 2 - size.x / 2,
-            .y = @as(f32, @floatFromInt(state.world_height)) / 2 - size.y / 2,
-        };
-
-        r.DrawTextureV(sprite, position, r.WHITE);
+    for (state.sprites.items) |sprite| {
+        if (sprite.entity.transform) |transform| {
+            r.DrawTextureV(sprite.texture, transform.position, r.WHITE);
+        }
     }
+}
+
+fn addSprite(state: *State, sprite_asset: SpriteAsset, position: r.Vector2) !void {
+    var entity: *ecs.Entity = try state.allocator.create(ecs.Entity);
+    var sprite: *ecs.SpriteComponent = try state.allocator.create(ecs.SpriteComponent);
+    var transform: *ecs.TransformComponent = try state.allocator.create(ecs.TransformComponent);
+
+    sprite.entity = entity;
+    sprite.texture = sprite_asset.texture;
+    sprite.document = sprite_asset.document;
+
+    transform.entity = entity;
+    transform.size = r.Vector2{ .x = @floatFromInt(sprite.texture.width), .y = @floatFromInt(sprite.texture.height) };
+    transform.position = position;
+
+    entity.transform = transform;
+    entity.sprite = sprite;
+
+    try state.transforms.append(transform);
+    try state.sprites.append(sprite);
 }
 
 fn openSprite(state: *State) void {
