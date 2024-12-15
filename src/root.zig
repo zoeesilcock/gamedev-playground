@@ -32,6 +32,8 @@ pub const State = struct {
 
 const Assets = struct {
     test_sprite: ?SpriteAsset,
+    wall: ?SpriteAsset,
+    ball: ?SpriteAsset,
 };
 
 const SpriteAsset = struct {
@@ -68,14 +70,7 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     state.sprites = std.ArrayList(*ecs.SpriteComponent).init(allocator);
 
     loadAssets(state);
-
-    if (state.assets.test_sprite) |sprite| {
-        const position = r.Vector2{
-            .x = @as(f32, @floatFromInt(state.world_width)) / 2,
-            .y = @as(f32, @floatFromInt(state.world_height)) / 2,
-        };
-        addSprite(state, sprite, position) catch undefined;
-    }
+    loadLevel(state);
 
     return state;
 }
@@ -118,7 +113,15 @@ export fn draw(state_ptr: *anyopaque) void {
 fn loadAssets(state: *State) void {
     // state.assets.test_texture = r.LoadTexture("assets/test.png");
 
-    if (aseprite.loadDocument("assets/test.aseprite", state.allocator) catch undefined) |doc| {
+    state.assets.test_sprite = loadSprite("assets/test.aseprite", state.allocator);
+    state.assets.ball = loadSprite("assets/ball.aseprite", state.allocator);
+    state.assets.wall = loadSprite("assets/wall.aseprite", state.allocator);
+}
+
+fn loadSprite(path: []const u8, allocator: std.mem.Allocator) ?SpriteAsset {
+    var result: ?SpriteAsset = null;
+
+    if (aseprite.loadDocument(path, allocator) catch undefined) |doc| {
         const cel = doc.frames[0].cel_chunk;
         const image: r.Image = .{
             .data = @ptrCast(@constCast(cel.data.compressedImage.pixels)),
@@ -127,11 +130,36 @@ fn loadAssets(state: *State) void {
             .mipmaps = 1,
             .format = r.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
         };
-        const sprite = SpriteAsset{
+        result = SpriteAsset{
             .document = doc,
             .texture = r.LoadTextureFromImage(image),
         };
-        state.assets.test_sprite = sprite;
+    }
+
+    return result;
+}
+
+fn loadLevel(state: *State) void {
+    if (state.assets.wall) |sprite| {
+        var position = r.Vector2{ .x = 0, .y = 0 };
+
+        for (0..6) |_| {
+            addSprite(state, sprite, position) catch undefined;
+            position.x += @floatFromInt(sprite.texture.width);
+        }
+    }
+
+    if (state.assets.ball) |sprite| {
+        const position = r.Vector2{ .x = 64, .y = 64 };
+        addSprite(state, sprite, position) catch undefined;
+    }
+
+    if (state.assets.test_sprite) |sprite| {
+        const position = r.Vector2{
+            .x = @as(f32, @floatFromInt(state.world_width)) / 2,
+            .y = @as(f32, @floatFromInt(state.world_height)) / 2,
+        };
+        addSprite(state, sprite, position) catch undefined;
     }
 }
 
