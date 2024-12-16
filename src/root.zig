@@ -143,6 +143,31 @@ fn loadLevel(state: *State) void {
     if (state.assets.wall) |sprite| {
         var position = r.Vector2{ .x = 0, .y = 0 };
 
+        // Top edge.
+        for (0..6) |_| {
+            addSprite(state, sprite, position) catch undefined;
+            position.x += @floatFromInt(sprite.texture.width);
+        }
+
+        // Right edge.
+        for (0..5) |_| {
+            addSprite(state, sprite, position) catch undefined;
+            position.y += @floatFromInt(sprite.texture.width);
+        }
+
+        // Left edge.
+        position.x = 0;
+        position.y = @floatFromInt(sprite.texture.height);
+        addSprite(state, sprite, position) catch undefined;
+
+        position.y += @floatFromInt(sprite.texture.height);
+        addSprite(state, sprite, position) catch undefined;
+
+        position.y += @floatFromInt(sprite.texture.height);
+        addSprite(state, sprite, position) catch undefined;
+
+        // Bottom edge.
+        position.y += @floatFromInt(sprite.texture.height);
         for (0..6) |_| {
             addSprite(state, sprite, position) catch undefined;
             position.x += @floatFromInt(sprite.texture.width);
