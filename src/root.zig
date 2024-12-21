@@ -6,6 +6,7 @@ const ecs = @import("ecs.zig");
 const PLATFORM = @import("builtin").os.tag;
 
 const DOUBLE_CLICK_THRESHOLD: f32 = 0.3;
+const BALL_VELOCITY: f32 = 0.01;
 
 pub const State = struct {
     allocator: std.mem.Allocator,
@@ -28,6 +29,7 @@ pub const State = struct {
     // Components
     transforms: std.ArrayList(*ecs.TransformComponent),
     sprites: std.ArrayList(*ecs.SpriteComponent),
+    ball: *ecs.Entity,
 };
 
 const Assets = struct {
@@ -90,6 +92,72 @@ export fn tick(state_ptr: *anyopaque) void {
 
         state.last_left_click_time = r.GetTime();
     }
+
+    if (state.ball.transform) |transform| {
+        if (r.IsKeyDown(r.KEY_LEFT)) {
+            transform.velocity.x = -BALL_VELOCITY;
+        } else if (r.IsKeyDown(r.KEY_RIGHT)) {
+            transform.velocity.x = BALL_VELOCITY;
+        } else {
+            transform.velocity.x = 0;
+        }
+    }
+
+    for (state.transforms.items) |transform| {
+        if (transform.velocity.x != 0 or transform.velocity.y != 0) {
+            transform.position.x += transform.velocity.x;
+            transform.position.y += transform.velocity.y;
+
+            if (collidesVertically(state, transform)) {
+                transform.velocity.y = -transform.velocity.y;
+            }
+
+            if (collidesHorizontally(state, transform)) {
+                // transform.velocity.y = -transform.velocity.y;
+                transform.velocity.x = 0;
+            }
+        }
+    }
+}
+
+fn collidesVertically(state: *State, transform: *ecs.TransformComponent) bool {
+    var collides = false;
+
+    for (state.transforms.items) |other| {
+        if (transform.entity != other.entity) {
+            if (
+                ((transform.left() > other.left() and transform.left() < other.right()) or
+                 (transform.right() > other.left() and transform.right() < other.right())) and
+                ((transform.bottom() > other.top() and transform.bottom() < other.bottom()) or
+                 (transform.top() < other.bottom() and transform.top() > other.top()))
+            ) {
+                collides = true;
+                break;
+            }
+        }
+    }
+
+    return collides;
+}
+
+fn collidesHorizontally(state: *State, transform: *ecs.TransformComponent) bool {
+    var collides = false;
+
+    for (state.transforms.items) |other| {
+        if (transform.entity != other.entity) {
+            if (
+                ((transform.top() > other.top() and transform.top() < other.bottom()) or
+                 (transform.bottom() > other.top() and transform.bottom() < other.bottom())) and
+                ((transform.right() > other.left() and transform.right() < other.right()) or
+                 (transform.left() < other.right() and transform.left() > other.left()))
+            ) {
+                collides = true;
+                break;
+            }
+        }
+    }
+
+    return collides;
 }
 
 export fn draw(state_ptr: *anyopaque) void {
@@ -145,38 +213,41 @@ fn loadLevel(state: *State) void {
 
         // Top edge.
         for (0..6) |_| {
-            addSprite(state, sprite, position) catch undefined;
+            _ = addSprite(state, sprite, position) catch undefined;
             position.x += @floatFromInt(sprite.texture.width);
         }
 
         // Right edge.
         for (0..5) |_| {
-            addSprite(state, sprite, position) catch undefined;
+            _ = addSprite(state, sprite, position) catch undefined;
             position.y += @floatFromInt(sprite.texture.width);
         }
 
         // Left edge.
         position.x = 0;
         position.y = @floatFromInt(sprite.texture.height);
-        addSprite(state, sprite, position) catch undefined;
+        _ = addSprite(state, sprite, position) catch undefined;
 
         position.y += @floatFromInt(sprite.texture.height);
-        addSprite(state, sprite, position) catch undefined;
+        _ = addSprite(state, sprite, position) catch undefined;
 
         position.y += @floatFromInt(sprite.texture.height);
-        addSprite(state, sprite, position) catch undefined;
+        _ = addSprite(state, sprite, position) catch undefined;
 
         // Bottom edge.
         position.y += @floatFromInt(sprite.texture.height);
         for (0..6) |_| {
-            addSprite(state, sprite, position) catch undefined;
+            _ = addSprite(state, sprite, position) catch undefined;
             position.x += @floatFromInt(sprite.texture.width);
         }
     }
 
     if (state.assets.ball) |sprite| {
         const position = r.Vector2{ .x = 64, .y = 64 };
-        addSprite(state, sprite, position) catch undefined;
+        if (addSprite(state, sprite, position) catch null) |entity| {
+            entity.transform.?.velocity.y = BALL_VELOCITY;
+            state.ball = entity;
+        }
     }
 
     if (state.assets.test_sprite) |sprite| {
@@ -184,7 +255,7 @@ fn loadLevel(state: *State) void {
             .x = @as(f32, @floatFromInt(state.world_width)) / 2,
             .y = @as(f32, @floatFromInt(state.world_height)) / 2,
         };
-        addSprite(state, sprite, position) catch undefined;
+        _ = addSprite(state, sprite, position) catch undefined;
     }
 }
 
@@ -192,11 +263,18 @@ fn drawWorld(state: *State) void {
     for (state.sprites.items) |sprite| {
         if (sprite.entity.transform) |transform| {
             r.DrawTextureV(sprite.texture, transform.position, r.WHITE);
+
+            if (sprite.entity == state.ball) {
+                r.DrawCircle(@intFromFloat(transform.left()), @intFromFloat(transform.top()), 2, r.YELLOW);
+                r.DrawCircle(@intFromFloat(transform.right()), @intFromFloat(transform.top()), 2, r.BROWN);
+                r.DrawCircle(@intFromFloat(transform.left()), @intFromFloat(transform.bottom()), 2, r.BLUE);
+                r.DrawCircle(@intFromFloat(transform.right()), @intFromFloat(transform.bottom()), 2, r.GREEN);
+            }
         }
     }
 }
 
-fn addSprite(state: *State, sprite_asset: SpriteAsset, position: r.Vector2) !void {
+fn addSprite(state: *State, sprite_asset: SpriteAsset, position: r.Vector2) !*ecs.Entity {
     var entity: *ecs.Entity = try state.allocator.create(ecs.Entity);
     var sprite: *ecs.SpriteComponent = try state.allocator.create(ecs.SpriteComponent);
     var transform: *ecs.TransformComponent = try state.allocator.create(ecs.TransformComponent);
@@ -214,6 +292,8 @@ fn addSprite(state: *State, sprite_asset: SpriteAsset, position: r.Vector2) !voi
 
     try state.transforms.append(transform);
     try state.sprites.append(sprite);
+
+    return entity;
 }
 
 fn openSprite(state: *State) void {
