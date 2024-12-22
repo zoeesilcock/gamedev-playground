@@ -19,8 +19,14 @@ pub const AseDocument = struct {
 const AseFrame = struct {
     header: *AseFrameHeader,
     cel_chunk: *AseCelChunk,
+    tags: []*AseTagsChunk,
 
     pub fn deinit(self: AseFrame, allocator: std.mem.Allocator) void {
+        for (self.tags) |tag| {
+            allocator.free(tag.tag_name);
+            allocator.destroy(tag);
+        }
+        allocator.free(self.tags);
         allocator.free(self.cel_chunk.data.compressedImage.pixels);
         allocator.destroy(self.header);
         allocator.destroy(self.cel_chunk);
@@ -47,6 +53,7 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
                     std.debug.print("Frame size: {d}, chunks: {d}\n", .{ frame_header.byte_count, frame_header.chunkCount() });
 
                     var opt_cel_chunk: ?*AseCelChunk = null;
+                    var opt_tags: ?[]*AseTagsChunk = null;    
 
                     for (0..frame_header.chunkCount()) |_| {
                         if (try parseChunkHeader(&file, allocator)) |chunk_header| {
@@ -56,6 +63,9 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
                             switch (chunk_header.chunk_type) {
                                 .Cel => {
                                     opt_cel_chunk = try parseCelChunk(&file, chunk_header, allocator);
+                                },
+                                .Tags => {
+                                    opt_tags = try parseTagsChunks(&file, allocator);
                                 },
                                 else => {
                                     _ = try file.reader().skipBytes(chunk_header.chunkSize(), .{});
@@ -68,6 +78,7 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
                         try frames.append(AseFrame{
                             .header = frame_header,
                             .cel_chunk = cel_chunk,
+                            .tags = opt_tags orelse &.{},
                         });
                     }
                 }
@@ -238,6 +249,43 @@ const AseCelChunk = struct {
     }
 };
 
+const AseTagsChunkHeader = struct {
+    count: u16,                 // WORD        Number of tags
+    //reserved: [8]u8,          // BYTE[8]     For future (set to zero)
+};
+
+const AseTagsLoop = enum(u8) {
+    Forward,
+    Reverse,
+    PingPong,
+    PingPongReverse,
+};
+
+const AseString = struct {
+    length: u16,                // WORD: string length (number of bytes)
+    characters: []u8,           // BYTE[length]: characters (in UTF-8) The '\0' character is not included.
+};
+
+const AseTagsChunk = struct {
+    from_frame: u16,            // WORD      From frame
+    to_frame: u16,              // WORD      To frame
+    loop_direction: AseTagsLoop,// BYTE      Loop animation direction
+    repeat_count: u16,          // WORD      Repeat N times. Play this animation section N times:
+                                //     0 = Doesn't specify (plays infinite in UI, once on export,
+                                //         for ping-pong it plays once in each direction)
+                                //     1 = Plays once (for ping-pong, it plays just in one direction)
+                                //     2 = Plays twice (for ping-pong, it plays once in one direction,
+                                //         and once in reverse)
+                                //     n = Plays N times
+    //reserved: [6]u8,          // BYTE[6]   For future (set to zero)
+    //deprecated: [4]u8,        // BYTE[3]   RGB values of the tag color
+                                //    Deprecated, used only for backward compatibility with Aseprite v1.2.x
+                                //    The color of the tag is the one in the user data field following
+                                //    the tags chunk
+    //extra: u8,                // BYTE      Extra byte (zero)
+    tag_name: []const u8,       // STRING    Tag name
+};
+
 fn parseHeader(file: *const std.fs.File, allocator: std.mem.Allocator) !?*AseHeader {
     const header: *AseHeader = try allocator.create(AseHeader);
 
@@ -337,6 +385,38 @@ fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: s
     return chunk;
 }
 
+fn parseTagsChunks(file: *const std.fs.File, allocator: std.mem.Allocator) !?[]*AseTagsChunk {
+    var tag_chunks = std.ArrayList(*AseTagsChunk).init(allocator);
+
+    const header: AseTagsChunkHeader = .{
+        .count = try file.reader().readInt(u16, .little),
+    };
+
+    _ = try file.reader().skipBytes(8, .{});
+
+    for (0..header.count) |_| {
+        const chunk: *AseTagsChunk = try allocator.create(AseTagsChunk);
+
+        chunk.from_frame = try file.reader().readInt(u16, .little);
+        chunk.to_frame = try file.reader().readInt(u16, .little);
+        chunk.loop_direction = @enumFromInt(try file.reader().readInt(u8, .little));
+        chunk.repeat_count = try file.reader().readInt(u16, .little);
+
+        _ = try file.reader().skipBytes(6 + 3 + 1, .{});
+        
+        const tag_name_length = try file.reader().readInt(u16, .little);
+        var buffer = std.ArrayList(u8).init(allocator);
+        for (0..tag_name_length) |_| {
+            try buffer.append(try file.reader().readByte()); 
+        }
+        chunk.tag_name = try buffer.toOwnedSlice();
+
+        try tag_chunks.append(chunk);
+    }
+
+    return try tag_chunks.toOwnedSlice();
+}
+
 test "single frame" {
     const aseprite_doc: ?AseDocument = try loadDocument("assets/test.aseprite", std.testing.allocator);
 
@@ -359,7 +439,7 @@ test "single frame" {
     }
 }
 
-test "multple frames" {
+test "multiple frames" {
     const aseprite_doc: ?AseDocument = try loadDocument("assets/test_animation.aseprite", std.testing.allocator);
 
     try std.testing.expect(aseprite_doc != null);
@@ -378,5 +458,14 @@ test "multple frames" {
         try std.testing.expectEqual(0, cel_chunk.y);
         try std.testing.expectEqual(32, cel_chunk.data.compressedImage.width);
         try std.testing.expectEqual(32, cel_chunk.data.compressedImage.height);
+
+        try std.testing.expectEqual(1, doc.frames[0].tags.len);
+
+        const tags_chunk = doc.frames[0].tags[0];
+        try std.testing.expectEqual(0, tags_chunk.from_frame);
+        try std.testing.expectEqual(11, tags_chunk.to_frame);
+        try std.testing.expectEqual(AseTagsLoop.Forward, tags_chunk.loop_direction);
+        try std.testing.expectEqual(0, tags_chunk.repeat_count);
+        try std.testing.expectEqualSlices(u8, "idle", tags_chunk.tag_name);
     }
 }
