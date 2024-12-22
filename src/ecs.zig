@@ -27,6 +27,21 @@ pub const TransformComponent = struct {
     pub fn center(self: *TransformComponent) r.Vector2 {
         return r.Vector2{ .x = self.position.x + self.size.x * 0.5, .y = self.position.y + self.size.y * 0.5 };
     }
+
+    pub fn collidesWith(self: *TransformComponent, other: *TransformComponent) bool {
+        var collides = false;
+
+        if (
+            ((self.left() >= other.left() and self.left() <= other.right()) or
+             (self.right() >= other.left() and self.right() <= other.right())) and
+            ((self.bottom() >= other.top() and self.bottom() <= other.bottom()) or
+             (self.top() <= other.bottom() and self.top() >= other.top()))
+        ) {
+            collides = true;
+        }
+
+        return collides;
+    }
 };
 
 pub const SpriteComponent = struct {

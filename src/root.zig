@@ -6,7 +6,7 @@ const ecs = @import("ecs.zig");
 const PLATFORM = @import("builtin").os.tag;
 
 const DOUBLE_CLICK_THRESHOLD: f32 = 0.3;
-const BALL_VELOCITY: f32 = 0.01;
+const BALL_VELOCITY: f32 = 0.05;
 
 pub const State = struct {
     allocator: std.mem.Allocator,
@@ -80,6 +80,10 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
 export fn reload(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
     loadAssets(state);
+
+    if (state.ball.transform) |transform| {
+        transform.velocity.y = if (transform.velocity.y > 0) BALL_VELOCITY else -BALL_VELOCITY;
+    }
 }
 
 export fn tick(state_ptr: *anyopaque) void {
@@ -105,59 +109,36 @@ export fn tick(state_ptr: *anyopaque) void {
 
     for (state.transforms.items) |transform| {
         if (transform.velocity.x != 0 or transform.velocity.y != 0) {
-            transform.position.x += transform.velocity.x;
-            transform.position.y += transform.velocity.y;
+            var next_transform = transform.*;
 
-            if (collidesVertically(state, transform)) {
+            next_transform.position.y += next_transform.velocity.y;
+            if (collides(state, &next_transform)) {
                 transform.velocity.y = -transform.velocity.y;
             }
 
-            if (collidesHorizontally(state, transform)) {
-                // transform.velocity.y = -transform.velocity.y;
+            next_transform.position.x += next_transform.velocity.x;
+            if (collides(state, &next_transform)) {
+                // transform.velocity.x = -transform.velocity.x;
                 transform.velocity.x = 0;
             }
+
+            transform.position.x += transform.velocity.x;
+            transform.position.y += transform.velocity.y;
         }
     }
 }
 
-fn collidesVertically(state: *State, transform: *ecs.TransformComponent) bool {
-    var collides = false;
+fn collides(state: *State, transform: *ecs.TransformComponent) bool {
+    var result = false;
 
     for (state.transforms.items) |other| {
-        if (transform.entity != other.entity) {
-            if (
-                ((transform.left() > other.left() and transform.left() < other.right()) or
-                 (transform.right() > other.left() and transform.right() < other.right())) and
-                ((transform.bottom() > other.top() and transform.bottom() < other.bottom()) or
-                 (transform.top() < other.bottom() and transform.top() > other.top()))
-            ) {
-                collides = true;
-                break;
-            }
+        if (transform.entity != other.entity and transform.collidesWith(other)) {
+            result = true;
+            break;
         }
     }
 
-    return collides;
-}
-
-fn collidesHorizontally(state: *State, transform: *ecs.TransformComponent) bool {
-    var collides = false;
-
-    for (state.transforms.items) |other| {
-        if (transform.entity != other.entity) {
-            if (
-                ((transform.top() > other.top() and transform.top() < other.bottom()) or
-                 (transform.bottom() > other.top() and transform.bottom() < other.bottom())) and
-                ((transform.right() > other.left() and transform.right() < other.right()) or
-                 (transform.left() < other.right() and transform.left() > other.left()))
-            ) {
-                collides = true;
-                break;
-            }
-        }
-    }
-
-    return collides;
+    return result;
 }
 
 export fn draw(state_ptr: *anyopaque) void {
@@ -263,13 +244,6 @@ fn drawWorld(state: *State) void {
     for (state.sprites.items) |sprite| {
         if (sprite.entity.transform) |transform| {
             r.DrawTextureV(sprite.texture, transform.position, r.WHITE);
-
-            if (sprite.entity == state.ball) {
-                r.DrawCircle(@intFromFloat(transform.left()), @intFromFloat(transform.top()), 2, r.YELLOW);
-                r.DrawCircle(@intFromFloat(transform.right()), @intFromFloat(transform.top()), 2, r.BROWN);
-                r.DrawCircle(@intFromFloat(transform.left()), @intFromFloat(transform.bottom()), 2, r.BLUE);
-                r.DrawCircle(@intFromFloat(transform.right()), @intFromFloat(transform.bottom()), 2, r.GREEN);
-            }
         }
     }
 }
