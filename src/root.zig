@@ -272,7 +272,9 @@ fn loadLevel(state: *State) void {
 fn drawWorld(state: *State) void {
     for (state.sprites.items) |sprite| {
         if (sprite.entity.transform) |transform| {
-            r.DrawTextureV(sprite.getTexture(), transform.position, r.WHITE);
+            if (sprite.getTexture()) |texture| {
+                r.DrawTextureV(texture, transform.position, r.WHITE);
+            }
         }
     }
 }

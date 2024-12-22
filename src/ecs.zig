@@ -62,8 +62,14 @@ pub const SpriteComponent = struct {
         }
     }
 
-    pub fn getTexture(self: *SpriteComponent) r.Texture2D {
-        return self.asset.frames[self.frame_index];
+    pub fn getTexture(self: *SpriteComponent) ?r.Texture2D {
+        var result: ?r.Texture2D = null;
+
+        if (self.frame_index < self.asset.frames.len) {
+            result = self.asset.frames[self.frame_index];
+        }
+
+        return result;
     }
 };
 
