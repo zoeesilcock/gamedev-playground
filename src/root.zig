@@ -39,7 +39,6 @@ const Assets = struct {
 };
 
 const SpriteAsset = struct {
-    texture: r.Texture,
     document: aseprite.AseDocument,
 };
 
@@ -95,6 +94,27 @@ export fn tick(state_ptr: *anyopaque) void {
         }
 
         state.last_left_click_time = r.GetTime();
+    }
+
+    for (state.sprites.items) |sprite| {
+        if (sprite.document.frames.len > 1) {
+            const current_frame = sprite.document.frames[sprite.frame_index];
+            const frame_end_time: f64 = sprite.frame_start_time + (@as(f64, @floatFromInt(current_frame.header.frame_duration)) / 1000);
+            if (r.GetTime() > frame_end_time) {
+                var next_frame = sprite.frame_index + 1;
+
+                if (next_frame >= sprite.document.frames.len) {
+                    if (sprite.loop_animation) {
+                        next_frame = 0;
+                    } else {
+                        sprite.animation_completed = true;
+                        continue;
+                    }
+                }
+
+                sprite.setFrame(next_frame);
+            }
+        }
     }
 
     if (state.ball.transform) |transform| {
@@ -162,7 +182,7 @@ export fn draw(state_ptr: *anyopaque) void {
 fn loadAssets(state: *State) void {
     // state.assets.test_texture = r.LoadTexture("assets/test.png");
 
-    state.assets.test_sprite = loadSprite("assets/test.aseprite", state.allocator);
+    state.assets.test_sprite = loadSprite("assets/test_animation.aseprite", state.allocator);
     state.assets.ball = loadSprite("assets/ball.aseprite", state.allocator);
     state.assets.wall = loadSprite("assets/wall.aseprite", state.allocator);
 }
@@ -171,17 +191,8 @@ fn loadSprite(path: []const u8, allocator: std.mem.Allocator) ?SpriteAsset {
     var result: ?SpriteAsset = null;
 
     if (aseprite.loadDocument(path, allocator) catch undefined) |doc| {
-        const cel = doc.frames[0].cel_chunk;
-        const image: r.Image = .{
-            .data = @ptrCast(@constCast(cel.data.compressedImage.pixels)),
-            .width = cel.data.compressedImage.width,
-            .height = cel.data.compressedImage.height,
-            .mipmaps = 1,
-            .format = r.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
-        };
         result = SpriteAsset{
             .document = doc,
-            .texture = r.LoadTextureFromImage(image),
         };
     }
 
@@ -195,31 +206,31 @@ fn loadLevel(state: *State) void {
         // Top edge.
         for (0..6) |_| {
             _ = addSprite(state, sprite, position) catch undefined;
-            position.x += @floatFromInt(sprite.texture.width);
+            position.x += @floatFromInt(sprite.document.header.width);
         }
 
         // Right edge.
         for (0..5) |_| {
             _ = addSprite(state, sprite, position) catch undefined;
-            position.y += @floatFromInt(sprite.texture.width);
+            position.y += @floatFromInt(sprite.document.header.width);
         }
 
         // Left edge.
         position.x = 0;
-        position.y = @floatFromInt(sprite.texture.height);
+        position.y = @floatFromInt(sprite.document.header.height);
         _ = addSprite(state, sprite, position) catch undefined;
 
-        position.y += @floatFromInt(sprite.texture.height);
+        position.y += @floatFromInt(sprite.document.header.height);
         _ = addSprite(state, sprite, position) catch undefined;
 
-        position.y += @floatFromInt(sprite.texture.height);
+        position.y += @floatFromInt(sprite.document.header.height);
         _ = addSprite(state, sprite, position) catch undefined;
 
         // Bottom edge.
-        position.y += @floatFromInt(sprite.texture.height);
+        position.y += @floatFromInt(sprite.document.header.height);
         for (0..6) |_| {
             _ = addSprite(state, sprite, position) catch undefined;
-            position.x += @floatFromInt(sprite.texture.width);
+            position.x += @floatFromInt(sprite.document.header.width);
         }
     }
 
@@ -236,14 +247,17 @@ fn loadLevel(state: *State) void {
             .x = @as(f32, @floatFromInt(state.world_width)) / 2,
             .y = @as(f32, @floatFromInt(state.world_height)) / 2,
         };
-        _ = addSprite(state, sprite, position) catch undefined;
+        const entity = addSprite(state, sprite, position) catch undefined;
+        entity.sprite.?.loop_animation = true;
     }
 }
 
 fn drawWorld(state: *State) void {
     for (state.sprites.items) |sprite| {
         if (sprite.entity.transform) |transform| {
-            r.DrawTextureV(sprite.texture, transform.position, r.WHITE);
+            if (sprite.texture) |texture| {
+                r.DrawTextureV(texture, transform.position, r.WHITE);
+            }
         }
     }
 }
@@ -254,11 +268,13 @@ fn addSprite(state: *State, sprite_asset: SpriteAsset, position: r.Vector2) !*ec
     var transform: *ecs.TransformComponent = try state.allocator.create(ecs.TransformComponent);
 
     sprite.entity = entity;
-    sprite.texture = sprite_asset.texture;
     sprite.document = sprite_asset.document;
+    sprite.setFrame(0);
 
     transform.entity = entity;
-    transform.size = r.Vector2{ .x = @floatFromInt(sprite.texture.width), .y = @floatFromInt(sprite.texture.height) };
+    if (sprite.texture) |texture| {
+        transform.size = r.Vector2{ .x = @floatFromInt(texture.width), .y = @floatFromInt(texture.height) };
+    }
     transform.position = position;
 
     entity.transform = transform;
