@@ -38,8 +38,9 @@ const Assets = struct {
     ball: ?SpriteAsset,
 };
 
-const SpriteAsset = struct {
+pub const SpriteAsset = struct {
     document: aseprite.AseDocument,
+    frames: []r.Texture2D,
 };
 
 export fn init(window_width: u32, window_height: u32) *anyopaque {
@@ -97,13 +98,13 @@ export fn tick(state_ptr: *anyopaque) void {
     }
 
     for (state.sprites.items) |sprite| {
-        if (sprite.document.frames.len > 1) {
-            const current_frame = sprite.document.frames[sprite.frame_index];
+        if (sprite.asset.document.frames.len > 1) {
+            const current_frame = sprite.asset.document.frames[sprite.frame_index];
             const frame_end_time: f64 = sprite.frame_start_time + (@as(f64, @floatFromInt(current_frame.header.frame_duration)) / 1000);
             if (r.GetTime() > frame_end_time) {
                 var next_frame = sprite.frame_index + 1;
 
-                if (next_frame >= sprite.document.frames.len) {
+                if (next_frame >= sprite.asset.document.frames.len) {
                     if (sprite.loop_animation) {
                         next_frame = 0;
                     } else {
@@ -191,8 +192,24 @@ fn loadSprite(path: []const u8, allocator: std.mem.Allocator) ?SpriteAsset {
     var result: ?SpriteAsset = null;
 
     if (aseprite.loadDocument(path, allocator) catch undefined) |doc| {
+        var textures = std.ArrayList(r.Texture2D).init(allocator);
+
+        for (doc.frames) |frame| {
+            const image: r.Image = .{
+                .data = @ptrCast(@constCast(frame.cel_chunk.data.compressedImage.pixels)),
+                .width = frame.cel_chunk.data.compressedImage.width,
+                .height = frame.cel_chunk.data.compressedImage.height,
+                .mipmaps = 1,
+                .format = r.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
+            };
+            textures.append(r.LoadTextureFromImage(image)) catch undefined;
+        }
+
+        std.debug.print("loadSprite: {s}: {d}\n", .{ path, doc.frames.len });
+
         result = SpriteAsset{
             .document = doc,
+            .frames = textures.toOwnedSlice() catch &.{},
         };
     }
 
@@ -200,7 +217,7 @@ fn loadSprite(path: []const u8, allocator: std.mem.Allocator) ?SpriteAsset {
 }
 
 fn loadLevel(state: *State) void {
-    if (state.assets.wall) |sprite| {
+    if (state.assets.wall) |*sprite| {
         var position = r.Vector2{ .x = 0, .y = 0 };
 
         // Top edge.
@@ -234,7 +251,7 @@ fn loadLevel(state: *State) void {
         }
     }
 
-    if (state.assets.ball) |sprite| {
+    if (state.assets.ball) |*sprite| {
         const position = r.Vector2{ .x = 64, .y = 64 };
         if (addSprite(state, sprite, position) catch null) |entity| {
             entity.transform.?.velocity.y = BALL_VELOCITY;
@@ -242,7 +259,7 @@ fn loadLevel(state: *State) void {
         }
     }
 
-    if (state.assets.test_sprite) |sprite| {
+    if (state.assets.test_sprite) |*sprite| {
         const position = r.Vector2{
             .x = @as(f32, @floatFromInt(state.world_width)) / 2,
             .y = @as(f32, @floatFromInt(state.world_height)) / 2,
@@ -255,26 +272,28 @@ fn loadLevel(state: *State) void {
 fn drawWorld(state: *State) void {
     for (state.sprites.items) |sprite| {
         if (sprite.entity.transform) |transform| {
-            if (sprite.texture) |texture| {
-                r.DrawTextureV(texture, transform.position, r.WHITE);
-            }
+            r.DrawTextureV(sprite.getTexture(), transform.position, r.WHITE);
         }
     }
 }
 
-fn addSprite(state: *State, sprite_asset: SpriteAsset, position: r.Vector2) !*ecs.Entity {
+fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: r.Vector2) !*ecs.Entity {
     var entity: *ecs.Entity = try state.allocator.create(ecs.Entity);
     var sprite: *ecs.SpriteComponent = try state.allocator.create(ecs.SpriteComponent);
     var transform: *ecs.TransformComponent = try state.allocator.create(ecs.TransformComponent);
 
     sprite.entity = entity;
-    sprite.document = sprite_asset.document;
-    sprite.setFrame(0);
+    sprite.asset = sprite_asset;
+    sprite.frame_index = 0;
+    sprite.frame_start_time = 0;
+    sprite.loop_animation = false;
+    sprite.animation_completed = false;
 
     transform.entity = entity;
-    if (sprite.texture) |texture| {
-        transform.size = r.Vector2{ .x = @floatFromInt(texture.width), .y = @floatFromInt(texture.height) };
-    }
+    transform.size = r.Vector2{
+        .x = @floatFromInt(sprite_asset.document.header.width),
+        .y = @floatFromInt(sprite_asset.document.header.height),
+    };
     transform.position = position;
 
     entity.transform = transform;

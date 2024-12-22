@@ -1,6 +1,7 @@
 const std = @import("std");
 const r = @import("dependencies/raylib.zig");
 const aseprite = @import("aseprite.zig");
+const root = @import("root.zig");
 
 pub const TransformComponent = struct {
     entity: *Entity,
@@ -48,27 +49,21 @@ pub const TransformComponent = struct {
 pub const SpriteComponent = struct {
     entity: *Entity,
 
-    texture: ?r.Texture = null,
+    asset: *const root.SpriteAsset,
     frame_index: u32,
     frame_start_time: f64,
     loop_animation: bool,
     animation_completed: bool,
-    document: aseprite.AseDocument,
 
     pub fn setFrame(self: *SpriteComponent, index: u32) void {
-        if (index < self.document.frames.len) {
-            const cel = self.document.frames[index].cel_chunk;
-            const image: r.Image = .{
-                .data = @ptrCast(@constCast(cel.data.compressedImage.pixels)),
-                .width = cel.data.compressedImage.width,
-                .height = cel.data.compressedImage.height,
-                .mipmaps = 1,
-                .format = r.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
-            };
-            self.texture = r.LoadTextureFromImage(image);
+        if (index < self.asset.document.frames.len) {
             self.frame_index = index;
             self.frame_start_time = r.GetTime();
         }
+    }
+
+    pub fn getTexture(self: *SpriteComponent) r.Texture2D {
+        return self.asset.frames[self.frame_index];
     }
 };
 
