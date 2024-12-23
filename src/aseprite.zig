@@ -266,7 +266,7 @@ const AseString = struct {
     characters: []u8,           // BYTE[length]: characters (in UTF-8) The '\0' character is not included.
 };
 
-const AseTagsChunk = struct {
+pub const AseTagsChunk = struct {
     from_frame: u16,            // WORD      From frame
     to_frame: u16,              // WORD      To frame
     loop_direction: AseTagsLoop,// BYTE      Loop animation direction

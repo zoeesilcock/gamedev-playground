@@ -100,15 +100,25 @@ export fn tick(state_ptr: *anyopaque) void {
     for (state.sprites.items) |sprite| {
         if (sprite.asset.document.frames.len > 1) {
             const current_frame = sprite.asset.document.frames[sprite.frame_index];
-            const frame_end_time: f64 = sprite.frame_start_time + (@as(f64, @floatFromInt(current_frame.header.frame_duration)) / 1000);
+            var from_frame: u16 = 0;
+            var to_frame: u16 = @intCast(sprite.asset.document.frames.len);
+
+            if (sprite.current_animation) |tag| {
+                from_frame = tag.from_frame;
+                to_frame = tag.to_frame;
+            }
+
+            const frame_end_time: f64 =
+                sprite.frame_start_time + (@as(f64, @floatFromInt(current_frame.header.frame_duration)) / 1000);
+
             if (r.GetTime() > frame_end_time) {
                 var next_frame = sprite.frame_index + 1;
-
-                if (next_frame >= sprite.asset.document.frames.len) {
+                if (next_frame > to_frame) {
                     if (sprite.loop_animation) {
-                        next_frame = 0;
+                        next_frame = from_frame;
                     } else {
                         sprite.animation_completed = true;
+                        next_frame = to_frame;
                         continue;
                     }
                 }
@@ -126,6 +136,14 @@ export fn tick(state_ptr: *anyopaque) void {
         } else {
             transform.velocity.x = 0;
         }
+
+        if (
+            (state.ball.sprite.?.isAnimating("bounce_up") or state.ball.sprite.?.isAnimating("bounce_down"))
+            and state.ball.sprite.?.animation_completed
+        ) {
+            state.ball.transform.?.velocity = state.ball.transform.?.next_velocity;
+            state.ball.sprite.?.startAnimation("idle");
+        }
     }
 
     for (state.transforms.items) |transform| {
@@ -134,7 +152,15 @@ export fn tick(state_ptr: *anyopaque) void {
 
             next_transform.position.y += next_transform.velocity.y;
             if (collides(state, &next_transform)) {
-                transform.velocity.y = -transform.velocity.y;
+                if (transform.entity == state.ball) {
+                    transform.next_velocity = transform.velocity;
+                    transform.next_velocity.y = -transform.next_velocity.y;
+                    state.ball.sprite.?.startAnimation(if (transform.velocity.y < 0) "bounce_up" else "bounce_down");
+
+                    transform.velocity.y = 0;
+                } else {
+                    transform.velocity.y = -transform.velocity.y;
+                }
             }
 
             next_transform.position.x += next_transform.velocity.x;
@@ -273,7 +299,12 @@ fn drawWorld(state: *State) void {
     for (state.sprites.items) |sprite| {
         if (sprite.entity.transform) |transform| {
             if (sprite.getTexture()) |texture| {
-                r.DrawTextureV(texture, transform.position, r.WHITE);
+                const offset = sprite.getOffset();
+                var position = transform.position;
+                position.x += offset.x;
+                position.y += offset.y;
+
+                r.DrawTextureV(texture, position, r.WHITE);
             }
         }
     }
@@ -290,6 +321,7 @@ fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: r.Vector2) !*e
     sprite.frame_start_time = 0;
     sprite.loop_animation = false;
     sprite.animation_completed = false;
+    sprite.current_animation = null;
 
     transform.entity = entity;
     transform.size = r.Vector2{
