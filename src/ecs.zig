@@ -45,6 +45,17 @@ pub const TransformComponent = struct {
 
         return collides;
     }
+
+    pub fn collidesWithPoint(self: *TransformComponent, point: r.Vector2) bool {
+        var collides = false;
+
+        if ((point.x <= self.right() and point.x >= self.left()) and 
+            (point.y <= self.bottom() and point.y >= self.top())) {
+            collides = true;
+        }
+
+        return collides;
+    }
 };
 
 pub const SpriteComponent = struct {

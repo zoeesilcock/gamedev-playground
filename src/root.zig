@@ -25,6 +25,8 @@ pub const State = struct {
     assets: Assets,
 
     last_left_click_time: f64,
+    last_left_click_entity: ?*ecs.Entity,
+    hovered_entity: ?*ecs.Entity,
 
     // Components
     transforms: std.ArrayList(*ecs.TransformComponent),
@@ -41,6 +43,7 @@ const Assets = struct {
 pub const SpriteAsset = struct {
     document: aseprite.AseDocument,
     frames: []r.Texture2D,
+    path: []const u8,
 };
 
 export fn init(window_width: u32, window_height: u32) *anyopaque {
@@ -89,12 +92,18 @@ export fn reload(state_ptr: *anyopaque) void {
 export fn tick(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    if (r.IsMouseButtonPressed(0)) {
-        if (r.GetTime() - state.last_left_click_time < DOUBLE_CLICK_THRESHOLD) {
-            openSprite(state);
-        }
+    state.hovered_entity = getHoveredEntity(state);
 
-        state.last_left_click_time = r.GetTime();
+    if (state.hovered_entity) |hovered_entity| {
+        if (r.IsMouseButtonPressed(0)) {
+            if (r.GetTime() - state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
+                state.last_left_click_entity.? == hovered_entity) {
+                openSprite(state, hovered_entity);
+            }
+
+            state.last_left_click_time = r.GetTime();
+            state.last_left_click_entity = hovered_entity;
+        }
     }
 
     for (state.sprites.items) |sprite| {
@@ -206,6 +215,40 @@ export fn draw(state_ptr: *anyopaque) void {
     }
 }
 
+fn drawWorld(state: *State) void {
+    for (state.sprites.items) |sprite| {
+        if (sprite.entity.transform) |transform| {
+            if (sprite.getTexture()) |texture| {
+                const offset = sprite.getOffset();
+                var position = transform.position;
+                position.x += offset.x;
+                position.y += offset.y;
+
+                r.DrawTextureV(texture, position, r.WHITE);
+            }
+        }
+    }
+
+    {
+        // Draw the current mouse position.
+        const mouse_position = r.GetMousePosition();
+        r.DrawCircle(@intFromFloat(mouse_position.x / state.world_scale), @intFromFloat(mouse_position.y / state.world_scale), 3, r.YELLOW);
+    }
+
+    // Highlight the currently hovered entity.
+    if (state.hovered_entity) |hovered_entity| {
+        if (hovered_entity.transform) |transform| {
+            r.DrawRectangleLines(
+                @intFromFloat(transform.position.x),
+                @intFromFloat(transform.position.y),
+                @intFromFloat(transform.size.x), 
+                @intFromFloat(transform.size.y),
+                r.RED
+            );
+        }
+    }
+}
+
 fn loadAssets(state: *State) void {
     // state.assets.test_texture = r.LoadTexture("assets/test.png");
 
@@ -234,6 +277,7 @@ fn loadSprite(path: []const u8, allocator: std.mem.Allocator) ?SpriteAsset {
         std.debug.print("loadSprite: {s}: {d}\n", .{ path, doc.frames.len });
 
         result = SpriteAsset{
+            .path = path,
             .document = doc,
             .frames = textures.toOwnedSlice() catch &.{},
         };
@@ -295,21 +339,6 @@ fn loadLevel(state: *State) void {
     }
 }
 
-fn drawWorld(state: *State) void {
-    for (state.sprites.items) |sprite| {
-        if (sprite.entity.transform) |transform| {
-            if (sprite.getTexture()) |texture| {
-                const offset = sprite.getOffset();
-                var position = transform.position;
-                position.x += offset.x;
-                position.y += offset.y;
-
-                r.DrawTextureV(texture, position, r.WHITE);
-            }
-        }
-    }
-}
-
 fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: r.Vector2) !*ecs.Entity {
     var entity: *ecs.Entity = try state.allocator.create(ecs.Entity);
     var sprite: *ecs.SpriteComponent = try state.allocator.create(ecs.SpriteComponent);
@@ -339,18 +368,38 @@ fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: r.Vector2) !*e
     return entity;
 }
 
-fn openSprite(state: *State) void {
-    const process_args = if (PLATFORM == .windows) [_][]const u8{ 
-        // "Aseprite.exe",
-        "explorer.exe",
-        ".\\assets\\test.aseprite",
-    } else [_][]const u8{ 
-        "open",
-        "./assets/test.aseprite",
-    };
+fn getHoveredEntity(state: *State) ?*ecs.Entity {
+    var result: ?*ecs.Entity = null;
+    var mouse_position = r.GetMousePosition();
 
-    var aseprite_process = std.process.Child.init(&process_args, state.allocator);
-    aseprite_process.spawn() catch |err| {
-        std.debug.print("Error spawning process: {}\n", .{ err });
-    };
+    mouse_position.x /= state.world_scale;
+    mouse_position.y /= state.world_scale;
+
+    for (state.transforms.items) |transform| {
+        if (transform.collidesWithPoint(mouse_position)) {
+            result = transform.entity;
+            break;
+        }
+    }
+
+    return result;
+}
+
+fn openSprite(state: *State, entity: *ecs.Entity) void {
+    if (entity.sprite) |sprite| {
+        const process_args = if (PLATFORM == .windows) [_][]const u8{ 
+            // "Aseprite.exe",
+            "explorer.exe",
+            sprite.asset.path,
+            // ".\\assets\\test.aseprite",
+        } else [_][]const u8{ 
+            "open",
+            sprite.asset.path,
+        };
+
+        var aseprite_process = std.process.Child.init(&process_args, state.allocator);
+        aseprite_process.spawn() catch |err| {
+            std.debug.print("Error spawning process: {}\n", .{ err });
+        };
+    }
 }
