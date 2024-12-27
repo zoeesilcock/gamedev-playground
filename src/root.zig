@@ -6,7 +6,7 @@ const ecs = @import("ecs.zig");
 const PLATFORM = @import("builtin").os.tag;
 
 const DOUBLE_CLICK_THRESHOLD: f32 = 0.3;
-const BALL_VELOCITY: f32 = 0.05;
+const BALL_VELOCITY: f32 = 64;
 
 pub const State = struct {
     allocator: std.mem.Allocator,
@@ -24,11 +24,15 @@ pub const State = struct {
 
     assets: Assets,
 
+    delta_time: f32,
+    is_paused: bool,
+
+    // Debug interactions.
     last_left_click_time: f64,
     last_left_click_entity: ?*ecs.Entity,
     hovered_entity: ?*ecs.Entity,
 
-    // Components
+    // Components.
     transforms: std.ArrayList(*ecs.TransformComponent),
     sprites: std.ArrayList(*ecs.SpriteComponent),
     ball: *ecs.Entity,
@@ -92,6 +96,16 @@ export fn reload(state_ptr: *anyopaque) void {
 export fn tick(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
+    if (r.IsKeyReleased(r.KEY_TAB)) {
+        state.is_paused = !state.is_paused;
+    }
+
+    if (!state.is_paused) {
+        state.delta_time = r.GetFrameTime();
+    } else {
+        state.delta_time = 0;
+    }
+
     state.hovered_entity = getHoveredEntity(state);
 
     if (state.hovered_entity) |hovered_entity| {
@@ -117,10 +131,9 @@ export fn tick(state_ptr: *anyopaque) void {
                 to_frame = tag.to_frame;
             }
 
-            const frame_end_time: f64 =
-                sprite.frame_start_time + (@as(f64, @floatFromInt(current_frame.header.frame_duration)) / 1000);
+            sprite.duration_shown += state.delta_time;
 
-            if (r.GetTime() > frame_end_time) {
+            if (sprite.duration_shown * 1000 >= @as(f64, @floatFromInt(current_frame.header.frame_duration))) {
                 var next_frame = sprite.frame_index + 1;
                 if (next_frame > to_frame) {
                     if (sprite.loop_animation) {
@@ -159,7 +172,7 @@ export fn tick(state_ptr: *anyopaque) void {
         if (transform.velocity.x != 0 or transform.velocity.y != 0) {
             var next_transform = transform.*;
 
-            next_transform.position.y += next_transform.velocity.y;
+            next_transform.position.y += next_transform.velocity.y * state.delta_time;
             if (collides(state, &next_transform)) {
                 if (transform.entity == state.ball) {
                     transform.next_velocity = transform.velocity;
@@ -172,14 +185,14 @@ export fn tick(state_ptr: *anyopaque) void {
                 }
             }
 
-            next_transform.position.x += next_transform.velocity.x;
+            next_transform.position.x += next_transform.velocity.x * state.delta_time;
             if (collides(state, &next_transform)) {
                 // transform.velocity.x = -transform.velocity.x;
                 transform.velocity.x = 0;
             }
 
-            transform.position.x += transform.velocity.x;
-            transform.position.y += transform.velocity.y;
+            transform.position.x += transform.velocity.x * state.delta_time;
+            transform.position.y += transform.velocity.y * state.delta_time;
         }
     }
 }
@@ -347,7 +360,7 @@ fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: r.Vector2) !*e
     sprite.entity = entity;
     sprite.asset = sprite_asset;
     sprite.frame_index = 0;
-    sprite.frame_start_time = 0;
+    sprite.duration_shown = 0;
     sprite.loop_animation = false;
     sprite.animation_completed = false;
     sprite.current_animation = null;

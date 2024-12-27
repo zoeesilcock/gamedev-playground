@@ -63,15 +63,15 @@ pub const SpriteComponent = struct {
 
     asset: *const root.SpriteAsset,
     frame_index: u32,
-    frame_start_time: f64,
+    duration_shown: f64,
     loop_animation: bool,
     animation_completed: bool,
     current_animation: ?*aseprite.AseTagsChunk,
 
     pub fn setFrame(self: *SpriteComponent, index: u32) void {
         if (index < self.asset.document.frames.len) {
+            self.duration_shown = 0;
             self.frame_index = index;
-            self.frame_start_time = r.GetTime();
         }
     }
 
