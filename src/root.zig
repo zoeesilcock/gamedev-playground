@@ -26,6 +26,7 @@ pub const State = struct {
 
     delta_time: f32,
     is_paused: bool,
+    debug_ui_state: DebugUIState,
 
     // Debug interactions.
     last_left_click_time: f64,
@@ -50,6 +51,11 @@ pub const SpriteAsset = struct {
     document: aseprite.AseDocument,
     frames: []r.Texture2D,
     path: []const u8,
+};
+
+const DebugUIState = struct {
+    current_wall: ?*SpriteAsset,
+    show_level_editor: bool,
 };
 
 export fn init(window_width: u32, window_height: u32) *anyopaque {
@@ -83,6 +89,10 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     loadAssets(state);
     loadLevel(state);
 
+    state.debug_ui_state.current_wall = &state.assets.wall_gray.?;
+
+    r.SetMouseScale(1 / state.world_scale, 1 / state.world_scale);
+
     return state;
 }
 
@@ -102,6 +112,10 @@ export fn tick(state_ptr: *anyopaque) void {
         state.is_paused = !state.is_paused;
     }
 
+    if (r.IsKeyReleased(r.KEY_E)) {
+        state.debug_ui_state.show_level_editor = !state.debug_ui_state.show_level_editor;
+    }
+
     if (!state.is_paused) {
         state.delta_time = r.GetFrameTime();
     } else {
@@ -115,10 +129,27 @@ export fn tick(state_ptr: *anyopaque) void {
             if (r.GetTime() - state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
                 state.last_left_click_entity.? == hovered_entity) {
                 openSprite(state, hovered_entity);
+            } else {
+                if (state.debug_ui_state.current_wall) |editor_wall| {
+                    if (editor_wall == hovered_entity.sprite.?.asset) {
+                        removeEntity(state, hovered_entity);
+                    } else {
+                        removeEntity(state, hovered_entity);
+                        const tiled_position = getTiledPosition(r.GetMousePosition(), editor_wall);
+                        _ = addSprite(state, editor_wall, tiled_position) catch undefined;
+                    }
+                }
             }
 
             state.last_left_click_time = r.GetTime();
             state.last_left_click_entity = hovered_entity;
+        }
+    } else {
+        if (r.IsMouseButtonPressed(0)) {
+            if (state.debug_ui_state.current_wall) |editor_wall| {
+                const tiled_position = getTiledPosition(r.GetMousePosition(), editor_wall);
+                _ = addSprite(state, editor_wall, tiled_position) catch undefined;
+            }
         }
     }
 
@@ -220,6 +251,7 @@ export fn draw(state_ptr: *anyopaque) void {
         {
             r.ClearBackground(r.BLACK);
             drawWorld(state);
+            drawDebugUI(state);
         }
         r.EndTextureMode();
 
@@ -247,7 +279,7 @@ fn drawWorld(state: *State) void {
     {
         // Draw the current mouse position.
         const mouse_position = r.GetMousePosition();
-        r.DrawCircle(@intFromFloat(mouse_position.x / state.world_scale), @intFromFloat(mouse_position.y / state.world_scale), 3, r.YELLOW);
+        r.DrawCircle(@intFromFloat(mouse_position.x), @intFromFloat(mouse_position.y), 3, r.YELLOW);
     }
 
     // Highlight the currently hovered entity.
@@ -262,6 +294,46 @@ fn drawWorld(state: *State) void {
             );
         }
     }
+}
+
+fn drawDebugUI(state: *State) void {
+    if (state.debug_ui_state.show_level_editor) {
+        _ = r.GuiWindowBox(r.Rectangle{ .x = 0, .y = 0, .width = 100, .height = 100 }, "Level editor");
+
+        var button_rect: r.Rectangle = .{ .x = 10, .y = 30, .width = 75, .height = 16 };
+        if (r.GuiButton(button_rect, "Gray") != 0) {
+            state.debug_ui_state.current_wall = &state.assets.wall_gray.?;
+        }
+        if (state.debug_ui_state.current_wall == &state.assets.wall_gray.?) {
+            drawButtonHighlight(button_rect);
+        }
+
+        button_rect.y += 20;
+        if (r.GuiButton(button_rect, "Red") != 0) {
+            state.debug_ui_state.current_wall = &state.assets.wall_red.?;
+        }
+        if (state.debug_ui_state.current_wall == &state.assets.wall_red.?) {
+            drawButtonHighlight(button_rect);
+        }
+
+        button_rect.y += 20;
+        if (r.GuiButton(button_rect, "Blue") != 0) {
+            state.debug_ui_state.current_wall = &state.assets.wall_blue.?;
+        }
+        if (state.debug_ui_state.current_wall == &state.assets.wall_blue.?) {
+            drawButtonHighlight(button_rect);
+        }
+    }
+}
+
+fn drawButtonHighlight(rect: r.Rectangle) void {
+    r.DrawRectangleLines(
+        @intFromFloat(rect.x),
+        @intFromFloat(rect.y),
+        @intFromFloat(rect.width),
+        @intFromFloat(rect.height),
+        r.RED,
+    );
 }
 
 fn loadAssets(state: *State) void {
@@ -385,12 +457,35 @@ fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: r.Vector2) !*e
     return entity;
 }
 
+fn removeEntity(state: *State, entity: *ecs.Entity) void {
+    if (entity.transform) |_| {
+        var opt_remove_at: ?usize = null;
+        for (state.transforms.items, 0..) |stored_transform, index| {
+            if (stored_transform.entity == entity) {
+                opt_remove_at = index;
+            }
+        }
+        if (opt_remove_at) |remove_at| {
+            _ = state.transforms.swapRemove(remove_at);
+        }
+    }
+
+    if (entity.sprite) |_| {
+        var opt_remove_at: ?usize = null;
+        for (state.sprites.items, 0..) |stored_sprite, index| {
+            if (stored_sprite.entity == entity) {
+                opt_remove_at = index;
+            }
+        }
+        if (opt_remove_at) |remove_at| {
+            _ = state.sprites.swapRemove(remove_at);
+        }
+    }
+}
+
 fn getHoveredEntity(state: *State) ?*ecs.Entity {
     var result: ?*ecs.Entity = null;
-    var mouse_position = r.GetMousePosition();
-
-    mouse_position.x /= state.world_scale;
-    mouse_position.y /= state.world_scale;
+    const mouse_position = r.GetMousePosition();
 
     for (state.transforms.items) |transform| {
         if (transform.collidesWithPoint(mouse_position)) {
@@ -400,6 +495,15 @@ fn getHoveredEntity(state: *State) ?*ecs.Entity {
     }
 
     return result;
+}
+
+fn getTiledPosition(position: r.Vector2, asset: *SpriteAsset) r.Vector2 {
+    const tile_x = @divFloor(position.x, @as(f32, @floatFromInt(asset.document.header.width)));
+    const tile_y = @divFloor(position.y, @as(f32, @floatFromInt(asset.document.header.height)));
+    return r.Vector2{
+        .x = tile_x * @as(f32, @floatFromInt(asset.document.header.width)),
+        .y = tile_y * @as(f32, @floatFromInt(asset.document.header.height)),
+    };
 }
 
 fn openSprite(state: *State, entity: *ecs.Entity) void {
