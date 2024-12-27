@@ -58,7 +58,7 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     state.window_width = window_width;
     state.window_height = window_height;
 
-    state.world_scale = 2;
+    state.world_scale = 4;
     state.world_width = @intFromFloat(@divFloor(@as(f32, @floatFromInt(state.window_width)), state.world_scale));
     state.world_height = @intFromFloat(@divFloor(@as(f32, @floatFromInt(state.window_height)), state.world_scale));
     state.render_texture = r.LoadRenderTexture(@intCast(state.world_width), @intCast(state.world_height));
@@ -304,31 +304,31 @@ fn loadLevel(state: *State) void {
         var position = r.Vector2{ .x = 0, .y = 0 };
 
         // Top edge.
-        for (0..6) |_| {
+        for (0..9) |_| {
             _ = addSprite(state, sprite, position) catch undefined;
             position.x += @floatFromInt(sprite.document.header.width);
         }
 
         // Right edge.
-        for (0..5) |_| {
+        position.x = @floatFromInt(sprite.document.header.width * 9);
+        position.y = 0;
+        for (0..10) |_| {
             _ = addSprite(state, sprite, position) catch undefined;
-            position.y += @floatFromInt(sprite.document.header.width);
+            position.y += @floatFromInt(sprite.document.header.height);
         }
 
         // Left edge.
         position.x = 0;
-        position.y = @floatFromInt(sprite.document.header.height);
-        _ = addSprite(state, sprite, position) catch undefined;
-
-        position.y += @floatFromInt(sprite.document.header.height);
-        _ = addSprite(state, sprite, position) catch undefined;
-
-        position.y += @floatFromInt(sprite.document.header.height);
-        _ = addSprite(state, sprite, position) catch undefined;
+        position.y = 0;
+        for (0..9) |_| {
+            _ = addSprite(state, sprite, position) catch undefined;
+            position.y += @floatFromInt(sprite.document.header.height);
+        }
 
         // Bottom edge.
-        position.y += @floatFromInt(sprite.document.header.height);
-        for (0..6) |_| {
+        position.x = 0;
+        position.y = @floatFromInt(sprite.document.header.height * 9);
+        for (0..9) |_| {
             _ = addSprite(state, sprite, position) catch undefined;
             position.x += @floatFromInt(sprite.document.header.width);
         }
