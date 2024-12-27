@@ -40,7 +40,9 @@ pub const State = struct {
 
 const Assets = struct {
     test_sprite: ?SpriteAsset,
-    wall: ?SpriteAsset,
+    wall_gray: ?SpriteAsset,
+    wall_red: ?SpriteAsset,
+    wall_blue: ?SpriteAsset,
     ball: ?SpriteAsset,
 };
 
@@ -267,7 +269,9 @@ fn loadAssets(state: *State) void {
 
     state.assets.test_sprite = loadSprite("assets/test_animation.aseprite", state.allocator);
     state.assets.ball = loadSprite("assets/ball.aseprite", state.allocator);
-    state.assets.wall = loadSprite("assets/wall.aseprite", state.allocator);
+    state.assets.wall_gray = loadSprite("assets/wall_gray.aseprite", state.allocator);
+    state.assets.wall_red = loadSprite("assets/wall_red.aseprite", state.allocator);
+    state.assets.wall_blue = loadSprite("assets/wall_blue.aseprite", state.allocator);
 }
 
 fn loadSprite(path: []const u8, allocator: std.mem.Allocator) ?SpriteAsset {
@@ -300,7 +304,7 @@ fn loadSprite(path: []const u8, allocator: std.mem.Allocator) ?SpriteAsset {
 }
 
 fn loadLevel(state: *State) void {
-    if (state.assets.wall) |*sprite| {
+    if (state.assets.wall_gray) |*sprite| {
         var position = r.Vector2{ .x = 0, .y = 0 };
 
         // Top edge.
