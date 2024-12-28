@@ -116,6 +116,10 @@ export fn tick(state_ptr: *anyopaque) void {
         state.debug_ui_state.show_level_editor = !state.debug_ui_state.show_level_editor;
     }
 
+    if (r.IsKeyReleased(r.KEY_S)) {
+        saveLevel(state);
+    }
+
     if (!state.is_paused) {
         state.delta_time = r.GetFrameTime();
     } else {
@@ -425,6 +429,25 @@ fn loadLevel(state: *State) void {
         };
         const entity = addSprite(state, sprite, position) catch undefined;
         entity.sprite.?.loop_animation = true;
+    }
+}
+
+fn saveLevel(state: *State) void {
+    for (state.sprites.items) |sprite| {
+        if (sprite.entity.transform) |transform| {
+            var sprite_name: ?[]const u8 = null;
+            if (std.mem.eql(u8, sprite.asset.path, state.assets.wall_gray.?.path)) {
+                sprite_name = "wall_gray";
+            } else if (std.mem.eql(u8, sprite.asset.path, state.assets.wall_red.?.path)) {
+                sprite_name = "wall_red";
+            } else if (std.mem.eql(u8, sprite.asset.path, state.assets.wall_blue.?.path)) {
+                sprite_name = "wall_blue";
+            }
+
+            if (sprite_name) |name| {
+                std.debug.print("{s}: {d}x{d}\n", .{ name, @round(transform.position.x), @round(transform.position.y) });
+            }
+        }
     }
 }
 
