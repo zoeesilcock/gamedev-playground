@@ -128,31 +128,33 @@ export fn tick(state_ptr: *anyopaque) void {
 
     state.hovered_entity = getHoveredEntity(state);
 
-    if (state.hovered_entity) |hovered_entity| {
-        if (r.IsMouseButtonPressed(0)) {
-            if (r.GetTime() - state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
-                state.last_left_click_entity.? == hovered_entity) {
-                openSprite(state, hovered_entity);
-            } else {
-                if (state.debug_ui_state.current_wall) |editor_wall| {
-                    if (editor_wall == hovered_entity.sprite.?.asset) {
-                        removeEntity(state, hovered_entity);
-                    } else {
-                        removeEntity(state, hovered_entity);
-                        const tiled_position = getTiledPosition(r.GetMousePosition(), editor_wall);
-                        _ = addSprite(state, editor_wall, tiled_position) catch undefined;
+    if (!state.debug_ui_state.show_level_editor) {
+        if (state.hovered_entity) |hovered_entity| {
+            if (r.IsMouseButtonPressed(0)) {
+                if (r.GetTime() - state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
+                    state.last_left_click_entity.? == hovered_entity) {
+                    openSprite(state, hovered_entity);
+                } else {
+                    if (state.debug_ui_state.current_wall) |editor_wall| {
+                        if (editor_wall == hovered_entity.sprite.?.asset) {
+                            removeEntity(state, hovered_entity);
+                        } else {
+                            removeEntity(state, hovered_entity);
+                            const tiled_position = getTiledPosition(r.GetMousePosition(), editor_wall);
+                            _ = addSprite(state, editor_wall, tiled_position) catch undefined;
+                        }
                     }
                 }
-            }
 
-            state.last_left_click_time = r.GetTime();
-            state.last_left_click_entity = hovered_entity;
-        }
-    } else {
-        if (r.IsMouseButtonPressed(0)) {
-            if (state.debug_ui_state.current_wall) |editor_wall| {
-                const tiled_position = getTiledPosition(r.GetMousePosition(), editor_wall);
-                _ = addSprite(state, editor_wall, tiled_position) catch undefined;
+                state.last_left_click_time = r.GetTime();
+                state.last_left_click_entity = hovered_entity;
+            }
+        } else {
+            if (r.IsMouseButtonPressed(0)) {
+                if (state.debug_ui_state.current_wall) |editor_wall| {
+                    const tiled_position = getTiledPosition(r.GetMousePosition(), editor_wall);
+                    _ = addSprite(state, editor_wall, tiled_position) catch undefined;
+                }
             }
         }
     }
@@ -210,20 +212,27 @@ export fn tick(state_ptr: *anyopaque) void {
             var next_transform = transform.*;
 
             next_transform.position.y += next_transform.velocity.y * state.delta_time;
-            if (collides(state, &next_transform)) {
+            if (collides(state, &next_transform)) |other_entity| {
                 if (transform.entity == state.ball) {
                     transform.next_velocity = transform.velocity;
                     transform.next_velocity.y = -transform.next_velocity.y;
                     state.ball.sprite.?.startAnimation(if (transform.velocity.y < 0) "bounce_up" else "bounce_down");
 
                     transform.velocity.y = 0;
+
+                    // Check if the other sprite is a wall of the same color as the ball.
+                    if (other_entity.sprite) |other_sprite| {
+                        if (other_sprite.asset == &state.assets.wall_red.?) {
+                            removeEntity(state, other_sprite.entity);
+                        }
+                    }
                 } else {
                     transform.velocity.y = -transform.velocity.y;
                 }
             }
 
             next_transform.position.x += next_transform.velocity.x * state.delta_time;
-            if (collides(state, &next_transform)) {
+            if (collides(state, &next_transform)) |_| {
                 // transform.velocity.x = -transform.velocity.x;
                 transform.velocity.x = 0;
             }
@@ -234,12 +243,12 @@ export fn tick(state_ptr: *anyopaque) void {
     }
 }
 
-fn collides(state: *State, transform: *ecs.TransformComponent) bool {
-    var result = false;
+fn collides(state: *State, transform: *ecs.TransformComponent) ?*ecs.Entity {
+    var result: ?*ecs.Entity = null;
 
     for (state.transforms.items) |other| {
         if (transform.entity != other.entity and transform.collidesWith(other)) {
-            result = true;
+            result = other.entity;
             break;
         }
     }
