@@ -130,7 +130,18 @@ pub const SpriteComponent = struct {
     }
 };
 
+pub const ColorComponentValue = enum {
+    Gray,
+    Red,
+    Blue,
+};
+
+pub const ColorComponent = struct {
+    color: ColorComponentValue,
+};
+
 pub const Entity = struct {
     transform: ?*TransformComponent,
     sprite: ?*SpriteComponent,
+    color: ?*ColorComponent,
 };

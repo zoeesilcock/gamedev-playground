@@ -34,6 +34,7 @@ pub const State = struct {
     hovered_entity: ?*ecs.Entity,
 
     // Components.
+    walls: std.ArrayList(*ecs.Entity),
     transforms: std.ArrayList(*ecs.TransformComponent),
     sprites: std.ArrayList(*ecs.SpriteComponent),
     ball: *ecs.Entity,
@@ -45,6 +46,14 @@ const Assets = struct {
     wall_red: ?SpriteAsset,
     wall_blue: ?SpriteAsset,
     ball: ?SpriteAsset,
+
+    pub fn getWall(self: *Assets, color: ecs.ColorComponentValue) SpriteAsset {
+        return switch (color) {
+            .Red => self.wall_red.?,
+            .Blue => self.wall_blue.?,
+            .Gray => self.wall_gray.?,
+        };
+    }
 };
 
 pub const SpriteAsset = struct {
@@ -54,7 +63,7 @@ pub const SpriteAsset = struct {
 };
 
 const DebugUIState = struct {
-    current_wall: ?*SpriteAsset,
+    current_wall_color: ?ecs.ColorComponentValue,
     show_level_editor: bool,
 };
 
@@ -83,13 +92,14 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
         .height = state.source_rect.height * state.world_scale,
     };
 
+    state.walls = std.ArrayList(*ecs.Entity).init(allocator);
     state.transforms = std.ArrayList(*ecs.TransformComponent).init(allocator);
     state.sprites = std.ArrayList(*ecs.SpriteComponent).init(allocator);
 
     loadAssets(state);
     loadLevel(state);
 
-    state.debug_ui_state.current_wall = &state.assets.wall_gray.?;
+    state.debug_ui_state.current_wall_color = .Red;
 
     r.SetMouseScale(1 / state.world_scale, 1 / state.world_scale);
 
@@ -135,13 +145,13 @@ export fn tick(state_ptr: *anyopaque) void {
                     state.last_left_click_entity.? == hovered_entity) {
                     openSprite(state, hovered_entity);
                 } else {
-                    if (state.debug_ui_state.current_wall) |editor_wall| {
-                        if (editor_wall == hovered_entity.sprite.?.asset) {
+                    if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
+                        if (editor_wall_color == hovered_entity.color.?.color) {
                             removeEntity(state, hovered_entity);
                         } else {
                             removeEntity(state, hovered_entity);
-                            const tiled_position = getTiledPosition(r.GetMousePosition(), editor_wall);
-                            _ = addSprite(state, editor_wall, tiled_position) catch undefined;
+                            const tiled_position = getTiledPosition(r.GetMousePosition(), &state.assets.getWall(editor_wall_color));
+                            _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
                         }
                     }
                 }
@@ -151,9 +161,9 @@ export fn tick(state_ptr: *anyopaque) void {
             }
         } else {
             if (r.IsMouseButtonPressed(0)) {
-                if (state.debug_ui_state.current_wall) |editor_wall| {
-                    const tiled_position = getTiledPosition(r.GetMousePosition(), editor_wall);
-                    _ = addSprite(state, editor_wall, tiled_position) catch undefined;
+                if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
+                    const tiled_position = getTiledPosition(r.GetMousePosition(), &state.assets.getWall(editor_wall_color));
+                    _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
                 }
             }
         }
@@ -221,9 +231,9 @@ export fn tick(state_ptr: *anyopaque) void {
                     transform.velocity.y = 0;
 
                     // Check if the other sprite is a wall of the same color as the ball.
-                    if (other_entity.sprite) |other_sprite| {
-                        if (other_sprite.asset == &state.assets.wall_red.?) {
-                            removeEntity(state, other_sprite.entity);
+                    if (other_entity.color) |other_color| {
+                        if (transform.entity.color.?.color == other_color.color) {
+                            removeEntity(state, other_entity);
                         }
                     }
                 } else {
@@ -315,25 +325,25 @@ fn drawDebugUI(state: *State) void {
 
         var button_rect: r.Rectangle = .{ .x = 10, .y = 30, .width = 75, .height = 16 };
         if (r.GuiButton(button_rect, "Gray") != 0) {
-            state.debug_ui_state.current_wall = &state.assets.wall_gray.?;
+            state.debug_ui_state.current_wall_color = .Gray;
         }
-        if (state.debug_ui_state.current_wall == &state.assets.wall_gray.?) {
+        if (state.debug_ui_state.current_wall_color == .Gray) {
             drawButtonHighlight(button_rect);
         }
 
         button_rect.y += 20;
         if (r.GuiButton(button_rect, "Red") != 0) {
-            state.debug_ui_state.current_wall = &state.assets.wall_red.?;
+            state.debug_ui_state.current_wall_color = .Red;
         }
-        if (state.debug_ui_state.current_wall == &state.assets.wall_red.?) {
+        if (state.debug_ui_state.current_wall_color == .Red) {
             drawButtonHighlight(button_rect);
         }
 
         button_rect.y += 20;
         if (r.GuiButton(button_rect, "Blue") != 0) {
-            state.debug_ui_state.current_wall = &state.assets.wall_blue.?;
+            state.debug_ui_state.current_wall_color = .Blue;
         }
-        if (state.debug_ui_state.current_wall == &state.assets.wall_blue.?) {
+        if (state.debug_ui_state.current_wall_color == .Blue) {
             drawButtonHighlight(button_rect);
         }
     }
@@ -394,7 +404,7 @@ fn loadLevel(state: *State) void {
 
         // Top edge.
         for (0..9) |_| {
-            _ = addSprite(state, sprite, position) catch undefined;
+            _ = addWall(state, .Gray, position) catch undefined;
             position.x += @floatFromInt(sprite.document.header.width);
         }
 
@@ -402,7 +412,7 @@ fn loadLevel(state: *State) void {
         position.x = @floatFromInt(sprite.document.header.width * 9);
         position.y = 0;
         for (0..10) |_| {
-            _ = addSprite(state, sprite, position) catch undefined;
+            _ = addWall(state, .Gray, position) catch undefined;
             position.y += @floatFromInt(sprite.document.header.height);
         }
 
@@ -410,7 +420,7 @@ fn loadLevel(state: *State) void {
         position.x = 0;
         position.y = 0;
         for (0..9) |_| {
-            _ = addSprite(state, sprite, position) catch undefined;
+            _ = addWall(state, .Gray, position) catch undefined;
             position.y += @floatFromInt(sprite.document.header.height);
         }
 
@@ -418,15 +428,19 @@ fn loadLevel(state: *State) void {
         position.x = 0;
         position.y = @floatFromInt(sprite.document.header.height * 9);
         for (0..9) |_| {
-            _ = addSprite(state, sprite, position) catch undefined;
+            _ = addWall(state, .Gray, position) catch undefined;
             position.x += @floatFromInt(sprite.document.header.width);
         }
     }
 
     if (state.assets.ball) |*sprite| {
         const position = r.Vector2{ .x = 64, .y = 64 };
+        var color_component: *ecs.ColorComponent = state.allocator.create(ecs.ColorComponent) catch undefined;
+        color_component.color = .Red;
+
         if (addSprite(state, sprite, position) catch null) |entity| {
             entity.transform.?.velocity.y = BALL_VELOCITY;
+            entity.color = color_component;
             state.ball = entity;
         }
     }
@@ -442,19 +456,10 @@ fn loadLevel(state: *State) void {
 }
 
 fn saveLevel(state: *State) void {
-    for (state.sprites.items) |sprite| {
-        if (sprite.entity.transform) |transform| {
-            var sprite_name: ?[]const u8 = null;
-            if (std.mem.eql(u8, sprite.asset.path, state.assets.wall_gray.?.path)) {
-                sprite_name = "wall_gray";
-            } else if (std.mem.eql(u8, sprite.asset.path, state.assets.wall_red.?.path)) {
-                sprite_name = "wall_red";
-            } else if (std.mem.eql(u8, sprite.asset.path, state.assets.wall_blue.?.path)) {
-                sprite_name = "wall_blue";
-            }
-
-            if (sprite_name) |name| {
-                std.debug.print("{s}: {d}x{d}\n", .{ name, @round(transform.position.x), @round(transform.position.y) });
+    for (state.walls.items) |wall| {
+        if (wall.color) |color| {
+            if (wall.transform) |transform| {
+                std.debug.print("{}: {d}x{d}\n", .{ color.color, @round(transform.position.x), @round(transform.position.y) });
             }
         }
     }
@@ -482,11 +487,29 @@ fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: r.Vector2) !*e
 
     entity.transform = transform;
     entity.sprite = sprite;
+    entity.color = null;
 
     try state.transforms.append(transform);
     try state.sprites.append(sprite);
 
     return entity;
+}
+
+fn addWall(state: *State, color: ecs.ColorComponentValue, position: r.Vector2) !*ecs.Entity {
+    var color_component: *ecs.ColorComponent = try state.allocator.create(ecs.ColorComponent);
+    const sprite_asset = &switch(color) {
+        .Gray => state.assets.wall_gray.?,
+        .Red => state.assets.wall_red.?,
+        .Blue => state.assets.wall_blue.?,
+    };
+
+    const new_entity = try addSprite(state, sprite_asset, position);
+
+    color_component.color = color;
+    new_entity.color = color_component;
+    try state.walls.append(new_entity);
+
+    return new_entity;
 }
 
 fn removeEntity(state: *State, entity: *ecs.Entity) void {
@@ -513,6 +536,18 @@ fn removeEntity(state: *State, entity: *ecs.Entity) void {
             _ = state.sprites.swapRemove(remove_at);
         }
     }
+
+    {
+        var opt_remove_at: ?usize = null;
+        for (state.walls.items, 0..) |stored_wall, index| {
+            if (stored_wall == entity) {
+                opt_remove_at = index;
+            }
+        }
+        if (opt_remove_at) |remove_at| {
+            _ = state.walls.swapRemove(remove_at);
+        }
+    }
 }
 
 fn getHoveredEntity(state: *State) ?*ecs.Entity {
@@ -529,7 +564,7 @@ fn getHoveredEntity(state: *State) ?*ecs.Entity {
     return result;
 }
 
-fn getTiledPosition(position: r.Vector2, asset: *SpriteAsset) r.Vector2 {
+fn getTiledPosition(position: r.Vector2, asset: *const SpriteAsset) r.Vector2 {
     const tile_x = @divFloor(position.x, @as(f32, @floatFromInt(asset.document.header.width)));
     const tile_y = @divFloor(position.y, @as(f32, @floatFromInt(asset.document.header.height)));
     return r.Vector2{
