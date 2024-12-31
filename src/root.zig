@@ -183,35 +183,45 @@ export fn tick(state_ptr: *anyopaque) void {
         }
     }
 
-    for (state.sprites.items) |sprite| {
-        if (sprite.asset.document.frames.len > 1) {
-            const current_frame = sprite.asset.document.frames[sprite.frame_index];
-            var from_frame: u16 = 0;
-            var to_frame: u16 = @intCast(sprite.asset.document.frames.len);
+    const collisions = ecs.TransformComponent.checkForCollisions(state.transforms.items, state.delta_time);
 
-            if (sprite.current_animation) |tag| {
-                from_frame = tag.from_frame;
-                to_frame = tag.to_frame;
-            }
+    // Handle vertical collisions.
+    if (collisions.vertical) |collision| {
+        if (collision.self.entity == state.ball) {
+            collision.self.next_velocity = collision.self.velocity;
+            collision.self.next_velocity.y = -collision.self.next_velocity.y;
+            collision.self.entity.sprite.?.startAnimation(if (collision.self.velocity.y < 0) "bounce_up" else "bounce_down");
 
-            sprite.duration_shown += state.delta_time;
+            collision.self.velocity.y = 0;
 
-            if (sprite.duration_shown * 1000 >= @as(f64, @floatFromInt(current_frame.header.frame_duration))) {
-                var next_frame = sprite.frame_index + 1;
-                if (next_frame > to_frame) {
-                    if (sprite.loop_animation) {
-                        next_frame = from_frame;
-                    } else {
-                        sprite.animation_completed = true;
-                        next_frame = to_frame;
-                        continue;
-                    }
+            // Check if the other sprite is a wall of the same color as the ball.
+            if (collision.other.entity.color) |other_color| {
+                if (collision.self.entity.color.?.color == other_color.color) {
+                    removeEntity(state, collision.other.entity);
                 }
+            }
+        } else {
+            collision.self.velocity.y = -collision.self.velocity.y;
+        }
+    }
 
-                sprite.setFrame(next_frame);
+    // Handle horizontal collisions.
+    if (collisions.horizontal) |collision| {
+        if (collision.self.entity == state.ball) {
+            collision.self.velocity.x = 0;
+
+            // Check if the other sprite is a wall of the same color as the ball.
+            if (collision.other.entity.color) |other_color| {
+                if (collision.self.entity.color.?.color == other_color.color) {
+                    removeEntity(state, collision.other.entity);
+                }
             }
         }
     }
+
+    ecs.TransformComponent.tick(state.transforms.items, state.delta_time);
+
+    ecs.SpriteComponent.tick(state.sprites.items, state.delta_time);
 
     if (state.ball.transform) |transform| {
         if (r.IsKeyDown(r.KEY_LEFT)) {
@@ -231,68 +241,9 @@ export fn tick(state_ptr: *anyopaque) void {
         }
     }
 
-    for (state.transforms.items) |transform| {
-        if (transform.velocity.x != 0 or transform.velocity.y != 0) {
-            var next_transform = transform.*;
-
-            // Check in the Y direction.
-            next_transform.position.y += next_transform.velocity.y * state.delta_time;
-            if (collides(state, &next_transform)) |other_entity| {
-                if (transform.entity == state.ball) {
-                    transform.next_velocity = transform.velocity;
-                    transform.next_velocity.y = -transform.next_velocity.y;
-                    state.ball.sprite.?.startAnimation(if (transform.velocity.y < 0) "bounce_up" else "bounce_down");
-
-                    transform.velocity.y = 0;
-
-                    // Check if the other sprite is a wall of the same color as the ball.
-                    if (other_entity.color) |other_color| {
-                        if (transform.entity.color.?.color == other_color.color) {
-                            removeEntity(state, other_entity);
-                        }
-                    }
-                } else {
-                    transform.velocity.y = -transform.velocity.y;
-                }
-            }
-
-            // Check in the X direction.
-            next_transform.position.x += next_transform.velocity.x * state.delta_time;
-            if (collides(state, &next_transform)) |other_entity| {
-                if (transform.entity == state.ball) {
-                    transform.velocity.x = 0;
-
-                    // Check if the other sprite is a wall of the same color as the ball.
-                    if (other_entity.color) |other_color| {
-                        if (transform.entity.color.?.color == other_color.color) {
-                            removeEntity(state, other_entity);
-                        }
-                    }
-                }
-            }
-
-            // Apply any remaining velocity to the position.
-            transform.position.x += transform.velocity.x * state.delta_time;
-            transform.position.y += transform.velocity.y * state.delta_time;
-        }
-    }
-
     if (isLevelCompleted(state)) {
         nextLevel(state);
     }
-}
-
-fn collides(state: *State, transform: *ecs.TransformComponent) ?*ecs.Entity {
-    var result: ?*ecs.Entity = null;
-
-    for (state.transforms.items) |other| {
-        if (transform.entity != other.entity and transform.collidesWith(other)) {
-            result = other.entity;
-            break;
-        }
-    }
-
-    return result;
 }
 
 export fn draw(state_ptr: *anyopaque) void {
@@ -433,16 +384,17 @@ fn spawnBall(state: *State) void {
         color_component.color = .Red;
 
         if (addSprite(state, sprite, BALL_SPAWN) catch null) |entity| {
-            entity.transform.?.velocity.y = -BALL_VELOCITY;
             entity.color = color_component;
             state.ball = entity;
+
+            resetBall(state);
         }
     }
 }
 
 fn resetBall(state: *State) void {
     state.ball.transform.?.position = BALL_SPAWN;
-    state.ball.transform.?.velocity.y = -BALL_VELOCITY;
+    state.ball.transform.?.velocity.y = BALL_VELOCITY;
 }
 
 fn saveLevel(state: *State, path: []const u8) !void {
@@ -528,6 +480,7 @@ fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: r.Vector2) !*e
         .y = @floatFromInt(sprite_asset.document.header.height),
     };
     transform.position = position;
+    transform.velocity = r.Vector2Zero();
 
     entity.transform = transform;
     entity.sprite = sprite;

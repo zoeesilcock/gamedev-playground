@@ -3,6 +3,16 @@ const r = @import("dependencies/raylib.zig");
 const aseprite = @import("aseprite.zig");
 const root = @import("root.zig");
 
+pub const TransformCollisionResult = struct {
+    vertical: ?TransformCollision = null,
+    horizontal: ?TransformCollision = null,
+};
+
+const TransformCollision = struct {
+    self: *TransformComponent,
+    other: *TransformComponent,
+};
+
 pub const TransformComponent = struct {
     entity: *Entity,
 
@@ -10,6 +20,37 @@ pub const TransformComponent = struct {
     size: r.Vector2,
     velocity: r.Vector2,
     next_velocity: r.Vector2,
+
+    pub fn checkForCollisions(transforms: []*TransformComponent, delta_time: f32) TransformCollisionResult {
+        var result: TransformCollisionResult = .{};
+
+        for (transforms) |transform| {
+            if (transform.velocity.x != 0 or transform.velocity.y != 0) {
+                var next_transform = transform.*;
+
+                // Check in the Y direction.
+                next_transform.position.y += next_transform.velocity.y * delta_time;
+                if (next_transform.collisionTarget(transforms)) |other_entity| {
+                    result.vertical = .{ .self = transform, .other = other_entity.transform.? };
+                }
+
+                // Check in the X direction.
+                next_transform.position.x += next_transform.velocity.x * delta_time;
+                if (next_transform.collisionTarget(transforms)) |other_entity| {
+                    result.horizontal = .{ .self = transform, .other = other_entity.transform.? };
+                }
+            }
+        }
+
+        return result;
+    }
+
+    pub fn tick(transforms: []*TransformComponent, delta_time: f32) void {
+        for (transforms) |transform| {
+            transform.position.x += transform.velocity.x * delta_time;
+            transform.position.y += transform.velocity.y * delta_time;
+        }
+    }
 
     pub fn top(self: *TransformComponent) f32 {
         return self.position.y;
@@ -29,6 +70,19 @@ pub const TransformComponent = struct {
 
     pub fn center(self: *TransformComponent) r.Vector2 {
         return r.Vector2{ .x = self.position.x + self.size.x * 0.5, .y = self.position.y + self.size.y * 0.5 };
+    }
+
+    fn collisionTarget(self: *TransformComponent, others: []*TransformComponent) ?*Entity {
+        var result: ?*Entity = null;
+
+        for (others) |other| {
+            if (self.entity != other.entity and self.collidesWith(other)) {
+                result = other.entity;
+                break;
+            }
+        }
+
+        return result;
     }
 
     pub fn collidesWith(self: *TransformComponent, other: *TransformComponent) bool {
@@ -67,6 +121,38 @@ pub const SpriteComponent = struct {
     loop_animation: bool,
     animation_completed: bool,
     current_animation: ?*aseprite.AseTagsChunk,
+
+    pub fn tick(sprites: []*SpriteComponent, delta_time: f32) void {
+        for (sprites) |sprite| {
+            if (sprite.asset.document.frames.len > 1) {
+                const current_frame = sprite.asset.document.frames[sprite.frame_index];
+                var from_frame: u16 = 0;
+                var to_frame: u16 = @intCast(sprite.asset.document.frames.len);
+
+                if (sprite.current_animation) |tag| {
+                    from_frame = tag.from_frame;
+                    to_frame = tag.to_frame;
+                }
+
+                sprite.duration_shown += delta_time;
+
+                if (sprite.duration_shown * 1000 >= @as(f64, @floatFromInt(current_frame.header.frame_duration))) {
+                    var next_frame = sprite.frame_index + 1;
+                    if (next_frame > to_frame) {
+                        if (sprite.loop_animation) {
+                            next_frame = from_frame;
+                        } else {
+                            sprite.animation_completed = true;
+                            next_frame = to_frame;
+                            continue;
+                        }
+                    }
+
+                    sprite.setFrame(next_frame);
+                }
+            }
+        }
+    }
 
     pub fn setFrame(self: *SpriteComponent, index: u32) void {
         if (index < self.asset.document.frames.len) {
