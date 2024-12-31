@@ -279,7 +279,7 @@ export fn tick(state_ptr: *anyopaque) void {
 
     if (isLevelCompleted(state)) {
         state.level_index += 1;
-        if (state.level_index > LEVELS.len) {
+        if (state.level_index > LEVELS.len - 1) {
             state.level_index = 0;
         }
         loadLevel(state, LEVELS[state.level_index]) catch unreachable;
