@@ -7,6 +7,13 @@ const PLATFORM = @import("builtin").os.tag;
 
 const DOUBLE_CLICK_THRESHOLD: f32 = 0.3;
 const BALL_VELOCITY: f32 = 64;
+const BALL_SPAWN = r.Vector2{ .x = 24, .y = 20 };
+
+const LEVELS: []const []const u8 = &.{
+    "assets/level1.lvl",
+    "assets/level2.lvl",
+    "assets/level3.lvl",
+};
 
 pub const State = struct {
     allocator: std.mem.Allocator,
@@ -23,6 +30,7 @@ pub const State = struct {
     dest_rect: r.Rectangle,
 
     assets: Assets,
+    level_index: u32,
 
     delta_time: f32,
     is_paused: bool,
@@ -92,13 +100,14 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
         .height = state.source_rect.height * state.world_scale,
     };
 
+    state.level_index = 0;
     state.walls = std.ArrayList(*ecs.Entity).init(allocator);
     state.transforms = std.ArrayList(*ecs.TransformComponent).init(allocator);
     state.sprites = std.ArrayList(*ecs.SpriteComponent).init(allocator);
 
     loadAssets(state);
     spawnBall(state);
-    loadLevel(state, "assets/level1.lvl") catch unreachable;
+    loadLevel(state, LEVELS[state.level_index]) catch unreachable;
 
     state.debug_ui_state.current_wall_color = .Red;
 
@@ -256,6 +265,15 @@ export fn tick(state_ptr: *anyopaque) void {
             transform.position.y += transform.velocity.y * state.delta_time;
         }
     }
+
+    if (isLevelCompleted(state)) {
+        state.level_index += 1;
+        if (state.level_index > LEVELS.len) {
+            state.level_index = 0;
+        }
+        loadLevel(state, LEVELS[state.level_index]) catch unreachable;
+        resetBall(state);
+    }
 }
 
 fn collides(state: *State, transform: *ecs.TransformComponent) ?*ecs.Entity {
@@ -405,11 +423,10 @@ fn loadSprite(path: []const u8, allocator: std.mem.Allocator) ?SpriteAsset {
 
 fn spawnBall(state: *State) void {
     if (state.assets.ball) |*sprite| {
-        const position = r.Vector2{ .x = 24, .y = 20 };
         var color_component: *ecs.ColorComponent = state.allocator.create(ecs.ColorComponent) catch undefined;
         color_component.color = .Red;
 
-        if (addSprite(state, sprite, position) catch null) |entity| {
+        if (addSprite(state, sprite, BALL_SPAWN) catch null) |entity| {
             entity.transform.?.velocity.y = -BALL_VELOCITY;
             entity.color = color_component;
             state.ball = entity;
@@ -417,9 +434,13 @@ fn spawnBall(state: *State) void {
     }
 }
 
+fn resetBall(state: *State) void {
+    state.ball.transform.?.position = BALL_SPAWN;
+    state.ball.transform.?.velocity.y = -BALL_VELOCITY;
+}
+
 fn saveLevel(state: *State, path: []const u8) !void {
     if (std.fs.cwd().createFile(path, .{ .truncate = true }) catch null) |file| {
-        std.debug.print("saveLevel\n", .{});
         defer file.close();
 
         try file.writer().writeInt(u32, @intCast(state.walls.items.len), .little);
@@ -427,8 +448,6 @@ fn saveLevel(state: *State, path: []const u8) !void {
         for (state.walls.items) |wall| {
             if (wall.color) |color| {
                 if (wall.transform) |transform| {
-                    std.debug.print("{}: {d}x{d}\n", .{ color.color, @round(transform.position.x), @round(transform.position.y) });
-
                     try file.writer().writeInt(u32, @intFromEnum(color.color), .little);
                     try file.writer().writeInt(i32, @intFromFloat(@round(transform.position.x)), .little);
                     try file.writer().writeInt(i32, @intFromFloat(@round(transform.position.y)), .little);
@@ -460,6 +479,18 @@ fn loadLevel(state: *State, path: []const u8) !void {
             _ = try addWall(state, @enumFromInt(color), r.Vector2{ .x = @floatFromInt(x), .y = @floatFromInt(y) });
         }
     }
+}
+
+fn isLevelCompleted(state: *State) bool {
+    var result = true;
+
+    for (state.walls.items) |wall| {
+        if (wall.color.?.color != .Gray) {
+            result = false;
+        }
+    }
+
+    return result;
 }
 
 fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: r.Vector2) !*ecs.Entity {
