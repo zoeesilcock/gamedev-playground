@@ -278,12 +278,7 @@ export fn tick(state_ptr: *anyopaque) void {
     }
 
     if (isLevelCompleted(state)) {
-        state.level_index += 1;
-        if (state.level_index > LEVELS.len - 1) {
-            state.level_index = 0;
-        }
-        loadLevel(state, LEVELS[state.level_index]) catch unreachable;
-        resetBall(state);
+        nextLevel(state);
     }
 }
 
@@ -490,6 +485,16 @@ fn loadLevel(state: *State, path: []const u8) !void {
             _ = try addWall(state, @enumFromInt(color), r.Vector2{ .x = @floatFromInt(x), .y = @floatFromInt(y) });
         }
     }
+}
+
+fn nextLevel(state: *State) void {
+    state.level_index += 1;
+    if (state.level_index > LEVELS.len - 1) {
+        state.level_index = 0;
+    }
+
+    loadLevel(state, LEVELS[state.level_index]) catch unreachable;
+    resetBall(state);
 }
 
 fn isLevelCompleted(state: *State) bool {
