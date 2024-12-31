@@ -71,6 +71,10 @@ pub const SpriteAsset = struct {
 };
 
 const DebugUIState = struct {
+    mode: enum {
+        Select,
+        Edit,
+    },
     current_wall_color: ?ecs.ColorComponentValue,
     show_level_editor: bool,
 };
@@ -109,6 +113,7 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     spawnBall(state);
     loadLevel(state, LEVELS[state.level_index]) catch unreachable;
 
+    state.debug_ui_state.mode = .Select;
     state.debug_ui_state.current_wall_color = .Red;
 
     r.SetMouseScale(1 / state.world_scale, 1 / state.world_scale);
@@ -155,10 +160,7 @@ export fn tick(state_ptr: *anyopaque) void {
     if (!state.debug_ui_state.show_level_editor) {
         if (state.hovered_entity) |hovered_entity| {
             if (r.IsMouseButtonPressed(0)) {
-                if (r.GetTime() - state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
-                    state.last_left_click_entity.? == hovered_entity) {
-                    openSprite(state, hovered_entity);
-                } else {
+                if (state.debug_ui_state.mode == .Edit) {
                     if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
                         if (editor_wall_color == hovered_entity.color.?.color) {
                             removeEntity(state, hovered_entity);
@@ -168,6 +170,11 @@ export fn tick(state_ptr: *anyopaque) void {
                             _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
                         }
                     }
+                } else {
+                    if (r.GetTime() - state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
+                        state.last_left_click_entity.? == hovered_entity) {
+                        openSprite(state, hovered_entity);
+                    }
                 }
 
                 state.last_left_click_time = r.GetTime();
@@ -175,9 +182,11 @@ export fn tick(state_ptr: *anyopaque) void {
             }
         } else {
             if (r.IsMouseButtonPressed(0)) {
-                if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
-                    const tiled_position = getTiledPosition(r.GetMousePosition(), &state.assets.getWall(editor_wall_color));
-                    _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
+                if (state.debug_ui_state.mode == .Edit) {
+                    if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
+                        const tiled_position = getTiledPosition(r.GetMousePosition(), &state.assets.getWall(editor_wall_color));
+                        _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
+                    }
                 }
             }
         }
@@ -301,29 +310,41 @@ fn drawWorld(state: *State) void {
 
 fn drawDebugUI(state: *State) void {
     if (state.debug_ui_state.show_level_editor) {
-        _ = r.GuiWindowBox(r.Rectangle{ .x = 0, .y = 0, .width = 100, .height = 100 }, "Level editor");
+        _ = r.GuiWindowBox(r.Rectangle{ .x = 0, .y = 0, .width = 100, .height = 140 }, "Level editor");
 
         var button_rect: r.Rectangle = .{ .x = 10, .y = 30, .width = 75, .height = 16 };
+
+        if (r.GuiButton(button_rect, "Select") != 0) {
+            state.debug_ui_state.mode = .Select;
+        }
+        if (state.debug_ui_state.mode == .Select) {
+            drawButtonHighlight(button_rect);
+        }
+
+        button_rect.y += 20;
         if (r.GuiButton(button_rect, "Gray") != 0) {
+            state.debug_ui_state.mode = .Edit;
             state.debug_ui_state.current_wall_color = .Gray;
         }
-        if (state.debug_ui_state.current_wall_color == .Gray) {
+        if (state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Gray) {
             drawButtonHighlight(button_rect);
         }
 
         button_rect.y += 20;
         if (r.GuiButton(button_rect, "Red") != 0) {
+            state.debug_ui_state.mode = .Edit;
             state.debug_ui_state.current_wall_color = .Red;
         }
-        if (state.debug_ui_state.current_wall_color == .Red) {
+        if (state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Red) {
             drawButtonHighlight(button_rect);
         }
 
         button_rect.y += 20;
         if (r.GuiButton(button_rect, "Blue") != 0) {
+            state.debug_ui_state.mode = .Edit;
             state.debug_ui_state.current_wall_color = .Blue;
         }
-        if (state.debug_ui_state.current_wall_color == .Blue) {
+        if (state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Blue) {
             drawButtonHighlight(button_rect);
         }
     }
