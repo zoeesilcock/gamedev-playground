@@ -235,6 +235,7 @@ export fn tick(state_ptr: *anyopaque) void {
         if (transform.velocity.x != 0 or transform.velocity.y != 0) {
             var next_transform = transform.*;
 
+            // Check in the Y direction.
             next_transform.position.y += next_transform.velocity.y * state.delta_time;
             if (collides(state, &next_transform)) |other_entity| {
                 if (transform.entity == state.ball) {
@@ -255,12 +256,22 @@ export fn tick(state_ptr: *anyopaque) void {
                 }
             }
 
+            // Check in the X direction.
             next_transform.position.x += next_transform.velocity.x * state.delta_time;
-            if (collides(state, &next_transform)) |_| {
-                // transform.velocity.x = -transform.velocity.x;
-                transform.velocity.x = 0;
+            if (collides(state, &next_transform)) |other_entity| {
+                if (transform.entity == state.ball) {
+                    transform.velocity.x = 0;
+
+                    // Check if the other sprite is a wall of the same color as the ball.
+                    if (other_entity.color) |other_color| {
+                        if (transform.entity.color.?.color == other_color.color) {
+                            removeEntity(state, other_entity);
+                        }
+                    }
+                }
             }
 
+            // Apply any remaining velocity to the position.
             transform.position.x += transform.velocity.x * state.delta_time;
             transform.position.y += transform.velocity.y * state.delta_time;
         }
