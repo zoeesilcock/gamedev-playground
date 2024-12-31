@@ -97,7 +97,8 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     state.sprites = std.ArrayList(*ecs.SpriteComponent).init(allocator);
 
     loadAssets(state);
-    loadLevel(state);
+    spawnBall(state);
+    loadLevel(state, "assets/level1.lvl") catch unreachable;
 
     state.debug_ui_state.current_wall_color = .Red;
 
@@ -127,7 +128,11 @@ export fn tick(state_ptr: *anyopaque) void {
     }
 
     if (r.IsKeyReleased(r.KEY_S)) {
-        saveLevel(state);
+        saveLevel(state, "assets/level1.lvl") catch unreachable;
+    }
+
+    if (r.IsKeyReleased(r.KEY_L)) {
+        loadLevel(state, "assets/level1.lvl") catch unreachable;
     }
 
     if (!state.is_paused) {
@@ -398,69 +403,61 @@ fn loadSprite(path: []const u8, allocator: std.mem.Allocator) ?SpriteAsset {
     return result;
 }
 
-fn loadLevel(state: *State) void {
-    if (state.assets.wall_gray) |*sprite| {
-        var position = r.Vector2{ .x = 0, .y = 0 };
-
-        // Top edge.
-        for (0..9) |_| {
-            _ = addWall(state, .Gray, position) catch undefined;
-            position.x += @floatFromInt(sprite.document.header.width);
-        }
-
-        // Right edge.
-        position.x = @floatFromInt(sprite.document.header.width * 9);
-        position.y = 0;
-        for (0..10) |_| {
-            _ = addWall(state, .Gray, position) catch undefined;
-            position.y += @floatFromInt(sprite.document.header.height);
-        }
-
-        // Left edge.
-        position.x = 0;
-        position.y = 0;
-        for (0..9) |_| {
-            _ = addWall(state, .Gray, position) catch undefined;
-            position.y += @floatFromInt(sprite.document.header.height);
-        }
-
-        // Bottom edge.
-        position.x = 0;
-        position.y = @floatFromInt(sprite.document.header.height * 9);
-        for (0..9) |_| {
-            _ = addWall(state, .Gray, position) catch undefined;
-            position.x += @floatFromInt(sprite.document.header.width);
-        }
-    }
-
+fn spawnBall(state: *State) void {
     if (state.assets.ball) |*sprite| {
-        const position = r.Vector2{ .x = 64, .y = 64 };
+        const position = r.Vector2{ .x = 24, .y = 20 };
         var color_component: *ecs.ColorComponent = state.allocator.create(ecs.ColorComponent) catch undefined;
         color_component.color = .Red;
 
         if (addSprite(state, sprite, position) catch null) |entity| {
-            entity.transform.?.velocity.y = BALL_VELOCITY;
+            entity.transform.?.velocity.y = -BALL_VELOCITY;
             entity.color = color_component;
             state.ball = entity;
         }
     }
+}
 
-    if (state.assets.test_sprite) |*sprite| {
-        const position = r.Vector2{
-            .x = @as(f32, @floatFromInt(state.world_width)) / 2,
-            .y = @as(f32, @floatFromInt(state.world_height)) / 2,
-        };
-        const entity = addSprite(state, sprite, position) catch undefined;
-        entity.sprite.?.loop_animation = true;
+fn saveLevel(state: *State, path: []const u8) !void {
+    if (std.fs.cwd().createFile(path, .{ .truncate = true }) catch null) |file| {
+        std.debug.print("saveLevel\n", .{});
+        defer file.close();
+
+        try file.writer().writeInt(u32, @intCast(state.walls.items.len), .little);
+
+        for (state.walls.items) |wall| {
+            if (wall.color) |color| {
+                if (wall.transform) |transform| {
+                    std.debug.print("{}: {d}x{d}\n", .{ color.color, @round(transform.position.x), @round(transform.position.y) });
+
+                    try file.writer().writeInt(u32, @intFromEnum(color.color), .little);
+                    try file.writer().writeInt(i32, @intFromFloat(@round(transform.position.x)), .little);
+                    try file.writer().writeInt(i32, @intFromFloat(@round(transform.position.y)), .little);
+                }
+            }
+        }
     }
 }
 
-fn saveLevel(state: *State) void {
+fn unloadLevel(state: *State) void {
     for (state.walls.items) |wall| {
-        if (wall.color) |color| {
-            if (wall.transform) |transform| {
-                std.debug.print("{}: {d}x{d}\n", .{ color.color, @round(transform.position.x), @round(transform.position.y) });
-            }
+        removeEntity(state, wall);
+    }
+
+    state.walls.clearRetainingCapacity();
+}
+
+fn loadLevel(state: *State, path: []const u8) !void {
+    if (std.fs.cwd().openFile(path, .{ .mode = .read_only }) catch null) |file| {
+        const wall_count = try file.reader().readInt(u32, .little);
+
+        unloadLevel(state);
+
+        for (0..wall_count) |_| {
+            const color = try file.reader().readInt(u32, .little);
+            const x = try file.reader().readInt(i32, .little);
+            const y = try file.reader().readInt(i32, .little);
+
+            _ = try addWall(state, @enumFromInt(color), r.Vector2{ .x = @floatFromInt(x), .y = @floatFromInt(y) });
         }
     }
 }
