@@ -133,63 +133,76 @@ export fn reload(state_ptr: *anyopaque) void {
 export fn tick(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    if (r.IsKeyReleased(r.KEY_TAB)) {
-        state.is_paused = !state.is_paused;
-    }
+    { // Handle input. 
+        if (r.IsKeyReleased(r.KEY_TAB)) {
+            state.is_paused = !state.is_paused;
+        }
 
-    if (r.IsKeyReleased(r.KEY_E)) {
-        state.debug_ui_state.show_level_editor = !state.debug_ui_state.show_level_editor;
-    }
+        if (r.IsKeyReleased(r.KEY_E)) {
+            state.debug_ui_state.show_level_editor = !state.debug_ui_state.show_level_editor;
+        }
 
-    if (r.IsKeyReleased(r.KEY_S)) {
-        saveLevel(state, "assets/level1.lvl") catch unreachable;
-    }
+        if (r.IsKeyReleased(r.KEY_S)) {
+            saveLevel(state, "assets/level1.lvl") catch unreachable;
+        }
 
-    if (r.IsKeyReleased(r.KEY_L)) {
-        loadLevel(state, "assets/level1.lvl") catch unreachable;
+        if (r.IsKeyReleased(r.KEY_L)) {
+            loadLevel(state, "assets/level1.lvl") catch unreachable;
+        }
+
+        if (state.ball.transform) |transform| {
+            if (r.IsKeyDown(r.KEY_LEFT)) {
+                transform.velocity.x = -BALL_VELOCITY;
+            } else if (r.IsKeyDown(r.KEY_RIGHT)) {
+                transform.velocity.x = BALL_VELOCITY;
+            } else {
+                transform.velocity.x = 0;
+            }
+        }
+
+        state.hovered_entity = getHoveredEntity(state);
+
+        // Level editor.
+        if (!state.debug_ui_state.show_level_editor) {
+            if (state.hovered_entity) |hovered_entity| {
+                if (r.IsMouseButtonPressed(0)) {
+                    if (state.debug_ui_state.mode == .Edit) {
+                        if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
+                            if (editor_wall_color == hovered_entity.color.?.color) {
+                                removeEntity(state, hovered_entity);
+                            } else {
+                                removeEntity(state, hovered_entity);
+                                const tiled_position = getTiledPosition(r.GetMousePosition(), &state.assets.getWall(editor_wall_color));
+                                _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
+                            }
+                        }
+                    } else {
+                        if (r.GetTime() - state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
+                            state.last_left_click_entity.? == hovered_entity) {
+                            openSprite(state, hovered_entity);
+                        }
+                    }
+
+                    state.last_left_click_time = r.GetTime();
+                    state.last_left_click_entity = hovered_entity;
+                }
+            } else {
+                if (r.IsMouseButtonPressed(0)) {
+                    if (state.debug_ui_state.mode == .Edit) {
+                        if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
+                            const tiled_position = getTiledPosition(r.GetMousePosition(), &state.assets.getWall(editor_wall_color));
+                            _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     if (!state.is_paused) {
         state.delta_time = r.GetFrameTime();
     } else {
         state.delta_time = 0;
-    }
-
-    state.hovered_entity = getHoveredEntity(state);
-
-    if (!state.debug_ui_state.show_level_editor) {
-        if (state.hovered_entity) |hovered_entity| {
-            if (r.IsMouseButtonPressed(0)) {
-                if (state.debug_ui_state.mode == .Edit) {
-                    if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
-                        if (editor_wall_color == hovered_entity.color.?.color) {
-                            removeEntity(state, hovered_entity);
-                        } else {
-                            removeEntity(state, hovered_entity);
-                            const tiled_position = getTiledPosition(r.GetMousePosition(), &state.assets.getWall(editor_wall_color));
-                            _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
-                        }
-                    }
-                } else {
-                    if (r.GetTime() - state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
-                        state.last_left_click_entity.? == hovered_entity) {
-                        openSprite(state, hovered_entity);
-                    }
-                }
-
-                state.last_left_click_time = r.GetTime();
-                state.last_left_click_entity = hovered_entity;
-            }
-        } else {
-            if (r.IsMouseButtonPressed(0)) {
-                if (state.debug_ui_state.mode == .Edit) {
-                    if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
-                        const tiled_position = getTiledPosition(r.GetMousePosition(), &state.assets.getWall(editor_wall_color));
-                        _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
-                    }
-                }
-            }
-        }
     }
 
     const collisions = ecs.TransformComponent.checkForCollisions(state.transforms.items, state.delta_time);
@@ -228,27 +241,21 @@ export fn tick(state_ptr: *anyopaque) void {
         }
     }
 
-    ecs.TransformComponent.tick(state.transforms.items, state.delta_time);
-
-    ecs.SpriteComponent.tick(state.sprites.items, state.delta_time);
-
-    if (state.ball.transform) |transform| {
-        if (r.IsKeyDown(r.KEY_LEFT)) {
-            transform.velocity.x = -BALL_VELOCITY;
-        } else if (r.IsKeyDown(r.KEY_RIGHT)) {
-            transform.velocity.x = BALL_VELOCITY;
-        } else {
-            transform.velocity.x = 0;
-        }
-
-        if (
-            (state.ball.sprite.?.isAnimating("bounce_up") or state.ball.sprite.?.isAnimating("bounce_down"))
-            and state.ball.sprite.?.animation_completed
-        ) {
-            state.ball.transform.?.velocity = state.ball.transform.?.next_velocity;
-            state.ball.sprite.?.startAnimation("idle");
+    // Handle ball specific animations.
+    if (state.ball.sprite) |sprite| {
+        if (state.ball.transform) |transform| {
+            if (
+                (sprite.isAnimating("bounce_up") or sprite.isAnimating("bounce_down"))
+                and sprite.animation_completed
+            ) {
+                transform.velocity = transform.next_velocity;
+                sprite.startAnimation("idle");
+            }
         }
     }
+
+    ecs.TransformComponent.tick(state.transforms.items, state.delta_time);
+    ecs.SpriteComponent.tick(state.sprites.items, state.delta_time);
 
     if (isLevelCompleted(state)) {
         nextLevel(state);
