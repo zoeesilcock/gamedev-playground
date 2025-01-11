@@ -3,16 +3,6 @@ const r = @import("dependencies/raylib.zig");
 const aseprite = @import("aseprite.zig");
 const root = @import("root.zig");
 
-pub const TransformCollisionResult = struct {
-    vertical: ?TransformCollision = null,
-    horizontal: ?TransformCollision = null,
-};
-
-const TransformCollision = struct {
-    self: *TransformComponent,
-    other: *TransformComponent,
-};
-
 pub const TransformComponent = struct {
     entity: *Entity,
 
@@ -21,30 +11,6 @@ pub const TransformComponent = struct {
     velocity: r.Vector2,
     next_velocity: r.Vector2,
 
-    pub fn checkForCollisions(transforms: []*TransformComponent, delta_time: f32) TransformCollisionResult {
-        var result: TransformCollisionResult = .{};
-
-        for (transforms) |transform| {
-            if (transform.velocity.x != 0 or transform.velocity.y != 0) {
-                var next_transform = transform.*;
-
-                // Check in the Y direction.
-                next_transform.position.y += next_transform.velocity.y * delta_time;
-                if (next_transform.collisionTarget(transforms)) |other_entity| {
-                    result.vertical = .{ .self = transform, .other = other_entity.transform.? };
-                }
-
-                // Check in the X direction.
-                next_transform.position.x += next_transform.velocity.x * delta_time;
-                if (next_transform.collisionTarget(transforms)) |other_entity| {
-                    result.horizontal = .{ .self = transform, .other = other_entity.transform.? };
-                }
-            }
-        }
-
-        return result;
-    }
-
     pub fn tick(transforms: []*TransformComponent, delta_time: f32) void {
         for (transforms) |transform| {
             transform.position.x += transform.velocity.x * delta_time;
@@ -52,31 +18,66 @@ pub const TransformComponent = struct {
         }
     }
 
-    pub fn top(self: *TransformComponent) f32 {
+    pub fn top(self: *const TransformComponent) f32 {
         return self.position.y;
     }
 
-    pub fn bottom(self: *TransformComponent) f32 {
+    pub fn bottom(self: *const TransformComponent) f32 {
         return self.position.y + self.size.y;
     }
 
-    pub fn left(self: *TransformComponent) f32 {
+    pub fn left(self: *const TransformComponent) f32 {
         return self.position.x;
     }
 
-    pub fn right(self: *TransformComponent) f32 {
+    pub fn right(self: *const TransformComponent) f32 {
         return self.position.x + self.size.x;
     }
 
-    pub fn center(self: *TransformComponent) r.Vector2 {
+    pub fn center(self: *const TransformComponent) r.Vector2 {
         return r.Vector2{ .x = self.position.x + self.size.x * 0.5, .y = self.position.y + self.size.y * 0.5 };
     }
 
-    fn collisionTarget(self: *TransformComponent, others: []*TransformComponent) ?*Entity {
+    pub fn containsPoint(self: *const TransformComponent, point: r.Vector2) bool {
+        var contains_point = false;
+
+        if ((point.x <= self.right() and point.x >= self.left()) and
+            (point.y <= self.bottom() and point.y >= self.top()))
+        {
+            contains_point = true;
+        }
+
+        return contains_point;
+    }
+};
+
+const ColliderShape = enum {
+    Square,
+    Circle,
+};
+
+pub const CollisionResult = struct {
+    vertical: ?Collision = null,
+    horizontal: ?Collision = null,
+};
+
+const Collision = struct {
+    self: *ColliderComponent,
+    other: *ColliderComponent,
+};
+
+pub const ColliderComponent = struct {
+    entity: *Entity,
+
+    offset: r.Vector2,
+    size: r.Vector2,
+    shape: ColliderShape,
+
+    fn collidesWithAnyAt(self: *ColliderComponent, others: []*ColliderComponent, at: TransformComponent) ?*Entity {
         var result: ?*Entity = null;
 
         for (others) |other| {
-            if (self.entity != other.entity and self.collidesWith(other)) {
+            if (self.entity != other.entity and self.collidesWithAt(other, at)) {
                 result = other.entity;
                 break;
             }
@@ -85,30 +86,48 @@ pub const TransformComponent = struct {
         return result;
     }
 
-    pub fn collidesWith(self: *TransformComponent, other: *TransformComponent) bool {
+    pub fn collidesWithAt(self: *ColliderComponent, other: *ColliderComponent, at: TransformComponent) bool {
+        _ = self;
         var collides = false;
 
-        if (((self.left() >= other.left() and self.left() <= other.right()) or
-            (self.right() >= other.left() and self.right() <= other.right())) and
-            ((self.bottom() >= other.top() and self.bottom() <= other.bottom()) or
-            (self.top() <= other.bottom() and self.top() >= other.top())))
-        {
-            collides = true;
+        if (other.entity.transform) |other_at| {
+            if (((at.left() >= other_at.left() and at.left() <= other_at.right()) or
+                (at.right() >= other_at.left() and at.right() <= other_at.right())) and
+                ((at.bottom() >= other_at.top() and at.bottom() <= other_at.bottom()) or
+                (at.top() <= other_at.bottom() and at.top() >= other_at.top())))
+            {
+                collides = true;
+            }
         }
 
         return collides;
     }
 
-    pub fn collidesWithPoint(self: *TransformComponent, point: r.Vector2) bool {
-        var collides = false;
+    pub fn checkForCollisions(colliders: []*ColliderComponent, delta_time: f32) CollisionResult {
+        var result: CollisionResult = .{};
 
-        if ((point.x <= self.right() and point.x >= self.left()) and
-            (point.y <= self.bottom() and point.y >= self.top()))
-        {
-            collides = true;
+        for (colliders) |collider| {
+            if (collider.entity.transform) |transform| {
+                if (transform.velocity.x != 0 or transform.velocity.y != 0) {
+                    var next_transform = transform.*;
+
+                    // Check in the Y direction.
+                    next_transform.position.y += next_transform.velocity.y * delta_time;
+                    if (collider.collidesWithAnyAt(colliders, next_transform)) |other_entity| {
+                        result.vertical = .{ .self = collider, .other = other_entity.collider.? };
+                    }
+
+                    // Check in the X direction.
+                    next_transform = transform.*;
+                    next_transform.position.x += next_transform.velocity.x * delta_time;
+                    if (collider.collidesWithAnyAt(colliders, next_transform)) |other_entity| {
+                        result.horizontal = .{ .self = collider, .other = other_entity.collider.? };
+                    }
+                }
+            }
         }
 
-        return collides;
+        return result;
     }
 };
 
@@ -223,11 +242,14 @@ pub const ColorComponentValue = enum {
 };
 
 pub const ColorComponent = struct {
+    entity: *Entity,
+
     color: ColorComponentValue,
 };
 
 pub const Entity = struct {
     transform: ?*TransformComponent,
+    collider: ?*ColliderComponent,
     sprite: ?*SpriteComponent,
     color: ?*ColorComponent,
 };

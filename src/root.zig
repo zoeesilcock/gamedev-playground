@@ -42,10 +42,11 @@ pub const State = struct {
     hovered_entity: ?*ecs.Entity,
 
     // Components.
-    walls: std.ArrayList(*ecs.Entity),
     transforms: std.ArrayList(*ecs.TransformComponent),
+    colliders: std.ArrayList(*ecs.ColliderComponent),
     sprites: std.ArrayList(*ecs.SpriteComponent),
     ball: *ecs.Entity,
+    walls: std.ArrayList(*ecs.Entity),
 };
 
 const Assets = struct {
@@ -107,10 +108,11 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     state.level_index = 0;
     state.walls = std.ArrayList(*ecs.Entity).init(allocator);
     state.transforms = std.ArrayList(*ecs.TransformComponent).init(allocator);
+    state.colliders = std.ArrayList(*ecs.ColliderComponent).init(allocator);
     state.sprites = std.ArrayList(*ecs.SpriteComponent).init(allocator);
 
     loadAssets(state);
-    spawnBall(state);
+    spawnBall(state) catch unreachable;
     loadLevel(state, LEVELS[state.level_index]) catch unreachable;
 
     state.debug_ui_state.mode = .Select;
@@ -212,37 +214,43 @@ export fn tick(state_ptr: *anyopaque) void {
         state.delta_time = 0;
     }
 
-    const collisions = ecs.TransformComponent.checkForCollisions(state.transforms.items, state.delta_time);
+    const collisions = ecs.ColliderComponent.checkForCollisions(state.colliders.items, state.delta_time);
 
     // Handle vertical collisions.
     if (collisions.vertical) |collision| {
         if (collision.self.entity == state.ball) {
-            collision.self.next_velocity = collision.self.velocity;
-            collision.self.next_velocity.y = -collision.self.next_velocity.y;
-            collision.self.entity.sprite.?.startAnimation(if (collision.self.velocity.y < 0) "bounce_up" else "bounce_down");
+            if (collision.self.entity.transform) |transform| {
+                transform.next_velocity = transform.velocity;
+                transform.next_velocity.y = -transform.next_velocity.y;
+                collision.self.entity.sprite.?.startAnimation(if (transform.velocity.y < 0) "bounce_up" else "bounce_down");
 
-            collision.self.velocity.y = 0;
+                transform.velocity.y = 0;
 
-            // Check if the other sprite is a wall of the same color as the ball.
-            if (collision.other.entity.color) |other_color| {
-                if (collision.self.entity.color.?.color == other_color.color) {
-                    removeEntity(state, collision.other.entity);
+                // Check if the other sprite is a wall of the same color as the ball.
+                if (collision.other.entity.color) |other_color| {
+                    if (collision.self.entity.color.?.color == other_color.color) {
+                        removeEntity(state, collision.other.entity);
+                    }
                 }
             }
         } else {
-            collision.self.velocity.y = -collision.self.velocity.y;
+            if (collision.self.entity.transform) |transform| {
+                transform.velocity.y = -transform.velocity.y;
+            }
         }
     }
 
     // Handle horizontal collisions.
     if (collisions.horizontal) |collision| {
         if (collision.self.entity == state.ball) {
-            collision.self.velocity.x = 0;
+            if (collision.self.entity.transform) |transform| {
+                transform.velocity.x = 0;
 
-            // Check if the other sprite is a wall of the same color as the ball.
-            if (collision.other.entity.color) |other_color| {
-                if (collision.self.entity.color.?.color == other_color.color) {
-                    removeEntity(state, collision.other.entity);
+                // Check if the other sprite is a wall of the same color as the ball.
+                if (collision.other.entity.color) |other_color| {
+                    if (collision.self.entity.color.?.color == other_color.color) {
+                        removeEntity(state, collision.other.entity);
+                    }
                 }
             }
         }
@@ -410,14 +418,27 @@ fn loadSprite(path: []const u8, allocator: std.mem.Allocator) ?SpriteAsset {
     return result;
 }
 
-fn spawnBall(state: *State) void {
+fn spawnBall(state: *State) !void {
     if (state.assets.ball) |*sprite| {
-        var color_component: *ecs.ColorComponent = state.allocator.create(ecs.ColorComponent) catch undefined;
-        color_component.color = .Red;
-
         if (addSprite(state, sprite, BALL_SPAWN) catch null) |entity| {
+            var collider_component: *ecs.ColliderComponent = state.allocator.create(ecs.ColliderComponent) catch undefined;
+            collider_component.entity = entity;
+            collider_component.shape = .Circle;
+            collider_component.size = r.Vector2{
+                .x = @floatFromInt(sprite.document.header.width),
+                .y = @floatFromInt(sprite.document.header.height),
+            };
+            collider_component.offset = r.Vector2Zero();
+
+            var color_component: *ecs.ColorComponent = state.allocator.create(ecs.ColorComponent) catch undefined;
+            color_component.entity = entity;
+            color_component.color = .Red;
+
             entity.color = color_component;
+            entity.collider = collider_component;
+
             state.ball = entity;
+            try state.colliders.append(collider_component);
 
             resetBall(state);
         }
@@ -525,18 +546,31 @@ fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: r.Vector2) !*e
 }
 
 fn addWall(state: *State, color: ecs.ColorComponentValue, position: r.Vector2) !*ecs.Entity {
-    var color_component: *ecs.ColorComponent = try state.allocator.create(ecs.ColorComponent);
     const sprite_asset = &switch (color) {
         .Gray => state.assets.wall_gray.?,
         .Red => state.assets.wall_red.?,
         .Blue => state.assets.wall_blue.?,
     };
-
     const new_entity = try addSprite(state, sprite_asset, position);
 
+    var collider_component: *ecs.ColliderComponent = state.allocator.create(ecs.ColliderComponent) catch undefined;
+    collider_component.entity = new_entity;
+    collider_component.shape = .Square;
+    collider_component.size = r.Vector2{
+        .x = @floatFromInt(sprite_asset.document.header.width),
+        .y = @floatFromInt(sprite_asset.document.header.height),
+    };
+    collider_component.offset = r.Vector2Zero();
+
+    var color_component: *ecs.ColorComponent = try state.allocator.create(ecs.ColorComponent);
+    color_component.entity = new_entity;
     color_component.color = color;
+
     new_entity.color = color_component;
+    new_entity.collider = collider_component;
+
     try state.walls.append(new_entity);
+    try state.colliders.append(collider_component);
 
     return new_entity;
 }
@@ -551,6 +585,18 @@ fn removeEntity(state: *State, entity: *ecs.Entity) void {
         }
         if (opt_remove_at) |remove_at| {
             _ = state.transforms.swapRemove(remove_at);
+        }
+    }
+
+    if (entity.collider) |_| {
+        var opt_remove_at: ?usize = null;
+        for (state.colliders.items, 0..) |stored_collider, index| {
+            if (stored_collider.entity == entity) {
+                opt_remove_at = index;
+            }
+        }
+        if (opt_remove_at) |remove_at| {
+            _ = state.colliders.swapRemove(remove_at);
         }
     }
 
@@ -584,7 +630,7 @@ fn getHoveredEntity(state: *State) ?*ecs.Entity {
     const mouse_position = r.GetMousePosition();
 
     for (state.transforms.items) |transform| {
-        if (transform.collidesWithPoint(mouse_position)) {
+        if (transform.containsPoint(mouse_position)) {
             result = transform.entity;
             break;
         }
