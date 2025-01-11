@@ -78,6 +78,7 @@ const DebugUIState = struct {
     },
     current_wall_color: ?ecs.ColorComponentValue,
     show_level_editor: bool,
+    show_colliders: bool,
 };
 
 export fn init(window_width: u32, window_height: u32) *anyopaque {
@@ -142,6 +143,10 @@ export fn tick(state_ptr: *anyopaque) void {
 
         if (r.IsKeyReleased(r.KEY_E)) {
             state.debug_ui_state.show_level_editor = !state.debug_ui_state.show_level_editor;
+        }
+
+        if (r.IsKeyReleased(r.KEY_C)) {
+            state.debug_ui_state.show_colliders = !state.debug_ui_state.show_colliders;
         }
 
         if (r.IsKeyReleased(r.KEY_S)) {
@@ -313,14 +318,46 @@ fn drawWorld(state: *State) void {
         r.DrawCircle(@intFromFloat(mouse_position.x), @intFromFloat(mouse_position.y), 3, r.YELLOW);
     }
 
+    // Highlight colliders.
+    if (state.debug_ui_state.show_colliders) {
+        for (state.colliders.items) |collider| {
+            if (collider.entity.transform) |transform| {
+                switch (collider.shape) {
+                    .Square => {
+                        r.DrawRectangleLinesEx(
+                            r.Rectangle{
+                                .x = transform.position.x,
+                                .y = transform.position.y,
+                                .width = transform.size.x,
+                                .height = transform.size.y,
+                            },
+                            1,
+                            r.GREEN,
+                        );
+                    },
+                    .Circle => {
+                        r.DrawCircleLinesV(
+                            transform.center(),
+                            collider.radius,
+                            r.GREEN,
+                        );
+                    },
+                }
+            }
+        }
+    }
+
     // Highlight the currently hovered entity.
     if (state.hovered_entity) |hovered_entity| {
         if (hovered_entity.transform) |transform| {
-            r.DrawRectangleLines(
-                @intFromFloat(transform.position.x),
-                @intFromFloat(transform.position.y),
-                @intFromFloat(transform.size.x),
-                @intFromFloat(transform.size.y),
+            r.DrawRectangleLinesEx(
+                r.Rectangle{
+                    .x = transform.position.x,
+                    .y = transform.position.y,
+                    .width = transform.size.x,
+                    .height = transform.size.y,
+                },
+                1,
                 r.RED,
             );
         }
@@ -370,13 +407,7 @@ fn drawDebugUI(state: *State) void {
 }
 
 fn drawButtonHighlight(rect: r.Rectangle) void {
-    r.DrawRectangleLines(
-        @intFromFloat(rect.x),
-        @intFromFloat(rect.y),
-        @intFromFloat(rect.width),
-        @intFromFloat(rect.height),
-        r.RED,
-    );
+    r.DrawRectangleLinesEx(rect, 1, r.RED);
 }
 
 fn loadAssets(state: *State) void {
@@ -424,10 +455,7 @@ fn spawnBall(state: *State) !void {
             var collider_component: *ecs.ColliderComponent = state.allocator.create(ecs.ColliderComponent) catch undefined;
             collider_component.entity = entity;
             collider_component.shape = .Circle;
-            collider_component.size = r.Vector2{
-                .x = @floatFromInt(sprite.document.header.width),
-                .y = @floatFromInt(sprite.document.header.height),
-            };
+            collider_component.radius = 8;
             collider_component.offset = r.Vector2Zero();
 
             var color_component: *ecs.ColorComponent = state.allocator.create(ecs.ColorComponent) catch undefined;

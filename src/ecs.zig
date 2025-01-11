@@ -71,6 +71,7 @@ pub const ColliderComponent = struct {
 
     offset: r.Vector2,
     size: r.Vector2,
+    radius: f32,
     shape: ColliderShape,
 
     fn collidesWithAnyAt(self: *ColliderComponent, others: []*ColliderComponent, at: TransformComponent) ?*Entity {
@@ -87,16 +88,52 @@ pub const ColliderComponent = struct {
     }
 
     pub fn collidesWithAt(self: *ColliderComponent, other: *ColliderComponent, at: TransformComponent) bool {
-        _ = self;
         var collides = false;
 
         if (other.entity.transform) |other_at| {
-            if (((at.left() >= other_at.left() and at.left() <= other_at.right()) or
-                (at.right() >= other_at.left() and at.right() <= other_at.right())) and
-                ((at.bottom() >= other_at.top() and at.bottom() <= other_at.bottom()) or
-                (at.top() <= other_at.bottom() and at.top() >= other_at.top())))
-            {
-                collides = true;
+            if (self.shape == other.shape) {
+                switch (self.shape) {
+                    .Circle => unreachable,
+                    .Square => {
+                        if (((at.left() >= other_at.left() and at.left() <= other_at.right()) or
+                            (at.right() >= other_at.left() and at.right() <= other_at.right())) and
+                            ((at.bottom() >= other_at.top() and at.bottom() <= other_at.bottom()) or
+                            (at.top() <= other_at.bottom() and at.top() >= other_at.top())))
+                        {
+                            collides = true;
+                        }
+                    },
+                }
+            } else {
+                var circle_collider: *ColliderComponent = undefined;
+                var square_collider: *ColliderComponent = undefined;
+
+                if (self.shape == .Circle) {
+                    circle_collider = self;
+                } else {
+                    square_collider = self;
+                }
+
+                if (other.shape == .Circle) {
+                    circle_collider = other;
+                } else {
+                    square_collider = other;
+                }
+
+                if (circle_collider.entity.transform) |circle| {
+                    if (square_collider.entity.transform) |square| {
+                        const circle_position = circle.center();
+                        const closest_x: f32 = std.math.clamp(circle_position.x, square.left(), square.right());
+                        const closest_y: f32 = std.math.clamp(circle_position.y, square.top(), square.bottom());
+                        const distance_x: f32 = circle_position.x - closest_x;
+                        const distance_y: f32 = circle_position.y - closest_y;
+                        const distance: f32 = (distance_x * distance_x) + (distance_y * distance_y);
+
+                        if (distance < circle_collider.radius * circle_collider.radius) {
+                            collides = true;
+                        }
+                    }
+                }
             }
         }
 
