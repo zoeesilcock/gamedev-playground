@@ -22,10 +22,10 @@ var dyn_lib_last_modified: i128 = 0;
 var src_last_modified: i128 = 0;
 var assets_last_modified: i128 = 0;
 
-var gameInit: *const fn(u32, u32) GameStatePtr = undefined;
-var gameReload: *const fn(GameStatePtr) void = undefined;
-var gameTick: *const fn(GameStatePtr) void = undefined;
-var gameDraw: *const fn(GameStatePtr) void = undefined;
+var gameInit: *const fn (u32, u32) GameStatePtr = undefined;
+var gameReload: *const fn (GameStatePtr) void = undefined;
+var gameTick: *const fn (GameStatePtr) void = undefined;
+var gameDraw: *const fn (GameStatePtr) void = undefined;
 
 pub fn main() !void {
     const allocator = std.heap.c_allocator;
@@ -170,9 +170,9 @@ fn loadDll() !void {
 }
 
 fn recompileDll(allocator: std.mem.Allocator) !void {
-    const process_args = [_][]const u8{ 
-        "zig", 
-        "build", 
+    const process_args = [_][]const u8{
+        "zig",
+        "build",
         "-Dlib_only=true",
     };
 
@@ -187,7 +187,7 @@ fn checkRecompileResult() !void {
             .Exited => |exited| {
                 if (exited == 2) return error.RecompileFail;
             },
-            else => return
+            else => return,
         }
 
         build_process = null;

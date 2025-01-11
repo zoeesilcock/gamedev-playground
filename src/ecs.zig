@@ -88,12 +88,11 @@ pub const TransformComponent = struct {
     pub fn collidesWith(self: *TransformComponent, other: *TransformComponent) bool {
         var collides = false;
 
-        if (
-            ((self.left() >= other.left() and self.left() <= other.right()) or
-             (self.right() >= other.left() and self.right() <= other.right())) and
+        if (((self.left() >= other.left() and self.left() <= other.right()) or
+            (self.right() >= other.left() and self.right() <= other.right())) and
             ((self.bottom() >= other.top() and self.bottom() <= other.bottom()) or
-             (self.top() <= other.bottom() and self.top() >= other.top()))
-        ) {
+            (self.top() <= other.bottom() and self.top() >= other.top())))
+        {
             collides = true;
         }
 
@@ -103,8 +102,9 @@ pub const TransformComponent = struct {
     pub fn collidesWithPoint(self: *TransformComponent, point: r.Vector2) bool {
         var collides = false;
 
-        if ((point.x <= self.right() and point.x >= self.left()) and 
-            (point.y <= self.bottom() and point.y >= self.top())) {
+        if ((point.x <= self.right() and point.x >= self.left()) and
+            (point.y <= self.bottom() and point.y >= self.top()))
+        {
             collides = true;
         }
 

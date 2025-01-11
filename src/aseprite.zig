@@ -45,20 +45,26 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
 
         if (opt_header) |header| {
             std.debug.assert(header.magic_number == 0xA5E0);
-            std.debug.print("Frame count: {d}\n", .{ header.frames });
+            std.debug.print("Frame count: {d}\n", .{header.frames});
 
             for (0..header.frames) |_| {
                 if (try parseFrameHeader(&file, allocator)) |frame_header| {
                     std.debug.assert(frame_header.magic_number == 0xF1FA);
-                    std.debug.print("Frame size: {d}, chunks: {d}\n", .{ frame_header.byte_count, frame_header.chunkCount() });
+                    std.debug.print(
+                        "Frame size: {d}, chunks: {d}\n",
+                        .{ frame_header.byte_count, frame_header.chunkCount() },
+                    );
 
                     var opt_cel_chunk: ?*AseCelChunk = null;
-                    var opt_tags: ?[]*AseTagsChunk = null;    
+                    var opt_tags: ?[]*AseTagsChunk = null;
 
                     for (0..frame_header.chunkCount()) |_| {
                         if (try parseChunkHeader(&file, allocator)) |chunk_header| {
                             defer allocator.destroy(chunk_header);
-                            std.debug.print("Chunk size: {d}, chunk_type: {}\n", .{ chunk_header.chunkSize(), chunk_header.chunk_type });
+                            std.debug.print(
+                                "Chunk size: {d}, chunk_type: {}\n",
+                                .{ chunk_header.chunkSize(), chunk_header.chunk_type },
+                            );
 
                             switch (chunk_header.chunk_type) {
                                 .Cel => {
@@ -69,7 +75,7 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
                                 },
                                 else => {
                                     _ = try file.reader().skipBytes(chunk_header.chunkSize(), .{});
-                                }
+                                },
                             }
                         }
                     }
@@ -101,48 +107,48 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
 
 // File format structs.
 const AseHeader = struct {
-    file_size: u32,         // DWORD       File size
-    magic_number: u16,      // WORD        Magic number (0xA5E0)
-    frames: u16,            // WORD        Frames
-    width: u16,             // WORD        Width in pixels
-    height: u16,            // WORD        Height in pixels
-    color_depth: u16,       // WORD        Color depth (bits per pixel)
-                            // 32 bpp = RGBA
-                            // 16 bpp = Grayscale
-                            // 8 bpp = Indexed
-    flags: u32,             // DWORD       Flags:
-                            // 1 = Layer opacity has valid value
-    speed: u16,             // WORD        Speed (milliseconds between frame, like in FLC files)
-                            // DEPRECATED: You should use the frame duration field
-                            // from each frame header
-    padding1: u32,          // DWORD       Set be 0
-    padding2: u32,          // DWORD       Set be 0
-    palette_index: u8,      // BYTE        Palette entry (index) which represent transparent color
-                            // in all non-background layers (only for Indexed sprites).
-    //padding3: u24,        // BYTE[3]     Ignore these bytes
-    color_count: u16,       // WORD        Number of colors (0 means 256 for old sprites)
-    pixel_width: u8,        // BYTE        Pixel width (pixel ratio is "pixel width/pixel height").
-                            // If this or pixel height field is zero, pixel ratio is 1:1
-    pixel_height: u8,       // BYTE        Pixel height
-    grid_y: i16,            // SHORT       X position of the grid
-    grid_x: i16,            // SHORT       Y position of the grid
-    grid_width: u16,        // WORD        Grid width (zero if there is no grid, grid size
-                            //     is 16x16 on Aseprite by default)
-    grid_height: u16,       // WORD        Grid height (zero if there is no grid)
-    //reserved: u672,       // BYTE[84]    For future (set to zero)
+    file_size: u32, // DWORD File size
+    magic_number: u16, // WORD Magic number (0xA5E0)
+    frames: u16, // WORD Frames
+    width: u16, // WORD Width in pixels
+    height: u16, // WORD Height in pixels
+    color_depth: u16, // WORD Color depth (bits per pixel)
+    // 32 bpp = RGBA
+    // 16 bpp = Grayscale
+    // 8 bpp = Indexed
+    flags: u32, // DWORD Flags:
+    // 1 = Layer opacity has valid value
+    speed: u16, // WORD Speed (milliseconds between frame, like in FLC files)
+    // DEPRECATED: You should use the frame duration field
+    // from each frame header
+    padding1: u32, // DWORD Set be 0
+    padding2: u32, // DWORD Set be 0
+    palette_index: u8, // BYTE Palette entry (index) which represent transparent color
+    // in all non-background layers (only for Indexed sprites).
+    //padding3: u24, // BYTE[3] Ignore these bytes
+    color_count: u16, // WORD Number of colors (0 means 256 for old sprites)
+    pixel_width: u8, // BYTE Pixel width (pixel ratio is "pixel width/pixel height").
+    // If this or pixel height field is zero, pixel ratio is 1:1
+    pixel_height: u8, // BYTE Pixel height
+    grid_y: i16, // SHORT X position of the grid
+    grid_x: i16, // SHORT Y position of the grid
+    grid_width: u16, // WORD Grid width (zero if there is no grid, grid size
+    //     is 16x16 on Aseprite by default)
+    grid_height: u16, // WORD Grid height (zero if there is no grid)
+    //reserved: u672, // BYTE[84] For future (set to zero)
 };
 
 const AseFrameHeader = struct {
-    byte_count: u32,        // DWORD       Bytes in this frame
-    magic_number: u16,      // WORD        Magic number (always 0xF1FA)
-    old_chunk_count: u16,   // WORD        Old field which specifies the number of "chunks"
-                            //             in this frame. If this value is 0xFFFF, we might
-                            //             have more chunks to read in this frame
-                            //             (so we have to use the new field)
-    frame_duration: u16,    // WORD        Frame duration (in milliseconds)
-    //reserved: u16,        // BYTE[2]     For future (set to zero)
-    chunk_count: u32,       // DWORD       New field which specifies the number of "chunks"
-                            //             in this frame (if this is 0, use the old field)
+    byte_count: u32, // DWORD Bytes in this frame
+    magic_number: u16, // WORD Magic number (always 0xF1FA)
+    old_chunk_count: u16, // WORD Old field which specifies the number of "chunks"
+    // in this frame. If this value is 0xFFFF, we might
+    // have more chunks to read in this frame
+    // (so we have to use the new field)
+    frame_duration: u16, // WORD Frame duration (in milliseconds)
+    //reserved: u16, // BYTE[2] For future (set to zero)
+    chunk_count: u32, // DWORD New field which specifies the number of "chunks"
+    // in this frame (if this is 0, use the old field)
 
     pub fn chunkCount(self: *AseFrameHeader) u32 {
         var result: u32 = self.chunk_count;
@@ -154,8 +160,8 @@ const AseFrameHeader = struct {
 };
 
 const AseChunkHeader = struct {
-    size: u32 align(1),                  // DWORD       Chunk size
-    chunk_type: AseChunkTypes align(1),  // WORD        Chunk type
+    size: u32 align(1), // DWORD Chunk size
+    chunk_type: AseChunkTypes align(1), // WORD Chunk type
 
     pub fn chunkSize(self: *AseChunkHeader) u32 {
         return self.size - @sizeOf(AseChunkHeader);
@@ -166,81 +172,81 @@ const AseChunkTypes = enum(u16) {
     OldPalette1 = 0x0004,
     OldPalette2 = 0x0011,
     Layer = 0x2004,
-    Cel = 0x2005, 
+    Cel = 0x2005,
     CelExtra = 0x2006,
     ColorProfile = 0x2007,
-    ExternalFile = 0x2008, 
+    ExternalFile = 0x2008,
     Mask = 0x2016, // Deprecated.
     Path = 0x2017, // Never used.
     Tags = 0x2018,
     Palette = 0x2019,
     UserData = 0x2020,
-    Slice = 0x2022, 
-    TileSet = 0x2023
+    Slice = 0x2022,
+    TileSet = 0x2023,
 };
 
 const AseCelType = enum(u16) {
-    rawImageData,               // (unused, compressed image is preferred)
+    rawImageData, // (unused, compressed image is preferred)
     linkedCel,
     compressedImage,
     compressedTileMap,
 };
 
 const AseCelChunk = struct {
-    layer_index: u16,           // WORD        Layer index (see NOTE.2)
-    x: i16,                     // SHORT       X position
-    y: i16,                     // SHORT       Y position
-    opacity: u8,                // BYTE        Opacity level
-    cel_type: AseCelType,       // WORD        Cel Type
-                                //             0 - Raw Image Data (unused, compressed image is preferred)
-                                //             1 - Linked Cel
-                                //             2 - Compressed Image
-                                //             3 - Compressed Tilemap
-    z_index: i16,               // SHORT       Z-Index (see NOTE.5)
-                                //             0 = default layer ordering
-                                //             +N = show this cel N layers later
-                                //             -N = show this cel N layers back
-    //reserved: [5]u8           // BYTE[5]     For future (set to zero)
+    layer_index: u16, // WORD Layer index (see NOTE.2)
+    x: i16, // SHORT X position
+    y: i16, // SHORT Y position
+    opacity: u8, // BYTE Opacity level
+    cel_type: AseCelType, // WORD Cel Type
+    // 0 - Raw Image Data (unused, compressed image is preferred)
+    // 1 - Linked Cel
+    // 2 - Compressed Image
+    // 3 - Compressed Tilemap
+    z_index: i16, // SHORT Z-Index (see NOTE.5)
+    // 0 = default layer ordering
+    // +N = show this cel N layers later
+    // -N = show this cel N layers back
+    //reserved: [5]u8 // BYTE[5] For future (set to zero)
     data: union(AseCelType) {
         rawImageData: struct {
-            width: u16,         //   WORD      Width in pixels
-            height: u16,        //   WORD      Height in pixels
-            pixels: []u8,       //   PIXEL[]   Raw pixel data: row by row from top to bottom,
-                                //             for each scanline read pixels from left to right.
+            width: u16, // WORD Width in pixels
+            height: u16, // WORD Height in pixels
+            pixels: []u8, // PIXEL[] Raw pixel data: row by row from top to bottom,
+            // for each scanline read pixels from left to right.
         },
         linkedCel: struct {
-            link: u16           //   WORD      Frame position to link with
+            link: u16, // WORD Frame position to link with
         },
         compressedImage: struct {
-            width: u16,         //   WORD      Width in pixels
-            height: u16,        //   WORD      Height in pixels
-            pixels: []const u8  //   PIXEL[]   "Raw Cel" data compressed with ZLIB method (see NOTE.3)
+            width: u16, // WORD Width in pixels
+            height: u16, // WORD Height in pixels
+            pixels: []const u8, // PIXEL[] "Raw Cel" data compressed with ZLIB method (see NOTE.3)
         },
         compressedTileMap: struct {
-            width: u16,         //   WORD      Width in number of tiles
-            height: u16,        //   WORD      Height in number of tiles
-            bits_per_tile: u16, //   WORD      Bits per tile (at the moment it's always 32-bit per tile)
-            tile_id: u32,       //   DWORD     Bitmask for tile ID (e.g. 0x1fffffff for 32-bit tiles)
-            x_flip: u32,        //   DWORD     Bitmask for X flip
-            y_flip: u32,        //   DWORD     Bitmask for Y flip
-            diagonal_flip: u32, //   DWORD     Bitmask for diagonal flip (swap X/Y axis)
-                                //   BYTE[10]  Reserved
-            tiles: []u8,        //   TILE[]    Row by row, from top to bottom tile by tile
-                                //             compressed with ZLIB method (see NOTE.3)
-        }
+            width: u16, // WORD Width in number of tiles
+            height: u16, // WORD Height in number of tiles
+            bits_per_tile: u16, // WORD Bits per tile (at the moment it's always 32-bit per tile)
+            tile_id: u32, // DWORD Bitmask for tile ID (e.g. 0x1fffffff for 32-bit tiles)
+            x_flip: u32, // DWORD Bitmask for X flip
+            y_flip: u32, // DWORD Bitmask for Y flip
+            diagonal_flip: u32, // DWORD Bitmask for diagonal flip (swap X/Y axis)
+            // BYTE[10]  Reserved
+            tiles: []u8, // TILE[] Row by row, from top to bottom tile by tile
+            // compressed with ZLIB method (see NOTE.3)
+        },
     },
 
     pub fn headerSize(cel_type: AseCelType) u32 {
         var result: u32 =
-            @sizeOf(u16) + 
-            @sizeOf(i16) + 
-            @sizeOf(i16) + 
-            @sizeOf(u8) + 
-            @sizeOf(u16) + 
+            @sizeOf(u16) +
+            @sizeOf(i16) +
+            @sizeOf(i16) +
+            @sizeOf(u8) +
+            @sizeOf(u16) +
             @sizeOf(i16) +
             5;
 
-        result += switch(cel_type) {
+        result += switch (cel_type) {
             .compressedImage => @sizeOf(u16) + @sizeOf(u16),
             else => 0,
         };
@@ -250,8 +256,8 @@ const AseCelChunk = struct {
 };
 
 const AseTagsChunkHeader = struct {
-    count: u16,                 // WORD        Number of tags
-    //reserved: [8]u8,          // BYTE[8]     For future (set to zero)
+    count: u16, // WORD Number of tags
+    //reserved: [8]u8, // BYTE[8] For future (set to zero)
 };
 
 const AseTagsLoop = enum(u8) {
@@ -262,28 +268,28 @@ const AseTagsLoop = enum(u8) {
 };
 
 const AseString = struct {
-    length: u16,                // WORD: string length (number of bytes)
-    characters: []u8,           // BYTE[length]: characters (in UTF-8) The '\0' character is not included.
+    length: u16, // WORD: string length (number of bytes)
+    characters: []u8, // BYTE[length]: characters (in UTF-8) The '\0' character is not included.
 };
 
 pub const AseTagsChunk = struct {
-    from_frame: u16,            // WORD      From frame
-    to_frame: u16,              // WORD      To frame
-    loop_direction: AseTagsLoop,// BYTE      Loop animation direction
-    repeat_count: u16,          // WORD      Repeat N times. Play this animation section N times:
-                                //     0 = Doesn't specify (plays infinite in UI, once on export,
-                                //         for ping-pong it plays once in each direction)
-                                //     1 = Plays once (for ping-pong, it plays just in one direction)
-                                //     2 = Plays twice (for ping-pong, it plays once in one direction,
-                                //         and once in reverse)
-                                //     n = Plays N times
-    //reserved: [6]u8,          // BYTE[6]   For future (set to zero)
-    //deprecated: [4]u8,        // BYTE[3]   RGB values of the tag color
-                                //    Deprecated, used only for backward compatibility with Aseprite v1.2.x
-                                //    The color of the tag is the one in the user data field following
-                                //    the tags chunk
-    //extra: u8,                // BYTE      Extra byte (zero)
-    tag_name: []const u8,       // STRING    Tag name
+    from_frame: u16, // WORD From frame
+    to_frame: u16, // WORD To frame
+    loop_direction: AseTagsLoop, // BYTE Loop animation direction
+    repeat_count: u16, // WORD Repeat N times. Play this animation section N times:
+    // 0 = Doesn't specify (plays infinite in UI, once on export,
+    // for ping-pong it plays once in each direction)
+    // 1 = Plays once (for ping-pong, it plays just in one direction)
+    // 2 = Plays twice (for ping-pong, it plays once in one direction,
+    // and once in reverse)
+    // n = Plays N times
+    //reserved: [6]u8, // BYTE[6] For future (set to zero)
+    //deprecated: [4]u8, // BYTE[3] RGB values of the tag color
+    // Deprecated, used only for backward compatibility with Aseprite v1.2.x
+    // The color of the tag is the one in the user data field following
+    // the tags chunk
+    //extra: u8, // BYTE Extra byte (zero)
+    tag_name: []const u8, // STRING Tag name
 };
 
 fn parseHeader(file: *const std.fs.File, allocator: std.mem.Allocator) !?*AseHeader {
@@ -351,18 +357,22 @@ fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: s
 
     switch (chunk.cel_type) {
         .compressedImage => {
-            chunk.data = .{
-                .compressedImage = .{
-                    .width = try file.reader().readInt(u16, .little),
-                    .height = try file.reader().readInt(u16, .little),
-                    .pixels = undefined,
-                }
-            };
+            chunk.data = .{ .compressedImage = .{
+                .width = try file.reader().readInt(u16, .little),
+                .height = try file.reader().readInt(u16, .little),
+                .pixels = undefined,
+            } };
 
-            std.debug.print("Cel width: {d}, height: {d}\n", .{ chunk.data.compressedImage.width, chunk.data.compressedImage.height });
+            std.debug.print(
+                "Cel width: {d}, height: {d}\n",
+                .{ chunk.data.compressedImage.width, chunk.data.compressedImage.height },
+            );
 
             const data_size = header.chunkSize() - AseCelChunk.headerSize(chunk.cel_type);
-            std.debug.print("Data size: {d}, chunk size: {d}, header size: {d}\n", .{ data_size, header.chunkSize(), AseCelChunk.headerSize(chunk.cel_type) });
+            std.debug.print(
+                "Data size: {d}, chunk size: {d}, header size: {d}\n",
+                .{ data_size, header.chunkSize(), AseCelChunk.headerSize(chunk.cel_type) },
+            );
 
             const compressed_data: []u8 = try allocator.alloc(u8, data_size);
             defer allocator.free(compressed_data);
@@ -373,9 +383,10 @@ fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: s
 
             var compressed_stream = std.io.fixedBufferStream(compressed_data);
             var decompress_stream = std.compress.zlib.decompressor(compressed_stream.reader());
-            chunk.data.compressedImage.pixels = try decompress_stream.reader().readAllAlloc(allocator, std.math.maxInt(usize));
+            chunk.data.compressedImage.pixels =
+                try decompress_stream.reader().readAllAlloc(allocator, std.math.maxInt(usize));
 
-            std.debug.print("Decompressed: {d}\n", .{ chunk.data.compressedImage.pixels.len });
+            std.debug.print("Decompressed: {d}\n", .{chunk.data.compressedImage.pixels.len});
         },
         else => {
             _ = try file.reader().skipBytes(AseCelChunk.headerSize(chunk.cel_type), .{});
@@ -403,11 +414,11 @@ fn parseTagsChunks(file: *const std.fs.File, allocator: std.mem.Allocator) !?[]*
         chunk.repeat_count = try file.reader().readInt(u16, .little);
 
         _ = try file.reader().skipBytes(6 + 3 + 1, .{});
-        
+
         const tag_name_length = try file.reader().readInt(u16, .little);
         var buffer = std.ArrayList(u8).init(allocator);
         for (0..tag_name_length) |_| {
-            try buffer.append(try file.reader().readByte()); 
+            try buffer.append(try file.reader().readByte());
         }
         chunk.tag_name = try buffer.toOwnedSlice();
 

@@ -97,7 +97,7 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
         .width = @floatFromInt(state.render_texture.?.texture.width),
         .height = -@as(f32, @floatFromInt(state.render_texture.?.texture.height)),
     };
-    state.dest_rect = r.Rectangle{ 
+    state.dest_rect = r.Rectangle{
         .x = @as(f32, @floatFromInt(state.window_width)) - state.source_rect.width * state.world_scale,
         .y = 0,
         .width = state.source_rect.width * state.world_scale,
@@ -133,7 +133,7 @@ export fn reload(state_ptr: *anyopaque) void {
 export fn tick(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    { // Handle input. 
+    { // Handle input.
         if (r.IsKeyReleased(r.KEY_TAB)) {
             state.is_paused = !state.is_paused;
         }
@@ -172,13 +172,17 @@ export fn tick(state_ptr: *anyopaque) void {
                                 removeEntity(state, hovered_entity);
                             } else {
                                 removeEntity(state, hovered_entity);
-                                const tiled_position = getTiledPosition(r.GetMousePosition(), &state.assets.getWall(editor_wall_color));
+                                const tiled_position = getTiledPosition(
+                                    r.GetMousePosition(),
+                                    &state.assets.getWall(editor_wall_color),
+                                );
                                 _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
                             }
                         }
                     } else {
                         if (r.GetTime() - state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
-                            state.last_left_click_entity.? == hovered_entity) {
+                            state.last_left_click_entity.? == hovered_entity)
+                        {
                             openSprite(state, hovered_entity);
                         }
                     }
@@ -190,7 +194,10 @@ export fn tick(state_ptr: *anyopaque) void {
                 if (r.IsMouseButtonPressed(0)) {
                     if (state.debug_ui_state.mode == .Edit) {
                         if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
-                            const tiled_position = getTiledPosition(r.GetMousePosition(), &state.assets.getWall(editor_wall_color));
+                            const tiled_position = getTiledPosition(
+                                r.GetMousePosition(),
+                                &state.assets.getWall(editor_wall_color),
+                            );
                             _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
                         }
                     }
@@ -244,10 +251,7 @@ export fn tick(state_ptr: *anyopaque) void {
     // Handle ball specific animations.
     if (state.ball.sprite) |sprite| {
         if (state.ball.transform) |transform| {
-            if (
-                (sprite.isAnimating("bounce_up") or sprite.isAnimating("bounce_down"))
-                and sprite.animation_completed
-            ) {
+            if ((sprite.isAnimating("bounce_up") or sprite.isAnimating("bounce_down")) and sprite.animation_completed) {
                 transform.velocity = transform.next_velocity;
                 sprite.startAnimation("idle");
             }
@@ -307,9 +311,9 @@ fn drawWorld(state: *State) void {
             r.DrawRectangleLines(
                 @intFromFloat(transform.position.x),
                 @intFromFloat(transform.position.y),
-                @intFromFloat(transform.size.x), 
+                @intFromFloat(transform.size.x),
                 @intFromFloat(transform.size.y),
-                r.RED
+                r.RED,
             );
         }
     }
@@ -522,7 +526,7 @@ fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: r.Vector2) !*e
 
 fn addWall(state: *State, color: ecs.ColorComponentValue, position: r.Vector2) !*ecs.Entity {
     var color_component: *ecs.ColorComponent = try state.allocator.create(ecs.ColorComponent);
-    const sprite_asset = &switch(color) {
+    const sprite_asset = &switch (color) {
         .Gray => state.assets.wall_gray.?,
         .Red => state.assets.wall_red.?,
         .Blue => state.assets.wall_blue.?,
@@ -600,19 +604,19 @@ fn getTiledPosition(position: r.Vector2, asset: *const SpriteAsset) r.Vector2 {
 
 fn openSprite(state: *State, entity: *ecs.Entity) void {
     if (entity.sprite) |sprite| {
-        const process_args = if (PLATFORM == .windows) [_][]const u8{ 
+        const process_args = if (PLATFORM == .windows) [_][]const u8{
             // "Aseprite.exe",
             "explorer.exe",
             sprite.asset.path,
             // ".\\assets\\test.aseprite",
-        } else [_][]const u8{ 
+        } else [_][]const u8{
             "open",
             sprite.asset.path,
         };
 
         var aseprite_process = std.process.Child.init(&process_args, state.allocator);
         aseprite_process.spawn() catch |err| {
-            std.debug.print("Error spawning process: {}\n", .{ err });
+            std.debug.print("Error spawning process: {}\n", .{err});
         };
     }
 }
