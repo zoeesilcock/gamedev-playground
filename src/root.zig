@@ -26,6 +26,7 @@ pub const State = struct {
     world_height: u32,
 
     render_texture: ?r.RenderTexture2D,
+    debug_render_texture: ?r.RenderTexture2D,
     source_rect: r.Rectangle,
     dest_rect: r.Rectangle,
 
@@ -93,6 +94,7 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     state.world_width = @intFromFloat(@divFloor(@as(f32, @floatFromInt(state.window_width)), state.world_scale));
     state.world_height = @intFromFloat(@divFloor(@as(f32, @floatFromInt(state.window_height)), state.world_scale));
     state.render_texture = r.LoadRenderTexture(@intCast(state.world_width), @intCast(state.world_height));
+    state.debug_render_texture = r.LoadRenderTexture(@intCast(state.window_width), @intCast(state.window_height));
     state.source_rect = r.Rectangle{
         .x = 0,
         .y = 0,
@@ -287,13 +289,23 @@ export fn draw(state_ptr: *anyopaque) void {
         {
             r.ClearBackground(r.BLACK);
             drawWorld(state);
-            drawDebugUI(state);
         }
         r.EndTextureMode();
 
         {
             r.ClearBackground(r.DARKGRAY);
             r.DrawTexturePro(render_texture.texture, state.source_rect, state.dest_rect, r.Vector2{}, 0, r.WHITE);
+        }
+
+        if (state.debug_render_texture) |debug_render_texture| {
+            r.BeginTextureMode(debug_render_texture);
+            {
+                r.ClearBackground(r.ColorAlpha(r.BLACK, 0));
+                drawDebugUI(state);
+            }
+            r.EndTextureMode();
+
+            r.DrawTexturePro(debug_render_texture.texture, state.dest_rect, state.dest_rect, r.Vector2{}, 0, r.WHITE);
         }
     }
 }
@@ -316,51 +328,6 @@ fn drawWorld(state: *State) void {
         // Draw the current mouse position.
         const mouse_position = r.GetMousePosition();
         r.DrawCircle(@intFromFloat(mouse_position.x), @intFromFloat(mouse_position.y), 3, r.YELLOW);
-    }
-
-    // Highlight colliders.
-    if (state.debug_ui_state.show_colliders) {
-        for (state.colliders.items) |collider| {
-            if (collider.entity.transform) |transform| {
-                switch (collider.shape) {
-                    .Square => {
-                        r.DrawRectangleLinesEx(
-                            r.Rectangle{
-                                .x = transform.position.x,
-                                .y = transform.position.y,
-                                .width = transform.size.x,
-                                .height = transform.size.y,
-                            },
-                            1,
-                            r.GREEN,
-                        );
-                    },
-                    .Circle => {
-                        r.DrawCircleLinesV(
-                            transform.center(),
-                            collider.radius,
-                            r.GREEN,
-                        );
-                    },
-                }
-            }
-        }
-    }
-
-    // Highlight the currently hovered entity.
-    if (state.hovered_entity) |hovered_entity| {
-        if (hovered_entity.transform) |transform| {
-            r.DrawRectangleLinesEx(
-                r.Rectangle{
-                    .x = transform.position.x,
-                    .y = transform.position.y,
-                    .width = transform.size.x,
-                    .height = transform.size.y,
-                },
-                1,
-                r.RED,
-            );
-        }
     }
 }
 
@@ -402,6 +369,55 @@ fn drawDebugUI(state: *State) void {
         }
         if (state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Blue) {
             drawButtonHighlight(button_rect);
+        }
+    }
+
+    // Highlight colliders.
+    if (state.debug_ui_state.show_colliders) {
+        for (state.colliders.items) |collider| {
+            if (collider.entity.transform) |transform| {
+                switch (collider.shape) {
+                    .Square => {
+                        r.DrawRectangleLinesEx(
+                            r.Rectangle{
+                                .x = transform.position.x * state.world_scale,
+                                .y = transform.position.y * state.world_scale,
+                                .width = transform.size.x * state.world_scale,
+                                .height = transform.size.y * state.world_scale,
+                            },
+                            2,
+                            r.GREEN,
+                        );
+                    },
+                    .Circle => {
+                        const center: r.Vector2 = .{
+                            .x = transform.center().x * state.world_scale,
+                            .y = transform.center().y * state.world_scale,
+                        };
+                        r.DrawCircleLinesV(
+                            center,
+                            collider.radius * state.world_scale,
+                            r.GREEN,
+                        );
+                    },
+                }
+            }
+        }
+    }
+
+    // Highlight the currently hovered entity.
+    if (state.hovered_entity) |hovered_entity| {
+        if (hovered_entity.transform) |transform| {
+            r.DrawRectangleLinesEx(
+                r.Rectangle{
+                    .x = transform.position.x * state.world_scale,
+                    .y = transform.position.y * state.world_scale,
+                    .width = transform.size.x * state.world_scale,
+                    .height = transform.size.y * state.world_scale,
+                },
+                2,
+                r.RED,
+            );
         }
     }
 }
