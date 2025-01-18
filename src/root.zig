@@ -121,7 +121,7 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     state.debug_ui_state.mode = .Select;
     state.debug_ui_state.current_wall_color = .Red;
 
-    r.SetMouseScale(1 / state.world_scale, 1 / state.world_scale);
+    updateMouseScale(state);
 
     return state;
 }
@@ -145,6 +145,7 @@ export fn tick(state_ptr: *anyopaque) void {
 
         if (r.IsKeyReleased(r.KEY_E)) {
             state.debug_ui_state.show_level_editor = !state.debug_ui_state.show_level_editor;
+            updateMouseScale(state);
         }
 
         if (r.IsKeyReleased(r.KEY_C)) {
@@ -323,12 +324,6 @@ fn drawWorld(state: *State) void {
             }
         }
     }
-
-    {
-        // Draw the current mouse position.
-        const mouse_position = r.GetMousePosition();
-        r.DrawCircle(@intFromFloat(mouse_position.x), @intFromFloat(mouse_position.y), 3, r.YELLOW);
-    }
 }
 
 fn drawDebugUI(state: *State) void {
@@ -406,19 +401,38 @@ fn drawDebugUI(state: *State) void {
     }
 
     // Highlight the currently hovered entity.
-    if (state.hovered_entity) |hovered_entity| {
-        if (hovered_entity.transform) |transform| {
-            r.DrawRectangleLinesEx(
-                r.Rectangle{
-                    .x = transform.position.x * state.world_scale,
-                    .y = transform.position.y * state.world_scale,
-                    .width = transform.size.x * state.world_scale,
-                    .height = transform.size.y * state.world_scale,
-                },
-                2,
-                r.RED,
-            );
+    if (!state.debug_ui_state.show_level_editor) {
+        if (state.hovered_entity) |hovered_entity| {
+            if (hovered_entity.transform) |transform| {
+                r.DrawRectangleLinesEx(
+                    r.Rectangle{
+                        .x = transform.position.x * state.world_scale,
+                        .y = transform.position.y * state.world_scale,
+                        .width = transform.size.x * state.world_scale,
+                        .height = transform.size.y * state.world_scale,
+                    },
+                    2,
+                    r.RED,
+                );
+            }
         }
+
+        // Draw the current mouse position.
+        const mouse_position = r.GetMousePosition();
+        r.DrawCircle(
+            @intFromFloat(mouse_position.x * state.world_scale),
+            @intFromFloat(mouse_position.y * state.world_scale),
+            2 * state.world_scale,
+            r.YELLOW,
+        );
+    }
+}
+
+fn updateMouseScale(state: *State) void {
+    if (state.debug_ui_state.show_level_editor) {
+        r.SetMouseScale(1, 1);
+    } else {
+        r.SetMouseScale(1 / state.world_scale, 1 / state.world_scale);
     }
 }
 
