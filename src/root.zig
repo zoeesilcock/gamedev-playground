@@ -6,6 +6,9 @@ const ecs = @import("ecs.zig");
 const PLATFORM = @import("builtin").os.tag;
 
 const DOUBLE_CLICK_THRESHOLD: f32 = 0.3;
+const DEFAULT_WORLD_SCALE: u32 = 4;
+const WORLD_WIDTH: u32 = 200;
+const WORLD_HEIGHT: u32 = 150;
 const BALL_VELOCITY: f32 = 64;
 const BALL_SPAWN = r.Vector2{ .x = 24, .y = 20 };
 
@@ -35,6 +38,8 @@ pub const State = struct {
 
     delta_time: f32,
     is_paused: bool,
+    fullscreen: bool,
+
     debug_ui_state: DebugUIState,
 
     // Debug interactions.
@@ -89,24 +94,10 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     state.allocator = allocator;
     state.window_width = window_width;
     state.window_height = window_height;
+    state.world_width = WORLD_WIDTH;
+    state.world_height = WORLD_HEIGHT;
 
-    state.world_scale = 4;
-    state.world_width = @intFromFloat(@divFloor(@as(f32, @floatFromInt(state.window_width)), state.world_scale));
-    state.world_height = @intFromFloat(@divFloor(@as(f32, @floatFromInt(state.window_height)), state.world_scale));
-    state.render_texture = r.LoadRenderTexture(@intCast(state.world_width), @intCast(state.world_height));
-    state.debug_render_texture = r.LoadRenderTexture(@intCast(state.window_width), @intCast(state.window_height));
-    state.source_rect = r.Rectangle{
-        .x = 0,
-        .y = 0,
-        .width = @floatFromInt(state.render_texture.?.texture.width),
-        .height = -@as(f32, @floatFromInt(state.render_texture.?.texture.height)),
-    };
-    state.dest_rect = r.Rectangle{
-        .x = @as(f32, @floatFromInt(state.window_width)) - state.source_rect.width * state.world_scale,
-        .y = 0,
-        .width = state.source_rect.width * state.world_scale,
-        .height = state.source_rect.height * state.world_scale,
-    };
+    updateRenderTexture(state);
 
     state.level_index = 0;
     state.walls = std.ArrayList(*ecs.Entity).init(allocator);
@@ -124,6 +115,37 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     updateMouseScale(state);
 
     return state;
+}
+
+fn updateRenderTexture(state: *State) void {
+    const dpi = r.GetWindowScaleDPI();
+    const window_position = r.GetWindowPosition();
+    state.window_width = @intFromFloat(@divFloor(@as(f32, @floatFromInt(r.GetRenderWidth())), dpi.x));
+    state.window_height = @intFromFloat(@divFloor(@as(f32, @floatFromInt(r.GetRenderHeight())), dpi.y));
+
+    if (state.fullscreen) {
+        // This is specific to borderless fullscreen on Mac.
+        state.window_height -= @intFromFloat(window_position.y);
+    }
+
+    state.world_scale = @as(f32, @floatFromInt(state.window_height)) / @as(f32, @floatFromInt(state.world_height));
+    updateMouseScale(state);
+
+    state.render_texture = r.LoadRenderTexture(@intCast(state.world_width), @intCast(state.world_height));
+    state.debug_render_texture = r.LoadRenderTexture(@intCast(state.window_width), @intCast(state.window_height));
+    state.source_rect = r.Rectangle{
+        .x = 0,
+        .y = 0,
+        .width = @floatFromInt(state.render_texture.?.texture.width),
+        .height = -@as(f32, @floatFromInt(state.render_texture.?.texture.height)),
+    };
+
+    state.dest_rect = r.Rectangle{
+        .x = 0,
+        .y = 0,
+        .width = state.source_rect.width * state.world_scale,
+        .height = state.source_rect.height * state.world_scale,
+    };
 }
 
 export fn reload(state_ptr: *anyopaque) void {
@@ -146,6 +168,13 @@ export fn tick(state_ptr: *anyopaque) void {
         if (r.IsKeyReleased(r.KEY_E)) {
             state.debug_ui_state.show_level_editor = !state.debug_ui_state.show_level_editor;
             updateMouseScale(state);
+        }
+
+        if (r.IsKeyReleased(r.KEY_F)) {
+            state.fullscreen = !state.fullscreen;
+            r.ToggleBorderlessWindowed();
+            // r.ToggleFullscreen();
+            updateRenderTexture(state);
         }
 
         if (r.IsKeyReleased(r.KEY_C)) {
