@@ -25,13 +25,12 @@ pub const State = struct {
     window_height: u32,
 
     world_scale: f32,
+    ui_scale: f32,
     world_width: u32,
     world_height: u32,
 
-    render_texture: ?r.RenderTexture2D,
-    debug_render_texture: ?r.RenderTexture2D,
-    source_rect: r.Rectangle,
-    dest_rect: r.Rectangle,
+    camera: r.Camera2D,
+    camera_ui: r.Camera2D,
 
     assets: Assets,
     level_index: u32,
@@ -97,7 +96,7 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     state.world_width = WORLD_WIDTH;
     state.world_height = WORLD_HEIGHT;
 
-    updateRenderTexture(state);
+    setupCameras(state);
 
     state.level_index = 0;
     state.walls = std.ArrayList(*ecs.Entity).init(allocator);
@@ -117,7 +116,7 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     return state;
 }
 
-fn updateRenderTexture(state: *State) void {
+fn setupCameras(state: *State) void {
     const dpi = r.GetWindowScaleDPI();
     const window_position = r.GetWindowPosition();
     state.window_width = @intFromFloat(@divFloor(@as(f32, @floatFromInt(r.GetRenderWidth())), dpi.x));
@@ -129,23 +128,26 @@ fn updateRenderTexture(state: *State) void {
     }
 
     state.world_scale = @as(f32, @floatFromInt(state.window_height)) / @as(f32, @floatFromInt(state.world_height));
+    state.ui_scale = state.world_scale / 2;
+
+    const horizontal_offset: f32 =
+        (@as(f32, @floatFromInt(state.window_width)) - (@as(f32, @floatFromInt(state.world_width)) * state.world_scale)) / 2;
+
+    state.camera = r.Camera2D{
+        .offset = r.Vector2{ .x = horizontal_offset, .y = 0 },
+        .target = r.Vector2{ .x = 0, .y = 0 },
+        .rotation = 0,
+        .zoom = state.world_scale,
+    };
+
+    state.camera_ui = r.Camera2D{
+        .offset = r.Vector2{ .x = 0, .y = 0 },
+        .target = r.Vector2{ .x = 0, .y = 0 },
+        .rotation = 0,
+        .zoom = state.ui_scale,
+    };
+
     updateMouseScale(state);
-
-    state.render_texture = r.LoadRenderTexture(@intCast(state.world_width), @intCast(state.world_height));
-    state.debug_render_texture = r.LoadRenderTexture(@intCast(state.window_width), @intCast(state.window_height));
-    state.source_rect = r.Rectangle{
-        .x = 0,
-        .y = 0,
-        .width = @floatFromInt(state.render_texture.?.texture.width),
-        .height = -@as(f32, @floatFromInt(state.render_texture.?.texture.height)),
-    };
-
-    state.dest_rect = r.Rectangle{
-        .x = 0,
-        .y = 0,
-        .width = state.source_rect.width * state.world_scale,
-        .height = state.source_rect.height * state.world_scale,
-    };
 }
 
 export fn reload(state_ptr: *anyopaque) void {
@@ -174,7 +176,7 @@ export fn tick(state_ptr: *anyopaque) void {
             state.fullscreen = !state.fullscreen;
             r.ToggleBorderlessWindowed();
             // r.ToggleFullscreen();
-            updateRenderTexture(state);
+            setupCameras(state);
         }
 
         if (r.IsKeyReleased(r.KEY_C)) {
@@ -313,31 +315,16 @@ export fn tick(state_ptr: *anyopaque) void {
 
 export fn draw(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
+    r.ClearBackground(r.BLACK);
 
-    if (state.render_texture) |render_texture| {
-        r.BeginTextureMode(render_texture);
-        {
-            r.ClearBackground(r.BLACK);
-            drawWorld(state);
-        }
-        r.EndTextureMode();
+    r.BeginMode2D(state.camera);
+    drawWorld(state);
+    drawDebugOverlay(state);
+    r.EndMode2D();
 
-        {
-            r.ClearBackground(r.DARKGRAY);
-            r.DrawTexturePro(render_texture.texture, state.source_rect, state.dest_rect, r.Vector2{}, 0, r.WHITE);
-        }
-
-        if (state.debug_render_texture) |debug_render_texture| {
-            r.BeginTextureMode(debug_render_texture);
-            {
-                r.ClearBackground(r.ColorAlpha(r.BLACK, 0));
-                drawDebugUI(state);
-            }
-            r.EndTextureMode();
-
-            r.DrawTexturePro(debug_render_texture.texture, state.dest_rect, state.dest_rect, r.Vector2{}, 0, r.WHITE);
-        }
-    }
+    r.BeginMode2D(state.camera_ui);
+    drawDebugUI(state);
+    r.EndMode2D();
 }
 
 fn drawWorld(state: *State) void {
@@ -355,7 +342,74 @@ fn drawWorld(state: *State) void {
     }
 }
 
+fn drawDebugOverlay(state: *State) void {
+    const line_thickness: f32 = 0.5;
+
+    // Highlight colliders.
+    if (state.debug_ui_state.show_colliders) {
+        for (state.colliders.items) |collider| {
+            if (collider.entity.transform) |transform| {
+                switch (collider.shape) {
+                    .Square => {
+                        r.DrawRectangleLinesEx(
+                            r.Rectangle{
+                                .x = transform.position.x,
+                                .y = transform.position.y,
+                                .width = transform.size.x,
+                                .height = transform.size.y,
+                            },
+                            line_thickness,
+                            r.GREEN,
+                        );
+                    },
+                    .Circle => {
+                        const center: r.Vector2 = .{
+                            .x = transform.center().x,
+                            .y = transform.center().y,
+                        };
+                        r.DrawCircleLinesV(
+                            center,
+                            collider.radius,
+                            r.GREEN,
+                        );
+                    },
+                }
+            }
+        }
+    }
+
+    // Highlight the currently hovered entity.
+    if (!state.debug_ui_state.show_level_editor) {
+        if (state.hovered_entity) |hovered_entity| {
+            if (hovered_entity.transform) |transform| {
+                r.DrawRectangleLinesEx(
+                    r.Rectangle{
+                        .x = transform.position.x,
+                        .y = transform.position.y,
+                        .width = transform.size.x,
+                        .height = transform.size.y,
+                    },
+                    line_thickness,
+                    r.RED,
+                );
+            }
+        }
+
+        // Draw the current mouse position.
+        const mouse_position = r.GetMousePosition();
+        r.DrawCircle(
+            @intFromFloat(mouse_position.x),
+            @intFromFloat(mouse_position.y),
+            line_thickness,
+            r.YELLOW,
+        );
+    }
+}
+
 fn drawDebugUI(state: *State) void {
+    const screen_bottom: i32 = @intFromFloat(@as(f32, @floatFromInt(state.window_height)) / state.ui_scale);
+    r.DrawFPS(8, screen_bottom - 22);
+
     if (state.debug_ui_state.show_level_editor) {
         _ = r.GuiWindowBox(r.Rectangle{ .x = 0, .y = 0, .width = 100, .height = 140 }, "Level editor");
 
@@ -395,72 +449,14 @@ fn drawDebugUI(state: *State) void {
             drawButtonHighlight(button_rect);
         }
     }
-
-    // Highlight colliders.
-    if (state.debug_ui_state.show_colliders) {
-        for (state.colliders.items) |collider| {
-            if (collider.entity.transform) |transform| {
-                switch (collider.shape) {
-                    .Square => {
-                        r.DrawRectangleLinesEx(
-                            r.Rectangle{
-                                .x = transform.position.x * state.world_scale,
-                                .y = transform.position.y * state.world_scale,
-                                .width = transform.size.x * state.world_scale,
-                                .height = transform.size.y * state.world_scale,
-                            },
-                            2,
-                            r.GREEN,
-                        );
-                    },
-                    .Circle => {
-                        const center: r.Vector2 = .{
-                            .x = transform.center().x * state.world_scale,
-                            .y = transform.center().y * state.world_scale,
-                        };
-                        r.DrawCircleLinesV(
-                            center,
-                            collider.radius * state.world_scale,
-                            r.GREEN,
-                        );
-                    },
-                }
-            }
-        }
-    }
-
-    // Highlight the currently hovered entity.
-    if (!state.debug_ui_state.show_level_editor) {
-        if (state.hovered_entity) |hovered_entity| {
-            if (hovered_entity.transform) |transform| {
-                r.DrawRectangleLinesEx(
-                    r.Rectangle{
-                        .x = transform.position.x * state.world_scale,
-                        .y = transform.position.y * state.world_scale,
-                        .width = transform.size.x * state.world_scale,
-                        .height = transform.size.y * state.world_scale,
-                    },
-                    2,
-                    r.RED,
-                );
-            }
-        }
-
-        // Draw the current mouse position.
-        const mouse_position = r.GetMousePosition();
-        r.DrawCircle(
-            @intFromFloat(mouse_position.x * state.world_scale),
-            @intFromFloat(mouse_position.y * state.world_scale),
-            2 * state.world_scale,
-            r.YELLOW,
-        );
-    }
 }
 
 fn updateMouseScale(state: *State) void {
     if (state.debug_ui_state.show_level_editor) {
-        r.SetMouseScale(1, 1);
+        r.SetMouseOffset(@intFromFloat(-state.camera_ui.offset.x), @intFromFloat(-state.camera_ui.offset.y));
+        r.SetMouseScale(1 / state.ui_scale, 1 / state.ui_scale);
     } else {
+        r.SetMouseOffset(@intFromFloat(-state.camera.offset.x), @intFromFloat(-state.camera.offset.y));
         r.SetMouseScale(1 / state.world_scale, 1 / state.world_scale);
     }
 }

@@ -60,12 +60,8 @@ pub fn main() !void {
         {
             gameDraw(state);
 
-            if (DEBUG) {
-                r.DrawFPS(0, WINDOW_HEIGHT - 20);
-            }
-
             if (build_process != null) {
-                r.DrawText("Re-compiling", 10, WINDOW_HEIGHT - 60, 16, r.WHITE);
+                r.DrawText("Recompiling", 12, WINDOW_HEIGHT - 60, 16, r.WHITE);
             }
         }
         r.EndDrawing();
