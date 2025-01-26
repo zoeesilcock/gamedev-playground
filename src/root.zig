@@ -76,6 +76,11 @@ pub const SpriteAsset = struct {
     path: []const u8,
 };
 
+const DebugCollision = struct {
+    collision: ecs.Collision,
+    time_added: f64,
+};
+
 const DebugUIState = struct {
     mode: enum {
         Select,
@@ -84,6 +89,15 @@ const DebugUIState = struct {
     current_wall_color: ?ecs.ColorComponentValue,
     show_level_editor: bool,
     show_colliders: bool,
+
+    collisions: std.ArrayList(DebugCollision),
+
+    pub fn addCollision(self: *DebugUIState, collision: *const ecs.Collision) void {
+        self.collisions.append(.{
+            .collision = collision.*,
+            .time_added = r.GetTime(),
+        }) catch unreachable;
+    }
 };
 
 export fn init(window_width: u32, window_height: u32) *anyopaque {
@@ -110,6 +124,7 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
 
     state.debug_ui_state.mode = .Select;
     state.debug_ui_state.current_wall_color = .Red;
+    state.debug_ui_state.collisions = std.ArrayList(DebugCollision).init(allocator);
 
     updateMouseScale(state);
 
@@ -264,6 +279,7 @@ export fn tick(state_ptr: *anyopaque) void {
                 collision.self.entity.sprite.?.startAnimation(if (transform.velocity.y < 0) "bounce_up" else "bounce_down");
 
                 transform.velocity.y = 0;
+                state.debug_ui_state.addCollision(&collision);
 
                 // Check if the other sprite is a wall of the same color as the ball.
                 if (collision.other.entity.color) |other_color| {
@@ -284,6 +300,7 @@ export fn tick(state_ptr: *anyopaque) void {
         if (collision.self.entity == state.ball) {
             if (collision.self.entity.transform) |transform| {
                 transform.velocity.x = 0;
+                state.debug_ui_state.addCollision(&collision);
 
                 // Check if the other sprite is a wall of the same color as the ball.
                 if (collision.other.entity.color) |other_color| {
@@ -342,39 +359,43 @@ fn drawWorld(state: *State) void {
     }
 }
 
+fn drawDebugCollider(collider: *ecs.ColliderComponent, color: r.Color, line_thickness: f32) void {
+    if (collider.entity.transform) |transform| {
+        switch (collider.shape) {
+            .Square => {
+                r.DrawRectangleLinesEx(
+                    r.Rectangle{
+                        .x = transform.position.x,
+                        .y = transform.position.y,
+                        .width = transform.size.x,
+                        .height = transform.size.y,
+                    },
+                    line_thickness,
+                    color,
+                );
+            },
+            .Circle => {
+                const center: r.Vector2 = .{
+                    .x = transform.center().x,
+                    .y = transform.center().y,
+                };
+                r.DrawCircleLinesV(
+                    center,
+                    collider.radius,
+                    color,
+                );
+            },
+        }
+    }
+}
+
 fn drawDebugOverlay(state: *State) void {
     const line_thickness: f32 = 0.5;
 
     // Highlight colliders.
     if (state.debug_ui_state.show_colliders) {
         for (state.colliders.items) |collider| {
-            if (collider.entity.transform) |transform| {
-                switch (collider.shape) {
-                    .Square => {
-                        r.DrawRectangleLinesEx(
-                            r.Rectangle{
-                                .x = transform.position.x,
-                                .y = transform.position.y,
-                                .width = transform.size.x,
-                                .height = transform.size.y,
-                            },
-                            line_thickness,
-                            r.GREEN,
-                        );
-                    },
-                    .Circle => {
-                        const center: r.Vector2 = .{
-                            .x = transform.center().x,
-                            .y = transform.center().y,
-                        };
-                        r.DrawCircleLinesV(
-                            center,
-                            collider.radius,
-                            r.GREEN,
-                        );
-                    },
-                }
-            }
+            drawDebugCollider(collider, r.GREEN, line_thickness);
         }
     }
 
@@ -403,6 +424,23 @@ fn drawDebugOverlay(state: *State) void {
             line_thickness,
             r.YELLOW,
         );
+    }
+
+    // Highlight collisions.
+    var index = state.debug_ui_state.collisions.items.len;
+    while (index > 0) {
+        index -= 1;
+
+        const show_time: f64 = 1;
+        const collision = state.debug_ui_state.collisions.items[index];
+        if (r.GetTime() > collision.time_added + show_time) {
+            _ = state.debug_ui_state.collisions.swapRemove(index);
+        } else {
+            const time_remaining: f64 = ((collision.time_added + show_time) - r.GetTime()) / show_time;
+            var color: r.Color = r.ORANGE;
+            color.a = @intFromFloat(255 * time_remaining);
+            drawDebugCollider(collision.collision.other, color, @floatCast(10 * time_remaining));
+        }
     }
 }
 

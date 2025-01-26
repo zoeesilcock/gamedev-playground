@@ -61,7 +61,7 @@ pub const CollisionResult = struct {
     horizontal: ?Collision = null,
 };
 
-const Collision = struct {
+pub const Collision = struct {
     self: *ColliderComponent,
     other: *ColliderComponent,
 };
