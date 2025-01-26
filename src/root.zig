@@ -276,9 +276,10 @@ export fn tick(state_ptr: *anyopaque) void {
             if (collision.self.entity.transform) |transform| {
                 transform.next_velocity = transform.velocity;
                 transform.next_velocity.y = -transform.next_velocity.y;
-                collision.self.entity.sprite.?.startAnimation(if (transform.velocity.y < 0) "bounce_up" else "bounce_down");
 
+                collision.self.entity.sprite.?.startAnimation(if (transform.velocity.y < 0) "bounce_up" else "bounce_down");
                 transform.velocity.y = 0;
+
                 state.debug_ui_state.addCollision(&collision);
 
                 // Check if the other sprite is a wall of the same color as the ball.
@@ -300,6 +301,8 @@ export fn tick(state_ptr: *anyopaque) void {
         if (collision.self.entity == state.ball) {
             if (collision.self.entity.transform) |transform| {
                 transform.velocity.x = 0;
+                transform.next_velocity.x = 0;
+
                 state.debug_ui_state.addCollision(&collision);
 
                 // Check if the other sprite is a wall of the same color as the ball.

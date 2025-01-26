@@ -105,23 +105,26 @@ pub const ColliderComponent = struct {
                     },
                 }
             } else {
-                var circle_collider: *ColliderComponent = undefined;
-                var square_collider: *ColliderComponent = undefined;
+                var circle_radius: f32 = 0;
+                var circle_transform: ?*const TransformComponent = null;
+                var square_transform: ?*const TransformComponent = null;
 
                 if (self.shape == .Circle) {
-                    circle_collider = self;
+                    circle_transform = &at;
+                    circle_radius = self.radius;
                 } else {
-                    square_collider = self;
+                    square_transform = &at;
                 }
 
                 if (other.shape == .Circle) {
-                    circle_collider = other;
+                    circle_transform = other.entity.transform;
+                    circle_radius = other.radius;
                 } else {
-                    square_collider = other;
+                    square_transform = other.entity.transform;
                 }
 
-                if (circle_collider.entity.transform) |circle| {
-                    if (square_collider.entity.transform) |square| {
+                if (circle_transform) |circle| {
+                    if (square_transform) |square| {
                         const circle_position = circle.center();
                         const closest_x: f32 = std.math.clamp(circle_position.x, square.left(), square.right());
                         const closest_y: f32 = std.math.clamp(circle_position.y, square.top(), square.bottom());
@@ -129,7 +132,7 @@ pub const ColliderComponent = struct {
                         const distance_y: f32 = circle_position.y - closest_y;
                         const distance: f32 = (distance_x * distance_x) + (distance_y * distance_y);
 
-                        if (distance < circle_collider.radius * circle_collider.radius) {
+                        if (distance < circle_radius * circle_radius) {
                             collides = true;
                         }
                     }
@@ -145,17 +148,18 @@ pub const ColliderComponent = struct {
 
         for (colliders) |collider| {
             if (collider.entity.transform) |transform| {
-                if (transform.velocity.x != 0 or transform.velocity.y != 0) {
+                // Check in the Y direction.
+                if (transform.velocity.y != 0) {
                     var next_transform = transform.*;
-
-                    // Check in the Y direction.
                     next_transform.position.y += next_transform.velocity.y * delta_time;
                     if (collider.collidesWithAnyAt(colliders, next_transform)) |other_entity| {
                         result.vertical = .{ .self = collider, .other = other_entity.collider.? };
                     }
+                }
 
-                    // Check in the X direction.
-                    next_transform = transform.*;
+                // Check in the X direction.
+                if (transform.velocity.x != 0) {
+                    var next_transform = transform.*;
                     next_transform.position.x += next_transform.velocity.x * delta_time;
                     if (collider.collidesWithAnyAt(colliders, next_transform)) |other_entity| {
                         result.horizontal = .{ .self = collider, .other = other_entity.collider.? };
