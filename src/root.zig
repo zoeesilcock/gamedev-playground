@@ -10,6 +10,7 @@ const DEFAULT_WORLD_SCALE: u32 = 4;
 const WORLD_WIDTH: u32 = 200;
 const WORLD_HEIGHT: u32 = 150;
 const BALL_VELOCITY: f32 = 64;
+const BALL_HORIZONTAL_BOUNCE_TIME: f64 = 0.075;
 const BALL_SPAWN = r.Vector2{ .x = 24, .y = 20 };
 
 const LEVELS: []const []const u8 = &.{
@@ -52,6 +53,8 @@ pub const State = struct {
     sprites: std.ArrayList(*ecs.SpriteComponent),
     ball: *ecs.Entity,
     walls: std.ArrayList(*ecs.Entity),
+
+    ball_horizontal_bounce_start_time: f64,
 };
 
 const Assets = struct {
@@ -207,12 +210,14 @@ export fn tick(state_ptr: *anyopaque) void {
         }
 
         if (state.ball.transform) |transform| {
-            if (r.IsKeyDown(r.KEY_LEFT)) {
-                transform.velocity.x = -BALL_VELOCITY;
-            } else if (r.IsKeyDown(r.KEY_RIGHT)) {
-                transform.velocity.x = BALL_VELOCITY;
-            } else {
-                transform.velocity.x = 0;
+            if ((state.ball_horizontal_bounce_start_time + BALL_HORIZONTAL_BOUNCE_TIME) < r.GetTime()) {
+                if (r.IsKeyDown(r.KEY_LEFT)) {
+                    transform.velocity.x = -BALL_VELOCITY;
+                } else if (r.IsKeyDown(r.KEY_RIGHT)) {
+                    transform.velocity.x = BALL_VELOCITY;
+                } else {
+                    transform.velocity.x = 0;
+                }
             }
         }
 
@@ -300,8 +305,8 @@ export fn tick(state_ptr: *anyopaque) void {
     if (collisions.horizontal) |collision| {
         if (collision.self.entity == state.ball) {
             if (collision.self.entity.transform) |transform| {
-                transform.velocity.x = 0;
-                transform.next_velocity.x = 0;
+                transform.velocity.x = -transform.velocity.x;
+                state.ball_horizontal_bounce_start_time = r.GetTime();
 
                 state.debug_ui_state.addCollision(&collision);
 
@@ -563,6 +568,10 @@ fn spawnBall(state: *State) !void {
 
             state.ball = entity;
             try state.colliders.append(collider_component);
+
+            if (entity.sprite) |ball_sprite| {
+                ball_sprite.startAnimation("idle");
+            }
 
             resetBall(state);
         }
