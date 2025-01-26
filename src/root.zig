@@ -405,6 +405,23 @@ fn drawDebugOverlay(state: *State) void {
         for (state.colliders.items) |collider| {
             drawDebugCollider(collider, r.GREEN, line_thickness);
         }
+
+        // Highlight collisions.
+        var index = state.debug_ui_state.collisions.items.len;
+        while (index > 0) {
+            index -= 1;
+
+            const show_time: f64 = 1;
+            const collision = state.debug_ui_state.collisions.items[index];
+            if (r.GetTime() > collision.time_added + show_time) {
+                _ = state.debug_ui_state.collisions.swapRemove(index);
+            } else {
+                const time_remaining: f64 = ((collision.time_added + show_time) - r.GetTime()) / show_time;
+                var color: r.Color = r.ORANGE;
+                color.a = @intFromFloat(255 * time_remaining);
+                drawDebugCollider(collision.collision.other, color, @floatCast(10 * time_remaining));
+            }
+        }
     }
 
     // Highlight the currently hovered entity.
@@ -432,23 +449,6 @@ fn drawDebugOverlay(state: *State) void {
             line_thickness,
             r.YELLOW,
         );
-    }
-
-    // Highlight collisions.
-    var index = state.debug_ui_state.collisions.items.len;
-    while (index > 0) {
-        index -= 1;
-
-        const show_time: f64 = 1;
-        const collision = state.debug_ui_state.collisions.items[index];
-        if (r.GetTime() > collision.time_added + show_time) {
-            _ = state.debug_ui_state.collisions.swapRemove(index);
-        } else {
-            const time_remaining: f64 = ((collision.time_added + show_time) - r.GetTime()) / show_time;
-            var color: r.Color = r.ORANGE;
-            color.a = @intFromFloat(255 * time_remaining);
-            drawDebugCollider(collision.collision.other, color, @floatCast(10 * time_remaining));
-        }
     }
 }
 
