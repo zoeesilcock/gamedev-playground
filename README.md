@@ -2,6 +2,7 @@
 
 Playground for exploring ways of making game development a more pleasurable experience.
 
+![Playground screenshot](/screenshot.png)
 
 ## Editor
 This approach aims to do as much of the editing directly in-game and offload to external editors for more complicated tasks.
@@ -12,10 +13,11 @@ Double clicking on an entity will open it's sprite in Aseprite. This works parti
 
 ### Keys
 * Tab: Toggle pause.
+* F: Toggle fullscreen.
 * E: Toggle level editor.
+* C: Toggle collider outlines.
 * S: Save level.
 * L: Load level.
-* C: Toggle collider outlines.
 
 
 ## Hot reloading
