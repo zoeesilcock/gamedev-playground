@@ -6,10 +6,6 @@
             .url = "https://github.com/raysan5/raylib/archive/0275d13aa84f8a464b5246abbef9205b94c73c5e.zip",
             .hash = "1220af2aa71cc9a2384244e027f7dea21f30a14943eeefc821f406eb0da35e2ae4e8",
         },
-        .raygui = .{
-            .url = "https://github.com/raysan5/raygui/archive/refs/tags/4.0.zip",
-            .hash = "1220b64eaeaf55609b3152b64d108ea73981c9689e783bddc68c80e77d275ebac164",
-        },
         .zgui = .{
             .url = "https://github.com/zig-gamedev/zgui/archive/655c131f4bfb14fb94c9d7e64fe643a5968622db.zip",
             .hash = "12207c154347a125a2026c1d973968dc97fc1324a568f8deaa895b84bcb6af74c76c",

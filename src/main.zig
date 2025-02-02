@@ -1,6 +1,5 @@
 const std = @import("std");
 const r = @import("dependencies/raylib.zig");
-const ri = @import("dependencies/rlimgui.zig");
 const z = @import("zgui");
 
 const DEBUG = @import("builtin").mode == std.builtin.OptimizeMode.Debug;
@@ -25,15 +24,22 @@ var src_last_modified: i128 = 0;
 var assets_last_modified: i128 = 0;
 
 var gameInit: *const fn (u32, u32) GameStatePtr = undefined;
-var gameReload: *const fn (GameStatePtr) void = undefined;
+var gameDeinit: *const fn () void = undefined;
+var gameWillReload: *const fn (GameStatePtr) void = undefined;
+var gameReloaded: *const fn (GameStatePtr) void = undefined;
 var gameTick: *const fn (GameStatePtr) void = undefined;
 var gameDraw: *const fn (GameStatePtr) void = undefined;
+var gameDrawDebugUI: *const fn (GameStatePtr) void = undefined;
 
 pub fn main() !void {
     const allocator = std.heap.c_allocator;
 
     r.SetConfigFlags(r.FLAG_WINDOW_HIGHDPI);
     r.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Playground");
+    defer r.CloseWindow();
+
+    z.init(allocator);
+    defer z.deinit();
 
     const current_monitor = r.GetCurrentMonitor();
     const monitor_width = r.GetMonitorWidth(current_monitor);
@@ -47,10 +53,11 @@ pub fn main() !void {
     } else {
         r.SetTargetFPS(TARGET_FPS);
     }
-    ri.rlImGuiSetup(true);
 
     loadDll() catch @panic("Failed to load the game lib.");
+
     const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT);
+    defer gameDeinit();
 
     initChangeTimes(allocator);
 
@@ -66,19 +73,11 @@ pub fn main() !void {
             if (build_process != null) {
                 r.DrawText("Recompiling", 12, WINDOW_HEIGHT - 60, 16, r.WHITE);
             }
-
-            ri.rlImGuiBegin();
-            {
-                var open: bool = true;
-                z.showDemoWindow(&open);
-            }
-            ri.rlImGuiEnd();
         }
         r.EndDrawing();
-    }
 
-    ri.rlImGuiShutdown();
-    r.CloseWindow();
+        gameDrawDebugUI(state);
+    }
 }
 
 fn initChangeTimes(allocator: std.mem.Allocator) void {
@@ -99,12 +98,14 @@ fn checkForChanges(state: GameStatePtr, allocator: std.mem.Allocator) void {
             };
         }
 
+        gameWillReload(state);
         unloadDll() catch unreachable;
         loadDll() catch @panic("Failed to load the game lib.");
-        gameReload(state);
+        gameReloaded(state);
         _ = assetsHaveChanged(allocator);
     } else if (assetsHaveChanged(allocator)) {
-        gameReload(state);
+        gameWillReload(state);
+        gameReloaded(state);
     }
 }
 
@@ -169,9 +170,12 @@ fn loadDll() !void {
 
     opt_dyn_lib = dyn_lib;
     gameInit = dyn_lib.lookup(@TypeOf(gameInit), "init") orelse return error.LookupFail;
-    gameReload = dyn_lib.lookup(@TypeOf(gameReload), "reload") orelse return error.LookupFail;
+    gameDeinit = dyn_lib.lookup(@TypeOf(gameDeinit), "deinit") orelse return error.LookupFail;
+    gameWillReload = dyn_lib.lookup(@TypeOf(gameWillReload), "willReload") orelse return error.LookupFail;
+    gameReloaded = dyn_lib.lookup(@TypeOf(gameReloaded), "reloaded") orelse return error.LookupFail;
     gameTick = dyn_lib.lookup(@TypeOf(gameTick), "tick") orelse return error.LookupFail;
     gameDraw = dyn_lib.lookup(@TypeOf(gameDraw), "draw") orelse return error.LookupFail;
+    gameDrawDebugUI = dyn_lib.lookup(@TypeOf(gameDrawDebugUI), "drawDebugUI") orelse return error.LookupFail;
 
     std.debug.print("Game lib loaded.\n", .{});
 }

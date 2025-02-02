@@ -1,5 +1,7 @@
 const std = @import("std");
 const r = @import("dependencies/raylib.zig");
+const z = @import("zgui");
+const ri = @import("dependencies/rlimgui.zig");
 const aseprite = @import("aseprite.zig");
 const ecs = @import("ecs.zig");
 
@@ -130,8 +132,23 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     state.debug_ui_state.collisions = std.ArrayList(DebugCollision).init(allocator);
 
     updateMouseScale(state);
+    initImgui(state);
 
     return state;
+}
+
+export fn deinit() void {
+    deinitImgui();
+}
+
+fn initImgui(state: *State) void {
+    z.initNoContext(state.allocator);
+    ri.rlImGuiSetup(true);
+}
+
+fn deinitImgui() void {
+    ri.rlImGuiShutdown();
+    z.deinitNoContext();
 }
 
 fn setupCameras(state: *State) void {
@@ -168,9 +185,15 @@ fn setupCameras(state: *State) void {
     updateMouseScale(state);
 }
 
-export fn reload(state_ptr: *anyopaque) void {
+export fn willReload(state_ptr: *anyopaque) void {
+    _ = state_ptr;
+    deinitImgui();
+}
+
+export fn reloaded(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
     loadAssets(state);
+    initImgui(state);
 
     if (state.ball.transform) |transform| {
         transform.velocity.y = if (transform.velocity.y > 0) BALL_VELOCITY else -BALL_VELOCITY;
@@ -367,6 +390,40 @@ fn drawWorld(state: *State) void {
     }
 }
 
+export fn drawDebugUI(state_ptr: *anyopaque) void {
+    const state: *State = @ptrCast(@alignCast(state_ptr));
+    const screen_bottom: i32 = @intFromFloat(@as(f32, @floatFromInt(state.window_height)) / state.ui_scale);
+    r.DrawFPS(8, screen_bottom - 22);
+
+    ri.rlImGuiBegin();
+    defer ri.rlImGuiEnd();
+
+    // z.showDemoWindow(&state.debug_ui_state.show_level_editor);
+
+    if (state.debug_ui_state.show_level_editor) {
+        _ = z.begin("Editor", .{});
+        defer z.end();
+
+        z.text("Mode:", .{});
+        if (z.radioButton("Select", .{ .active = state.debug_ui_state.mode == .Select })) {
+            state.debug_ui_state.mode = .Select;
+        }
+        z.spacing();
+        if (z.radioButton("Gray", .{ .active = state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Gray })) {
+            state.debug_ui_state.mode = .Edit;
+            state.debug_ui_state.current_wall_color = .Gray;
+        }
+        if (z.radioButton("Red", .{ .active = state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Red })) {
+            state.debug_ui_state.mode = .Edit;
+            state.debug_ui_state.current_wall_color = .Red;
+        }
+        if (z.radioButton("Blue", .{ .active = state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Blue })) {
+            state.debug_ui_state.mode = .Edit;
+            state.debug_ui_state.current_wall_color = .Blue;
+        }
+    }
+}
+
 fn drawDebugCollider(collider: *ecs.ColliderComponent, color: r.Color, line_thickness: f32) void {
     if (collider.entity.transform) |transform| {
         switch (collider.shape) {
@@ -449,51 +506,6 @@ fn drawDebugOverlay(state: *State) void {
             line_thickness,
             r.YELLOW,
         );
-    }
-}
-
-fn drawDebugUI(state: *State) void {
-    const screen_bottom: i32 = @intFromFloat(@as(f32, @floatFromInt(state.window_height)) / state.ui_scale);
-    r.DrawFPS(8, screen_bottom - 22);
-
-    if (state.debug_ui_state.show_level_editor) {
-        _ = r.GuiWindowBox(r.Rectangle{ .x = 0, .y = 0, .width = 100, .height = 140 }, "Level editor");
-
-        var button_rect: r.Rectangle = .{ .x = 10, .y = 30, .width = 75, .height = 16 };
-
-        if (r.GuiButton(button_rect, "Select") != 0) {
-            state.debug_ui_state.mode = .Select;
-        }
-        if (state.debug_ui_state.mode == .Select) {
-            drawButtonHighlight(button_rect);
-        }
-
-        button_rect.y += 20;
-        if (r.GuiButton(button_rect, "Gray") != 0) {
-            state.debug_ui_state.mode = .Edit;
-            state.debug_ui_state.current_wall_color = .Gray;
-        }
-        if (state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Gray) {
-            drawButtonHighlight(button_rect);
-        }
-
-        button_rect.y += 20;
-        if (r.GuiButton(button_rect, "Red") != 0) {
-            state.debug_ui_state.mode = .Edit;
-            state.debug_ui_state.current_wall_color = .Red;
-        }
-        if (state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Red) {
-            drawButtonHighlight(button_rect);
-        }
-
-        button_rect.y += 20;
-        if (r.GuiButton(button_rect, "Blue") != 0) {
-            state.debug_ui_state.mode = .Edit;
-            state.debug_ui_state.current_wall_color = .Blue;
-        }
-        if (state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Blue) {
-            drawButtonHighlight(button_rect);
-        }
     }
 }
 

@@ -81,7 +81,7 @@ fn linkLibraries(
     const zgui_dep = b.dependency("zgui", .{
         .target = target,
         .optimize = optimize,
-        .shared = false,
+        .shared = true,
     });
     const rlImGui_dep = b.dependency("rlImGui", .{
         .target = target,
@@ -106,12 +106,4 @@ fn linkLibraries(
         },
     });
     obj.addIncludePath(rlImGui_dep.path("."));
-
-    const raygui_dep = b.dependency("raygui", .{
-        .target = target,
-        .optimize = optimize,
-        .shared = true,
-    });
-    obj.addCSourceFile(.{ .file = b.path("src/dependencies/raygui.c") });
-    obj.addIncludePath(raygui_dep.path("src"));
 }
