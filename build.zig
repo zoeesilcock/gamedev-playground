@@ -78,15 +78,40 @@ fn linkLibraries(
         .optimize = optimize,
         .shared = true,
     });
+    const zgui_dep = b.dependency("zgui", .{
+        .target = target,
+        .optimize = optimize,
+        .shared = false,
+    });
+    const rlImGui_dep = b.dependency("rlImGui", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    obj.linkLibrary(raylib_dep.artifact("raylib"));
+    b.installArtifact(raylib_dep.artifact("raylib"));
+
+    obj.root_module.addImport("zgui", zgui_dep.module("root"));
+    obj.linkLibrary(zgui_dep.artifact("imgui"));
+    obj.addIncludePath(zgui_dep.path("libs/imgui"));
+
+    obj.linkLibCpp();
+    obj.addCSourceFile(.{
+        .file = rlImGui_dep.path("rlImGui.cpp"),
+        .flags = &.{
+            "-fno-sanitize=undefined",
+            "-std=c++11",
+            "-Wno-deprecated-declarations",
+            "-DNO_FONT_AWESOME",
+        },
+    });
+    obj.addIncludePath(rlImGui_dep.path("."));
+
     const raygui_dep = b.dependency("raygui", .{
         .target = target,
         .optimize = optimize,
         .shared = true,
     });
-
-    obj.linkLibrary(raylib_dep.artifact("raylib"));
     obj.addCSourceFile(.{ .file = b.path("src/dependencies/raygui.c") });
     obj.addIncludePath(raygui_dep.path("src"));
-
-    b.installArtifact(raylib_dep.artifact("raylib"));
 }

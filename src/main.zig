@@ -1,5 +1,7 @@
 const std = @import("std");
 const r = @import("dependencies/raylib.zig");
+const ri = @import("dependencies/rlimgui.zig");
+const z = @import("zgui");
 
 const DEBUG = @import("builtin").mode == std.builtin.OptimizeMode.Debug;
 const PLATFORM = @import("builtin").os.tag;
@@ -45,6 +47,7 @@ pub fn main() !void {
     } else {
         r.SetTargetFPS(TARGET_FPS);
     }
+    ri.rlImGuiSetup(true);
 
     loadDll() catch @panic("Failed to load the game lib.");
     const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -63,10 +66,18 @@ pub fn main() !void {
             if (build_process != null) {
                 r.DrawText("Recompiling", 12, WINDOW_HEIGHT - 60, 16, r.WHITE);
             }
+
+            ri.rlImGuiBegin();
+            {
+                var open: bool = true;
+                z.showDemoWindow(&open);
+            }
+            ri.rlImGuiEnd();
         }
         r.EndDrawing();
     }
 
+    ri.rlImGuiShutdown();
     r.CloseWindow();
 }
 
