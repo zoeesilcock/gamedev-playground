@@ -2,47 +2,52 @@ const std = @import("std");
 const r = @import("dependencies/raylib.zig");
 const aseprite = @import("aseprite.zig");
 const root = @import("root.zig");
+const math = @import("math.zig");
+
+const Vector2 = math.Vector2;
+const X = math.X;
+const Y = math.Y;
+const Z = math.Z;
 
 pub const TransformComponent = struct {
     entity: *Entity,
 
-    position: r.Vector2,
-    size: r.Vector2,
-    velocity: r.Vector2,
-    next_velocity: r.Vector2,
+    position: Vector2,
+    size: Vector2,
+    velocity: Vector2,
+    next_velocity: Vector2,
 
     pub fn tick(transforms: []*TransformComponent, delta_time: f32) void {
         for (transforms) |transform| {
-            transform.position.x += transform.velocity.x * delta_time;
-            transform.position.y += transform.velocity.y * delta_time;
+            transform.position += transform.velocity * @as(Vector2, @splat(delta_time));
         }
     }
 
     pub fn top(self: *const TransformComponent) f32 {
-        return self.position.y;
+        return self.position[Y];
     }
 
     pub fn bottom(self: *const TransformComponent) f32 {
-        return self.position.y + self.size.y;
+        return self.position[Y] + self.size[Y];
     }
 
     pub fn left(self: *const TransformComponent) f32 {
-        return self.position.x;
+        return self.position[X];
     }
 
     pub fn right(self: *const TransformComponent) f32 {
-        return self.position.x + self.size.x;
+        return self.position[X] + self.size[X];
     }
 
-    pub fn center(self: *const TransformComponent) r.Vector2 {
-        return r.Vector2{ .x = self.position.x + self.size.x * 0.5, .y = self.position.y + self.size.y * 0.5 };
+    pub fn center(self: *const TransformComponent) Vector2 {
+        return Vector2{ self.position[X] + self.size[X] * 0.5, self.position[Y] + self.size[Y] * 0.5 };
     }
 
-    pub fn containsPoint(self: *const TransformComponent, point: r.Vector2) bool {
+    pub fn containsPoint(self: *const TransformComponent, point: Vector2) bool {
         var contains_point = false;
 
-        if ((point.x <= self.right() and point.x >= self.left()) and
-            (point.y <= self.bottom() and point.y >= self.top()))
+        if ((point[X] <= self.right() and point[X] >= self.left()) and
+            (point[Y] <= self.bottom() and point[Y] >= self.top()))
         {
             contains_point = true;
         }
@@ -69,8 +74,8 @@ pub const Collision = struct {
 pub const ColliderComponent = struct {
     entity: *Entity,
 
-    offset: r.Vector2,
-    size: r.Vector2,
+    offset: Vector2,
+    size: Vector2,
     radius: f32,
     shape: ColliderShape,
 
@@ -126,10 +131,10 @@ pub const ColliderComponent = struct {
                 if (circle_transform) |circle| {
                     if (square_transform) |square| {
                         const circle_position = circle.center();
-                        const closest_x: f32 = std.math.clamp(circle_position.x, square.left(), square.right());
-                        const closest_y: f32 = std.math.clamp(circle_position.y, square.top(), square.bottom());
-                        const distance_x: f32 = circle_position.x - closest_x;
-                        const distance_y: f32 = circle_position.y - closest_y;
+                        const closest_x: f32 = std.math.clamp(circle_position[X], square.left(), square.right());
+                        const closest_y: f32 = std.math.clamp(circle_position[Y], square.top(), square.bottom());
+                        const distance_x: f32 = circle_position[X] - closest_x;
+                        const distance_y: f32 = circle_position[Y] - closest_y;
                         const distance: f32 = (distance_x * distance_x) + (distance_y * distance_y);
 
                         if (distance < circle_radius * circle_radius) {
@@ -149,18 +154,18 @@ pub const ColliderComponent = struct {
         for (colliders) |collider| {
             if (collider.entity.transform) |transform| {
                 // Check in the Y direction.
-                if (transform.velocity.y != 0) {
+                if (transform.velocity[Y] != 0) {
                     var next_transform = transform.*;
-                    next_transform.position.y += next_transform.velocity.y * delta_time;
+                    next_transform.position[Y] += next_transform.velocity[Y] * delta_time;
                     if (collider.collidesWithAnyAt(colliders, next_transform)) |other_entity| {
                         result.vertical = .{ .self = collider, .other = other_entity.collider.? };
                     }
                 }
 
                 // Check in the X direction.
-                if (transform.velocity.x != 0) {
+                if (transform.velocity[X] != 0) {
                     var next_transform = transform.*;
-                    next_transform.position.x += next_transform.velocity.x * delta_time;
+                    next_transform.position[X] += next_transform.velocity[X] * delta_time;
                     if (collider.collidesWithAnyAt(colliders, next_transform)) |other_entity| {
                         result.horizontal = .{ .self = collider, .other = other_entity.collider.? };
                     }
@@ -231,13 +236,13 @@ pub const SpriteComponent = struct {
         return result;
     }
 
-    pub fn getOffset(self: *SpriteComponent) r.Vector2 {
-        var result: r.Vector2 = .{ .x = 0, .y = 0 };
+    pub fn getOffset(self: *SpriteComponent) Vector2 {
+        var result: Vector2 = .{ 0, 0 };
 
         if (self.frame_index < self.asset.frames.len) {
             const cel_chunk = self.asset.document.frames[self.frame_index].cel_chunk;
-            result.x = @floatFromInt(cel_chunk.x);
-            result.y = @floatFromInt(cel_chunk.y);
+            result[0] = @floatFromInt(cel_chunk.x);
+            result[1] = @floatFromInt(cel_chunk.y);
         }
 
         return result;

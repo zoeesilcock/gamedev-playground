@@ -4,6 +4,12 @@ const z = @import("zgui");
 const ri = @import("dependencies/rlimgui.zig");
 const aseprite = @import("aseprite.zig");
 const ecs = @import("ecs.zig");
+const math = @import("math.zig");
+
+const Vector2 = math.Vector2;
+const X = math.X;
+const Y = math.Y;
+const Z = math.Z;
 
 const PLATFORM = @import("builtin").os.tag;
 
@@ -13,7 +19,7 @@ const WORLD_WIDTH: u32 = 200;
 const WORLD_HEIGHT: u32 = 150;
 const BALL_VELOCITY: f32 = 64;
 const BALL_HORIZONTAL_BOUNCE_TIME: f64 = 0.075;
-const BALL_SPAWN = r.Vector2{ .x = 24, .y = 20 };
+const BALL_SPAWN = Vector2{ 24, 20 };
 
 const LEVELS: []const []const u8 = &.{
     "assets/level1.lvl",
@@ -196,7 +202,7 @@ export fn reloaded(state_ptr: *anyopaque) void {
     initImgui(state);
 
     if (state.ball.transform) |transform| {
-        transform.velocity.y = if (transform.velocity.y > 0) BALL_VELOCITY else -BALL_VELOCITY;
+        transform.velocity[Y] = if (transform.velocity[Y] > 0) BALL_VELOCITY else -BALL_VELOCITY;
     }
 }
 
@@ -235,11 +241,11 @@ export fn tick(state_ptr: *anyopaque) void {
         if (state.ball.transform) |transform| {
             if ((state.ball_horizontal_bounce_start_time + BALL_HORIZONTAL_BOUNCE_TIME) < r.GetTime()) {
                 if (r.IsKeyDown(r.KEY_LEFT)) {
-                    transform.velocity.x = -BALL_VELOCITY;
+                    transform.velocity[X] = -BALL_VELOCITY;
                 } else if (r.IsKeyDown(r.KEY_RIGHT)) {
-                    transform.velocity.x = BALL_VELOCITY;
+                    transform.velocity[X] = BALL_VELOCITY;
                 } else {
-                    transform.velocity.x = 0;
+                    transform.velocity[X] = 0;
                 }
             }
         }
@@ -256,8 +262,9 @@ export fn tick(state_ptr: *anyopaque) void {
                                 removeEntity(state, hovered_entity);
                             } else {
                                 removeEntity(state, hovered_entity);
+                                const mouse_position = r.GetMousePosition();
                                 const tiled_position = getTiledPosition(
-                                    r.GetMousePosition(),
+                                    Vector2{mouse_position.x, mouse_position.y},
                                     &state.assets.getWall(editor_wall_color),
                                 );
                                 _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
@@ -278,8 +285,9 @@ export fn tick(state_ptr: *anyopaque) void {
                 if (r.IsMouseButtonPressed(0)) {
                     if (state.debug_ui_state.mode == .Edit) {
                         if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
+                            const mouse_position = r.GetMousePosition();
                             const tiled_position = getTiledPosition(
-                                r.GetMousePosition(),
+                                Vector2{mouse_position.x, mouse_position.y},
                                 &state.assets.getWall(editor_wall_color),
                             );
                             _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
@@ -303,10 +311,10 @@ export fn tick(state_ptr: *anyopaque) void {
         if (collision.self.entity == state.ball) {
             if (collision.self.entity.transform) |transform| {
                 transform.next_velocity = transform.velocity;
-                transform.next_velocity.y = -transform.next_velocity.y;
+                transform.next_velocity[Y] = -transform.next_velocity[Y];
 
-                collision.self.entity.sprite.?.startAnimation(if (transform.velocity.y < 0) "bounce_up" else "bounce_down");
-                transform.velocity.y = 0;
+                collision.self.entity.sprite.?.startAnimation(if (transform.velocity[Y] < 0) "bounce_up" else "bounce_down");
+                transform.velocity[Y] = 0;
 
                 state.debug_ui_state.addCollision(&collision);
 
@@ -319,7 +327,7 @@ export fn tick(state_ptr: *anyopaque) void {
             }
         } else {
             if (collision.self.entity.transform) |transform| {
-                transform.velocity.y = -transform.velocity.y;
+                transform.velocity[Y] = -transform.velocity[Y];
             }
         }
     }
@@ -328,7 +336,7 @@ export fn tick(state_ptr: *anyopaque) void {
     if (collisions.horizontal) |collision| {
         if (collision.self.entity == state.ball) {
             if (collision.self.entity.transform) |transform| {
-                transform.velocity.x = -transform.velocity.x;
+                transform.velocity[X] = -transform.velocity[X];
                 state.ball_horizontal_bounce_start_time = r.GetTime();
 
                 state.debug_ui_state.addCollision(&collision);
@@ -381,10 +389,9 @@ fn drawWorld(state: *State) void {
             if (sprite.getTexture()) |texture| {
                 const offset = sprite.getOffset();
                 var position = transform.position;
-                position.x += offset.x;
-                position.y += offset.y;
+                position += offset;
 
-                r.DrawTextureV(texture, position, r.WHITE);
+                r.DrawTextureV(texture, r.Vector2{ .x = position[X], .y = position[Y] }, r.WHITE);
             }
         }
     }
@@ -430,10 +437,10 @@ fn drawDebugCollider(collider: *ecs.ColliderComponent, color: r.Color, line_thic
             .Square => {
                 r.DrawRectangleLinesEx(
                     r.Rectangle{
-                        .x = transform.position.x,
-                        .y = transform.position.y,
-                        .width = transform.size.x,
-                        .height = transform.size.y,
+                        .x = transform.position[X],
+                        .y = transform.position[Y],
+                        .width = transform.size[X],
+                        .height = transform.size[Y],
                     },
                     line_thickness,
                     color,
@@ -441,8 +448,8 @@ fn drawDebugCollider(collider: *ecs.ColliderComponent, color: r.Color, line_thic
             },
             .Circle => {
                 const center: r.Vector2 = .{
-                    .x = transform.center().x,
-                    .y = transform.center().y,
+                    .x = transform.center()[X],
+                    .y = transform.center()[Y],
                 };
                 r.DrawCircleLinesV(
                     center,
@@ -487,10 +494,10 @@ fn drawDebugOverlay(state: *State) void {
             if (hovered_entity.transform) |transform| {
                 r.DrawRectangleLinesEx(
                     r.Rectangle{
-                        .x = transform.position.x,
-                        .y = transform.position.y,
-                        .width = transform.size.x,
-                        .height = transform.size.y,
+                        .x = transform.position[X],
+                        .y = transform.position[Y],
+                        .width = transform.size[X],
+                        .height = transform.size[Y],
                     },
                     line_thickness,
                     r.RED,
@@ -569,7 +576,7 @@ fn spawnBall(state: *State) !void {
             collider_component.entity = entity;
             collider_component.shape = .Circle;
             collider_component.radius = 8;
-            collider_component.offset = r.Vector2Zero();
+            collider_component.offset = @splat(0);
 
             var color_component: *ecs.ColorComponent = state.allocator.create(ecs.ColorComponent) catch undefined;
             color_component.entity = entity;
@@ -592,7 +599,7 @@ fn spawnBall(state: *State) !void {
 
 fn resetBall(state: *State) void {
     state.ball.transform.?.position = BALL_SPAWN;
-    state.ball.transform.?.velocity.y = BALL_VELOCITY;
+    state.ball.transform.?.velocity[Y] = BALL_VELOCITY;
 }
 
 fn saveLevel(state: *State, path: []const u8) !void {
@@ -605,8 +612,8 @@ fn saveLevel(state: *State, path: []const u8) !void {
             if (wall.color) |color| {
                 if (wall.transform) |transform| {
                     try file.writer().writeInt(u32, @intFromEnum(color.color), .little);
-                    try file.writer().writeInt(i32, @intFromFloat(@round(transform.position.x)), .little);
-                    try file.writer().writeInt(i32, @intFromFloat(@round(transform.position.y)), .little);
+                    try file.writer().writeInt(i32, @intFromFloat(@round(transform.position[X])), .little);
+                    try file.writer().writeInt(i32, @intFromFloat(@round(transform.position[Y])), .little);
                 }
             }
         }
@@ -632,7 +639,7 @@ fn loadLevel(state: *State, path: []const u8) !void {
             const x = try file.reader().readInt(i32, .little);
             const y = try file.reader().readInt(i32, .little);
 
-            _ = try addWall(state, @enumFromInt(color), r.Vector2{ .x = @floatFromInt(x), .y = @floatFromInt(y) });
+            _ = try addWall(state, @enumFromInt(color), Vector2{ @floatFromInt(x), @floatFromInt(y) });
         }
     }
 }
@@ -659,7 +666,7 @@ fn isLevelCompleted(state: *State) bool {
     return result;
 }
 
-fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: r.Vector2) !*ecs.Entity {
+fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: Vector2) !*ecs.Entity {
     var entity: *ecs.Entity = try state.allocator.create(ecs.Entity);
     var sprite: *ecs.SpriteComponent = try state.allocator.create(ecs.SpriteComponent);
     var transform: *ecs.TransformComponent = try state.allocator.create(ecs.TransformComponent);
@@ -673,12 +680,12 @@ fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: r.Vector2) !*e
     sprite.current_animation = null;
 
     transform.entity = entity;
-    transform.size = r.Vector2{
-        .x = @floatFromInt(sprite_asset.document.header.width),
-        .y = @floatFromInt(sprite_asset.document.header.height),
+    transform.size = Vector2{
+        @floatFromInt(sprite_asset.document.header.width),
+        @floatFromInt(sprite_asset.document.header.height),
     };
     transform.position = position;
-    transform.velocity = r.Vector2Zero();
+    transform.velocity = @splat(0);
 
     entity.transform = transform;
     entity.sprite = sprite;
@@ -690,7 +697,7 @@ fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: r.Vector2) !*e
     return entity;
 }
 
-fn addWall(state: *State, color: ecs.ColorComponentValue, position: r.Vector2) !*ecs.Entity {
+fn addWall(state: *State, color: ecs.ColorComponentValue, position: Vector2) !*ecs.Entity {
     const sprite_asset = &switch (color) {
         .Gray => state.assets.wall_gray.?,
         .Red => state.assets.wall_red.?,
@@ -701,11 +708,11 @@ fn addWall(state: *State, color: ecs.ColorComponentValue, position: r.Vector2) !
     var collider_component: *ecs.ColliderComponent = state.allocator.create(ecs.ColliderComponent) catch undefined;
     collider_component.entity = new_entity;
     collider_component.shape = .Square;
-    collider_component.size = r.Vector2{
-        .x = @floatFromInt(sprite_asset.document.header.width),
-        .y = @floatFromInt(sprite_asset.document.header.height),
+    collider_component.size = Vector2{
+        @floatFromInt(sprite_asset.document.header.width),
+        @floatFromInt(sprite_asset.document.header.height),
     };
-    collider_component.offset = r.Vector2Zero();
+    collider_component.offset = @splat(0);
 
     var color_component: *ecs.ColorComponent = try state.allocator.create(ecs.ColorComponent);
     color_component.entity = new_entity;
@@ -775,7 +782,7 @@ fn getHoveredEntity(state: *State) ?*ecs.Entity {
     const mouse_position = r.GetMousePosition();
 
     for (state.transforms.items) |transform| {
-        if (transform.containsPoint(mouse_position)) {
+        if (transform.containsPoint(Vector2{mouse_position.x, mouse_position.y})) {
             result = transform.entity;
             break;
         }
@@ -784,12 +791,12 @@ fn getHoveredEntity(state: *State) ?*ecs.Entity {
     return result;
 }
 
-fn getTiledPosition(position: r.Vector2, asset: *const SpriteAsset) r.Vector2 {
-    const tile_x = @divFloor(position.x, @as(f32, @floatFromInt(asset.document.header.width)));
-    const tile_y = @divFloor(position.y, @as(f32, @floatFromInt(asset.document.header.height)));
-    return r.Vector2{
-        .x = tile_x * @as(f32, @floatFromInt(asset.document.header.width)),
-        .y = tile_y * @as(f32, @floatFromInt(asset.document.header.height)),
+fn getTiledPosition(position: Vector2, asset: *const SpriteAsset) Vector2 {
+    const tile_x = @divFloor(position[X], @as(f32, @floatFromInt(asset.document.header.width)));
+    const tile_y = @divFloor(position[Y], @as(f32, @floatFromInt(asset.document.header.height)));
+    return Vector2{
+        tile_x * @as(f32, @floatFromInt(asset.document.header.width)),
+        tile_y * @as(f32, @floatFromInt(asset.document.header.height)),
     };
 }
 
