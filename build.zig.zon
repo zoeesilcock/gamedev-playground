@@ -7,12 +7,12 @@
             .hash = "1220af2aa71cc9a2384244e027f7dea21f30a14943eeefc821f406eb0da35e2ae4e8",
         },
         .zgui = .{
-            .url = "https://github.com/zig-gamedev/zgui/archive/655c131f4bfb14fb94c9d7e64fe643a5968622db.zip",
-            .hash = "12207c154347a125a2026c1d973968dc97fc1324a568f8deaa895b84bcb6af74c76c",
+            .url = "https://github.com/zig-gamedev/zgui/archive/6763f8a059efe96951700731a8a3efb8a99a8ceb.zip",
+            .hash = "1220c209784531fdf9eab84ca0a985adc98dc0b3c22fa477b54714036fe549b7eeb5",
         },
         .rlImGui = .{
-            .url = "https://github.com/raylib-extras/rlImGui/archive/30cd744e9d291644fc39d5b0fb79ad6c132f2b40.zip",
-            .hash = "122060e605015c47a3a79a61fccd00d1c81548503000b89346557b0a5eb9d9ed8be5",
+            .url = "https://github.com/raylib-extras/rlImGui/archive/583d4fea67e67d431319974f0625f680d3840dfb.zip",
+            .hash = "1220a54ec7eb29901b3f7d9e0bcfb7a63c752880e4fbacac4bfacf3ede88f062c3bd",
         }
     },
     .paths = .{
