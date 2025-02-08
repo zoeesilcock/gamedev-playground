@@ -20,6 +20,7 @@ const WINDOW_HEIGHT = if (DEBUG) 600 else 800;
 const WINDOW_DECORATIONS_WIDTH = if (PLATFORM == .windows) 16 else 0;
 const WINDOW_DECORATIONS_HEIGHT = if (PLATFORM == .windows) 39 else 0;
 const TARGET_FPS = 120;
+const TARGET_FRAME_TIME = 1000 / TARGET_FPS;
 
 const GameStatePtr = *anyopaque;
 
@@ -56,7 +57,11 @@ pub fn main() !void {
     const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT, window.?, renderer.?);
     initChangeTimes(allocator);
 
+    var frame_start_time: u64 = 0;
+    var frame_elapsed_time: u64 = 0;
     while (true) {
+        frame_start_time = c.SDL_GetTicks();
+
         checkForChanges(state, allocator);
 
         if (!gameProcessInput(state)) {
@@ -66,7 +71,13 @@ pub fn main() !void {
         gameTick(state);
         gameDraw(state);
 
-        c.SDL_Delay(1);
+        frame_elapsed_time = c.SDL_GetTicks() - frame_start_time;
+
+        if (!DEBUG) {
+            if (frame_elapsed_time < TARGET_FRAME_TIME) {
+                c.SDL_Delay(@intCast(TARGET_FRAME_TIME - frame_elapsed_time));
+            }
+        }
     }
 
     defer gameDeinit();
