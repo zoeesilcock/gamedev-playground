@@ -1,6 +1,12 @@
 const std = @import("std");
-const r = @import("dependencies/raylib.zig");
-const z = @import("zgui");
+
+const c = @cImport({
+    @cDefine("SDL_DISABLE_OLD_NAMES", {});
+    @cInclude("SDL3/SDL.h");
+    @cInclude("SDL3/SDL_revision.h");
+    @cDefine("SDL_MAIN_HANDLED", {});
+    @cInclude("SDL3/SDL_main.h");
+});
 
 const DEBUG = @import("builtin").mode == std.builtin.OptimizeMode.Debug;
 const PLATFORM = @import("builtin").os.tag;
@@ -9,8 +15,8 @@ const LIB_OUTPUT_DIR = if (PLATFORM == .windows) "zig-out/bin/" else "zig-out/li
 const LIB_PATH = if (PLATFORM == .windows) "zig-out/bin/playground.dll" else "zig-out/lib/libplayground.dylib";
 const LIB_PATH_RUNTIME = if (PLATFORM == .windows) "zig-out/bin/playground_temp.dll" else LIB_PATH;
 
-const WINDOW_WIDTH = if (DEBUG) 800 else 800;
-const WINDOW_HEIGHT = if (DEBUG) 600 else 600;
+const WINDOW_WIDTH = if (DEBUG) 800 else 1200;
+const WINDOW_HEIGHT = if (DEBUG) 600 else 800;
 const WINDOW_DECORATIONS_WIDTH = if (PLATFORM == .windows) 16 else 0;
 const WINDOW_DECORATIONS_HEIGHT = if (PLATFORM == .windows) 39 else 0;
 const TARGET_FPS = 120;
@@ -23,61 +29,52 @@ var dyn_lib_last_modified: i128 = 0;
 var src_last_modified: i128 = 0;
 var assets_last_modified: i128 = 0;
 
-var gameInit: *const fn (u32, u32) GameStatePtr = undefined;
+var gameInit: *const fn (u32, u32, *c.SDL_Window, *c.SDL_Renderer) GameStatePtr = undefined;
 var gameDeinit: *const fn () void = undefined;
 var gameWillReload: *const fn (GameStatePtr) void = undefined;
 var gameReloaded: *const fn (GameStatePtr) void = undefined;
+var gameProcessInput: *const fn (GameStatePtr) bool = undefined;
 var gameTick: *const fn (GameStatePtr) void = undefined;
 var gameDraw: *const fn (GameStatePtr) void = undefined;
-var gameDrawDebugUI: *const fn (GameStatePtr) void = undefined;
 
 pub fn main() !void {
     const allocator = std.heap.c_allocator;
 
-    r.SetConfigFlags(r.FLAG_WINDOW_HIGHDPI);
-    r.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Playground");
-    defer r.CloseWindow();
+    if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_EVENTS)) {
+        std.log.debug("SDL_Init failed", .{});
+        return;
+    }
 
-    z.init(allocator);
-    defer z.deinit();
+    const window = c.SDL_CreateWindow("Playground", WINDOW_WIDTH, WINDOW_HEIGHT, 0);
+    const renderer = c.SDL_CreateRenderer(window, null);
 
-    const current_monitor = r.GetCurrentMonitor();
-    const monitor_width = r.GetMonitorWidth(current_monitor);
-
-    if (DEBUG) {
-        const window_offset_x: c_int = 12;
-        const window_offset_y: c_int = 12 + WINDOW_DECORATIONS_HEIGHT;
-
-        r.SetWindowPosition(monitor_width - WINDOW_WIDTH - window_offset_x, window_offset_y);
-        r.SetWindowState(r.FLAG_WINDOW_TOPMOST);
-    } else {
-        r.SetTargetFPS(TARGET_FPS);
+    if (window == null or renderer == null) {
+        std.log.debug("Failed to create window", .{});
     }
 
     loadDll() catch @panic("Failed to load the game lib.");
-
-    const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT);
-    defer gameDeinit();
-
+    const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT, window.?, renderer.?);
     initChangeTimes(allocator);
 
-    while (!r.WindowShouldClose()) {
+    while (true) {
         checkForChanges(state, allocator);
 
-        gameTick(state);
-
-        r.BeginDrawing();
-        {
-            gameDraw(state);
-
-            if (build_process != null) {
-                r.DrawText("Recompiling", 12, WINDOW_HEIGHT - 60, 16, r.WHITE);
-            }
+        if (!gameProcessInput(state)) {
+            break;
         }
-        r.EndDrawing();
 
-        gameDrawDebugUI(state);
+        gameTick(state);
+        gameDraw(state);
+
+        c.SDL_Delay(1);
     }
+
+    defer gameDeinit();
+
+    c.SDL_DestroyRenderer(renderer);
+    c.SDL_DestroyWindow(window);
+
+    c.SDL_Quit();
 }
 
 fn initChangeTimes(allocator: std.mem.Allocator) void {
@@ -87,10 +84,6 @@ fn initChangeTimes(allocator: std.mem.Allocator) void {
 }
 
 fn checkForChanges(state: GameStatePtr, allocator: std.mem.Allocator) void {
-    if (r.IsKeyPressed(r.KEY_F5) or srcHasChanged(allocator)) {
-        recompileDll(allocator) catch @panic("Failed to recompile the lib.");
-    }
-
     if (dllHasChanged()) {
         if (build_process != null) {
             checkRecompileResult() catch {
@@ -173,9 +166,9 @@ fn loadDll() !void {
     gameDeinit = dyn_lib.lookup(@TypeOf(gameDeinit), "deinit") orelse return error.LookupFail;
     gameWillReload = dyn_lib.lookup(@TypeOf(gameWillReload), "willReload") orelse return error.LookupFail;
     gameReloaded = dyn_lib.lookup(@TypeOf(gameReloaded), "reloaded") orelse return error.LookupFail;
+    gameProcessInput = dyn_lib.lookup(@TypeOf(gameProcessInput), "processInput") orelse return error.LookupFail;
     gameTick = dyn_lib.lookup(@TypeOf(gameTick), "tick") orelse return error.LookupFail;
     gameDraw = dyn_lib.lookup(@TypeOf(gameDraw), "draw") orelse return error.LookupFail;
-    gameDrawDebugUI = dyn_lib.lookup(@TypeOf(gameDrawDebugUI), "drawDebugUI") orelse return error.LookupFail;
 
     std.debug.print("Game lib loaded.\n", .{});
 }

@@ -1,8 +1,15 @@
 const std = @import("std");
-const r = @import("dependencies/raylib.zig");
 const aseprite = @import("aseprite.zig");
 const root = @import("root.zig");
 const math = @import("math.zig");
+
+const c = @cImport({
+    @cDefine("SDL_DISABLE_OLD_NAMES", {});
+    @cInclude("SDL3/SDL.h");
+    @cInclude("SDL3/SDL_revision.h");
+    @cDefine("SDL_MAIN_HANDLED", {});
+    @cInclude("SDL3/SDL_main.h");
+});
 
 const Vector2 = math.Vector2;
 const X = math.X;
@@ -226,8 +233,8 @@ pub const SpriteComponent = struct {
         }
     }
 
-    pub fn getTexture(self: *SpriteComponent) ?r.Texture2D {
-        var result: ?r.Texture2D = null;
+    pub fn getTexture(self: *SpriteComponent) ?*c.SDL_Texture {
+        var result: ?*c.SDL_Texture = null;
 
         if (self.frame_index < self.asset.frames.len) {
             result = self.asset.frames[self.frame_index];

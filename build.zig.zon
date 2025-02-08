@@ -1,19 +1,11 @@
 .{
     .name = "gamedev-playground",
-    .version = "0.0.1",
+    .version = "0.1.0",
     .dependencies = .{
-        .raylib = .{
-            .url = "https://github.com/raysan5/raylib/archive/0275d13aa84f8a464b5246abbef9205b94c73c5e.zip",
-            .hash = "1220af2aa71cc9a2384244e027f7dea21f30a14943eeefc821f406eb0da35e2ae4e8",
+        .sdl = .{
+            .url = "git+https://github.com/castholm/SDL.git#2bb5f57ea8b8c43eabe514f7bbd3361365ba2ff3",
+            .hash = "1220f653f5b656888b522bf5be06fc3062278767cfa7764e5d00eb559056d65b616f",
         },
-        .zgui = .{
-            .url = "https://github.com/zig-gamedev/zgui/archive/6763f8a059efe96951700731a8a3efb8a99a8ceb.zip",
-            .hash = "1220c209784531fdf9eab84ca0a985adc98dc0b3c22fa477b54714036fe549b7eeb5",
-        },
-        .rlImGui = .{
-            .url = "https://github.com/raylib-extras/rlImGui/archive/583d4fea67e67d431319974f0625f680d3840dfb.zip",
-            .hash = "1220a54ec7eb29901b3f7d9e0bcfb7a63c752880e4fbacac4bfacf3ede88f062c3bd",
-        }
     },
     .paths = .{
         "build.zig",

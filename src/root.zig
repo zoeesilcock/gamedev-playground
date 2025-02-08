@@ -1,24 +1,35 @@
 const std = @import("std");
-const r = @import("dependencies/raylib.zig");
-const z = @import("zgui");
-const ri = @import("dependencies/rlimgui.zig");
 const aseprite = @import("aseprite.zig");
 const ecs = @import("ecs.zig");
 const math = @import("math.zig");
+
+const c = @cImport({
+    @cDefine("SDL_DISABLE_OLD_NAMES", {});
+    @cInclude("SDL3/SDL.h");
+    @cInclude("SDL3/SDL_revision.h");
+    @cDefine("SDL_MAIN_HANDLED", {});
+    @cInclude("SDL3/SDL_main.h");
+});
 
 const Vector2 = math.Vector2;
 const X = math.X;
 const Y = math.Y;
 const Z = math.Z;
 
+const Color = math.Color;
+const R = math.R;
+const G = math.G;
+const B = math.B;
+const A = math.A;
+
 const PLATFORM = @import("builtin").os.tag;
 
-const DOUBLE_CLICK_THRESHOLD: f32 = 0.3;
+const DOUBLE_CLICK_THRESHOLD: u64 = 300;
 const DEFAULT_WORLD_SCALE: u32 = 4;
 const WORLD_WIDTH: u32 = 200;
 const WORLD_HEIGHT: u32 = 150;
 const BALL_VELOCITY: f32 = 64;
-const BALL_HORIZONTAL_BOUNCE_TIME: f64 = 0.075;
+const BALL_HORIZONTAL_BOUNCE_TIME: u64 = 75;
 const BALL_SPAWN = Vector2{ 24, 20 };
 
 const LEVELS: []const []const u8 = &.{
@@ -30,6 +41,11 @@ const LEVELS: []const []const u8 = &.{
 pub const State = struct {
     allocator: std.mem.Allocator,
 
+    window: *c.SDL_Window,
+    renderer: *c.SDL_Renderer,
+    render_texture: *c.SDL_Texture,
+    dest_rect: c.SDL_FRect,
+
     window_width: u32,
     window_height: u32,
 
@@ -38,20 +54,21 @@ pub const State = struct {
     world_width: u32,
     world_height: u32,
 
-    camera: r.Camera2D,
-    camera_ui: r.Camera2D,
-
     assets: Assets,
     level_index: u32,
 
-    delta_time: f32,
+    time: u64,
+    delta_time: u64,
+    input: Input,
+    ball_horizontal_bounce_start_time: u64,
+
     is_paused: bool,
     fullscreen: bool,
 
     debug_ui_state: DebugUIState,
 
     // Debug interactions.
-    last_left_click_time: f64,
+    last_left_click_time: u64,
     last_left_click_entity: ?*ecs.Entity,
     hovered_entity: ?*ecs.Entity,
 
@@ -62,7 +79,14 @@ pub const State = struct {
     ball: *ecs.Entity,
     walls: std.ArrayList(*ecs.Entity),
 
-    ball_horizontal_bounce_start_time: f64,
+    pub fn deltaTime(self: *State) f32 {
+        return @as(f32, @floatFromInt(self.delta_time)) / 1000;
+    }
+};
+
+const Input = struct {
+    left: bool = false,
+    right: bool = false,
 };
 
 const Assets = struct {
@@ -83,16 +107,17 @@ const Assets = struct {
 
 pub const SpriteAsset = struct {
     document: aseprite.AseDocument,
-    frames: []r.Texture2D,
+    frames: []*c.SDL_Texture,
     path: []const u8,
 };
 
 const DebugCollision = struct {
     collision: ecs.Collision,
-    time_added: f64,
+    time_added: u64,
 };
 
 const DebugUIState = struct {
+    input: DebugInput,
     mode: enum {
         Select,
         Edit,
@@ -106,22 +131,51 @@ const DebugUIState = struct {
     pub fn addCollision(self: *DebugUIState, collision: *const ecs.Collision) void {
         self.collisions.append(.{
             .collision = collision.*,
-            .time_added = r.GetTime(),
+            // .time_added = r.GetTime(),
+            .time_added = 0,
         }) catch unreachable;
     }
 };
 
-export fn init(window_width: u32, window_height: u32) *anyopaque {
+const DebugInput = struct {
+    left_mouse_down: bool = false,
+    left_mouse_pressed: bool = false,
+    mouse_position: Vector2 = @splat(0),
+};
+
+fn sdlPanicIfNull(result: anytype, message: []const u8) @TypeOf(result) {
+    if (result == null) {
+        std.debug.print("{s} error: {s}\n", .{ message, c.SDL_GetError() });
+        @panic(message);
+    }
+
+    return result;
+}
+
+fn sdlPanic(result: bool, message: []const u8) void {
+    if (result == false) {
+        std.debug.print("{s} error: {s}\n", .{ message, c.SDL_GetError() });
+        @panic(message);
+    }
+}
+
+export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, renderer: *c.SDL_Renderer) *anyopaque {
     var allocator = std.heap.c_allocator;
     var state: *State = allocator.create(State) catch @panic("Out of memory");
 
     state.allocator = allocator;
+    state.window = window;
+    state.renderer = renderer;
+
     state.window_width = window_width;
     state.window_height = window_height;
     state.world_width = WORLD_WIDTH;
     state.world_height = WORLD_HEIGHT;
 
-    setupCameras(state);
+    state.time = 0;
+    state.delta_time = 0;
+    state.input = Input{};
+    state.ball_horizontal_bounce_start_time = 0;
 
     state.level_index = 0;
     state.walls = std.ArrayList(*ecs.Entity).init(allocator);
@@ -133,11 +187,15 @@ export fn init(window_width: u32, window_height: u32) *anyopaque {
     spawnBall(state) catch unreachable;
     loadLevel(state, LEVELS[state.level_index]) catch unreachable;
 
+    state.debug_ui_state.input = DebugInput{};
     state.debug_ui_state.mode = .Select;
     state.debug_ui_state.current_wall_color = .Red;
     state.debug_ui_state.collisions = std.ArrayList(DebugCollision).init(allocator);
 
-    updateMouseScale(state);
+    state.last_left_click_time = 0;
+    state.last_left_click_entity = null;
+
+    setupRenderTexture(state);
     initImgui(state);
 
     return state;
@@ -148,47 +206,36 @@ export fn deinit() void {
 }
 
 fn initImgui(state: *State) void {
-    z.initNoContext(state.allocator);
-    ri.rlImGuiSetup(true);
+    _ = state;
 }
 
-fn deinitImgui() void {
-    ri.rlImGuiShutdown();
-    z.deinitNoContext();
-}
+fn deinitImgui() void {}
 
-fn setupCameras(state: *State) void {
-    const dpi = r.GetWindowScaleDPI();
-    const window_position = r.GetWindowPosition();
-    state.window_width = @intFromFloat(@divFloor(@as(f32, @floatFromInt(r.GetRenderWidth())), dpi.x));
-    state.window_height = @intFromFloat(@divFloor(@as(f32, @floatFromInt(r.GetRenderHeight())), dpi.y));
-
-    if (state.fullscreen) {
-        // This is specific to borderless fullscreen on Mac.
-        state.window_height -= @intFromFloat(window_position.y);
-    }
-
+fn setupRenderTexture(state: *State) void {
+    _ = c.SDL_GetWindowSize(state.window, @ptrCast(&state.window_width), @ptrCast(&state.window_height));
     state.world_scale = @as(f32, @floatFromInt(state.window_height)) / @as(f32, @floatFromInt(state.world_height));
-    state.ui_scale = state.world_scale / 2;
 
     const horizontal_offset: f32 =
         (@as(f32, @floatFromInt(state.window_width)) - (@as(f32, @floatFromInt(state.world_width)) * state.world_scale)) / 2;
-
-    state.camera = r.Camera2D{
-        .offset = r.Vector2{ .x = horizontal_offset, .y = 0 },
-        .target = r.Vector2{ .x = 0, .y = 0 },
-        .rotation = 0,
-        .zoom = state.world_scale,
+    state.dest_rect = c.SDL_FRect{
+        .x = horizontal_offset,
+        .y = 0,
+        .w = @as(f32, @floatFromInt(state.world_width)) * state.world_scale,
+        .h = @as(f32, @floatFromInt(state.world_height)) * state.world_scale,
     };
 
-    state.camera_ui = r.Camera2D{
-        .offset = r.Vector2{ .x = 0, .y = 0 },
-        .target = r.Vector2{ .x = 0, .y = 0 },
-        .rotation = 0,
-        .zoom = state.ui_scale,
-    };
+    state.render_texture = sdlPanicIfNull(c.SDL_CreateTexture(
+        state.renderer,
+        c.SDL_PIXELFORMAT_RGBA32,
+        c.SDL_TEXTUREACCESS_TARGET,
+        @intCast(state.world_width),
+        @intCast(state.world_height),
+    ), "Failed to initialize main render texture.");
 
-    updateMouseScale(state);
+    sdlPanic(
+        c.SDL_SetTextureScaleMode(state.render_texture, c.SDL_SCALEMODE_NEAREST),
+        "Failed to set scale mode for the main render texture.",
+    );
 }
 
 export fn willReload(state_ptr: *anyopaque) void {
@@ -206,105 +253,148 @@ export fn reloaded(state_ptr: *anyopaque) void {
     }
 }
 
-export fn tick(state_ptr: *anyopaque) void {
+export fn processInput(state_ptr: *anyopaque) bool {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    { // Handle input.
-        if (r.IsKeyReleased(r.KEY_TAB)) {
-            state.is_paused = !state.is_paused;
+    state.debug_ui_state.input.left_mouse_pressed = false;
+
+    var continue_running: bool = true;
+    var event: c.SDL_Event = undefined;
+    while (c.SDL_PollEvent(&event)) {
+        if (event.type == c.SDL_EVENT_QUIT or (event.type == c.SDL_EVENT_KEY_DOWN and event.key.key == c.SDLK_ESCAPE)) {
+            continue_running = false;
+            break;
         }
 
-        if (r.IsKeyReleased(r.KEY_E)) {
-            state.debug_ui_state.show_level_editor = !state.debug_ui_state.show_level_editor;
-            updateMouseScale(state);
-        }
-
-        if (r.IsKeyReleased(r.KEY_F)) {
-            state.fullscreen = !state.fullscreen;
-            r.ToggleBorderlessWindowed();
-            // r.ToggleFullscreen();
-            setupCameras(state);
-        }
-
-        if (r.IsKeyReleased(r.KEY_C)) {
-            state.debug_ui_state.show_colliders = !state.debug_ui_state.show_colliders;
-        }
-
-        if (r.IsKeyReleased(r.KEY_S)) {
-            saveLevel(state, "assets/level1.lvl") catch unreachable;
-        }
-
-        if (r.IsKeyReleased(r.KEY_L)) {
-            loadLevel(state, "assets/level1.lvl") catch unreachable;
-        }
-
-        if (state.ball.transform) |transform| {
-            if ((state.ball_horizontal_bounce_start_time + BALL_HORIZONTAL_BOUNCE_TIME) < r.GetTime()) {
-                if (r.IsKeyDown(r.KEY_LEFT)) {
-                    transform.velocity[X] = -BALL_VELOCITY;
-                } else if (r.IsKeyDown(r.KEY_RIGHT)) {
-                    transform.velocity[X] = BALL_VELOCITY;
-                } else {
-                    transform.velocity[X] = 0;
-                }
+        // Editor input.
+        if (event.type == c.SDL_EVENT_KEY_DOWN) {
+            switch (event.key.key) {
+                c.SDLK_TAB => {
+                    state.is_paused = !state.is_paused;
+                },
+                c.SDLK_E => {
+                    state.debug_ui_state.show_level_editor = !state.debug_ui_state.show_level_editor;
+                },
+                c.SDLK_F => {
+                    state.fullscreen = !state.fullscreen;
+                    _ = c.SDL_SetWindowFullscreen(state.window, state.fullscreen);
+                    setupRenderTexture(state);
+                },
+                c.SDLK_C => {
+                    state.debug_ui_state.show_colliders = !state.debug_ui_state.show_colliders;
+                },
+                c.SDLK_S => {
+                    saveLevel(state, "assets/level1.lvl") catch unreachable;
+                },
+                c.SDLK_L => {
+                    loadLevel(state, "assets/level1.lvl") catch unreachable;
+                },
+                else => {},
             }
         }
 
-        state.hovered_entity = getHoveredEntity(state);
+        if (event.type == c.SDL_EVENT_MOUSE_MOTION) {
+            state.debug_ui_state.input.mouse_position = Vector2{ event.motion.x - state.dest_rect.x, event.motion.y };
+        } else if (event.type == c.SDL_EVENT_MOUSE_BUTTON_DOWN or event.type == c.SDL_EVENT_MOUSE_BUTTON_UP) {
+            const is_down = event.type == c.SDL_EVENT_MOUSE_BUTTON_DOWN;
 
-        // Level editor.
-        if (!state.debug_ui_state.show_level_editor) {
-            if (state.hovered_entity) |hovered_entity| {
-                if (r.IsMouseButtonPressed(0)) {
-                    if (state.debug_ui_state.mode == .Edit) {
-                        if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
-                            if (editor_wall_color == hovered_entity.color.?.color) {
-                                removeEntity(state, hovered_entity);
-                            } else {
-                                removeEntity(state, hovered_entity);
-                                const mouse_position = r.GetMousePosition();
-                                const tiled_position = getTiledPosition(
-                                    Vector2{mouse_position.x, mouse_position.y},
-                                    &state.assets.getWall(editor_wall_color),
-                                );
-                                _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
-                            }
-                        }
-                    } else {
-                        if (r.GetTime() - state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
-                            state.last_left_click_entity.? == hovered_entity)
-                        {
-                            openSprite(state, hovered_entity);
-                        }
-                    }
+            switch (event.button.button) {
+                1 => {
+                    state.debug_ui_state.input.left_mouse_pressed =
+                        (state.debug_ui_state.input.left_mouse_down and !is_down);
 
-                    state.last_left_click_time = r.GetTime();
-                    state.last_left_click_entity = hovered_entity;
-                }
-            } else {
-                if (r.IsMouseButtonPressed(0)) {
-                    if (state.debug_ui_state.mode == .Edit) {
-                        if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
-                            const mouse_position = r.GetMousePosition();
+                    state.debug_ui_state.input.left_mouse_down = is_down;
+                },
+                else => {},
+            }
+        }
+
+        // Game input.
+        if (event.type == c.SDL_EVENT_KEY_DOWN or event.type == c.SDL_EVENT_KEY_UP) {
+            const is_down = event.type == c.SDL_EVENT_KEY_DOWN;
+            switch (event.key.key) {
+                c.SDLK_LEFT => {
+                    state.input.left = is_down;
+                },
+                c.SDLK_RIGHT => {
+                    state.input.right = is_down;
+                },
+                else => {},
+            }
+        }
+    }
+
+    state.hovered_entity = getHoveredEntity(state);
+
+    // Level editor.
+    if (!state.debug_ui_state.show_level_editor) {
+        if (state.hovered_entity) |hovered_entity| {
+            if (state.debug_ui_state.input.left_mouse_pressed) {
+                if (state.debug_ui_state.mode == .Edit) {
+                    if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
+                        if (editor_wall_color == hovered_entity.color.?.color) {
+                            removeEntity(state, hovered_entity);
+                        } else {
+                            removeEntity(state, hovered_entity);
                             const tiled_position = getTiledPosition(
-                                Vector2{mouse_position.x, mouse_position.y},
+                                state.debug_ui_state.input.mouse_position,
                                 &state.assets.getWall(editor_wall_color),
                             );
                             _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
                         }
                     }
+                } else {
+                    if (state.time - state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
+                        state.last_left_click_entity.? == hovered_entity)
+                    {
+                        openSprite(state, hovered_entity);
+                    }
+                }
+
+                state.last_left_click_time = state.time;
+                state.last_left_click_entity = hovered_entity;
+            }
+        } else {
+            if (state.debug_ui_state.input.left_mouse_pressed) {
+                if (state.debug_ui_state.mode == .Edit) {
+                    if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
+                        const tiled_position = getTiledPosition(
+                            state.debug_ui_state.input.mouse_position,
+                            &state.assets.getWall(editor_wall_color),
+                        );
+                        _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
+                    }
                 }
             }
         }
     }
 
+    return continue_running;
+}
+
+export fn tick(state_ptr: *anyopaque) void {
+    const state: *State = @ptrCast(@alignCast(state_ptr));
+
     if (!state.is_paused) {
-        state.delta_time = r.GetFrameTime();
+        state.delta_time = c.SDL_GetTicks() - state.time;
     } else {
         state.delta_time = 0;
     }
+    state.time = c.SDL_GetTicks();
 
-    const collisions = ecs.ColliderComponent.checkForCollisions(state.colliders.items, state.delta_time);
+    if (state.ball.transform) |transform| {
+        if ((state.ball_horizontal_bounce_start_time + BALL_HORIZONTAL_BOUNCE_TIME) < state.time) {
+            if (state.input.left) {
+                transform.velocity[X] = -BALL_VELOCITY;
+            } else if (state.input.right) {
+                transform.velocity[X] = BALL_VELOCITY;
+            } else {
+                transform.velocity[X] = 0;
+            }
+        }
+    }
+
+    const collisions = ecs.ColliderComponent.checkForCollisions(state.colliders.items, state.deltaTime());
 
     // Handle vertical collisions.
     if (collisions.vertical) |collision| {
@@ -337,7 +427,7 @@ export fn tick(state_ptr: *anyopaque) void {
         if (collision.self.entity == state.ball) {
             if (collision.self.entity.transform) |transform| {
                 transform.velocity[X] = -transform.velocity[X];
-                state.ball_horizontal_bounce_start_time = r.GetTime();
+                state.ball_horizontal_bounce_start_time = state.time;
 
                 state.debug_ui_state.addCollision(&collision);
 
@@ -361,8 +451,8 @@ export fn tick(state_ptr: *anyopaque) void {
         }
     }
 
-    ecs.TransformComponent.tick(state.transforms.items, state.delta_time);
-    ecs.SpriteComponent.tick(state.sprites.items, state.delta_time);
+    ecs.TransformComponent.tick(state.transforms.items, state.deltaTime());
+    ecs.SpriteComponent.tick(state.sprites.items, state.deltaTime());
 
     if (isLevelCompleted(state)) {
         nextLevel(state);
@@ -371,16 +461,24 @@ export fn tick(state_ptr: *anyopaque) void {
 
 export fn draw(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
-    r.ClearBackground(r.BLACK);
 
-    r.BeginMode2D(state.camera);
-    drawWorld(state);
-    drawDebugOverlay(state);
-    r.EndMode2D();
+    sdlPanic(c.SDL_SetRenderTarget(state.renderer, state.render_texture), "Failed to set render target.");
+    {
+        _ = c.SDL_SetRenderDrawColor(state.renderer, 0, 0, 0, 255);
+        _ = c.SDL_RenderClear(state.renderer);
+        drawWorld(state);
+        drawDebugOverlay(state);
+    }
 
-    r.BeginMode2D(state.camera_ui);
-    drawDebugUI(state);
-    r.EndMode2D();
+    _ = c.SDL_SetRenderTarget(state.renderer, null);
+    {
+        _ = c.SDL_SetRenderDrawColor(state.renderer, 0, 0, 0, 255);
+        _ = c.SDL_RenderClear(state.renderer);
+        _ = c.SDL_RenderTexture(state.renderer, state.render_texture, null, &state.dest_rect);
+
+        drawDebugUI(state);
+    }
+    _ = c.SDL_RenderPresent(state.renderer);
 }
 
 fn drawWorld(state: *State) void {
@@ -391,71 +489,84 @@ fn drawWorld(state: *State) void {
                 var position = transform.position;
                 position += offset;
 
-                r.DrawTextureV(texture, r.Vector2{ .x = position[X], .y = position[Y] }, r.WHITE);
+                const texture_rect = c.SDL_FRect{
+                    .x = position[X],
+                    .y = position[Y],
+                    .w = @floatFromInt(texture.w),
+                    .h = @floatFromInt(texture.h),
+                };
+
+                _ = c.SDL_RenderTexture(state.renderer, texture, null, &texture_rect);
             }
         }
     }
 }
 
-export fn drawDebugUI(state_ptr: *anyopaque) void {
-    const state: *State = @ptrCast(@alignCast(state_ptr));
-    const screen_bottom: i32 = @intFromFloat(@as(f32, @floatFromInt(state.window_height)) / state.ui_scale);
-    r.DrawFPS(8, screen_bottom - 22);
-
-    ri.rlImGuiBegin();
-    defer ri.rlImGuiEnd();
-
-    // z.showDemoWindow(&state.debug_ui_state.show_level_editor);
-
-    if (state.debug_ui_state.show_level_editor) {
-        _ = z.begin("Editor", .{});
-        defer z.end();
-
-        z.text("Mode:", .{});
-        if (z.radioButton("Select", .{ .active = state.debug_ui_state.mode == .Select })) {
-            state.debug_ui_state.mode = .Select;
-        }
-        z.spacing();
-        if (z.radioButton("Gray", .{ .active = state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Gray })) {
-            state.debug_ui_state.mode = .Edit;
-            state.debug_ui_state.current_wall_color = .Gray;
-        }
-        if (z.radioButton("Red", .{ .active = state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Red })) {
-            state.debug_ui_state.mode = .Edit;
-            state.debug_ui_state.current_wall_color = .Red;
-        }
-        if (z.radioButton("Blue", .{ .active = state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Blue })) {
-            state.debug_ui_state.mode = .Edit;
-            state.debug_ui_state.current_wall_color = .Blue;
-        }
-    }
+fn drawDebugUI(state_ptr: *anyopaque) void {
+    _ = state_ptr;
+    // const state: *State = @ptrCast(@alignCast(state_ptr));
+    // const screen_bottom: i32 = @intFromFloat(@as(f32, @floatFromInt(state.window_height)) / state.ui_scale);
+    // r.DrawFPS(8, screen_bottom - 22);
+    //
+    // ri.rlImGuiBegin();
+    // defer ri.rlImGuiEnd();
+    //
+    // // z.showDemoWindow(&state.debug_ui_state.show_level_editor);
+    //
+    // if (state.debug_ui_state.show_level_editor) {
+    //     _ = z.begin("Editor", .{});
+    //     defer z.end();
+    //
+    //     z.text("Mode:", .{});
+    //     if (z.radioButton("Select", .{ .active = state.debug_ui_state.mode == .Select })) {
+    //         state.debug_ui_state.mode = .Select;
+    //     }
+    //     z.spacing();
+    //     if (z.radioButton("Gray", .{ .active = state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Gray })) {
+    //         state.debug_ui_state.mode = .Edit;
+    //         state.debug_ui_state.current_wall_color = .Gray;
+    //     }
+    //     if (z.radioButton("Red", .{ .active = state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Red })) {
+    //         state.debug_ui_state.mode = .Edit;
+    //         state.debug_ui_state.current_wall_color = .Red;
+    //     }
+    //     if (z.radioButton("Blue", .{ .active = state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Blue })) {
+    //         state.debug_ui_state.mode = .Edit;
+    //         state.debug_ui_state.current_wall_color = .Blue;
+    //     }
+    // }
 }
 
-fn drawDebugCollider(collider: *ecs.ColliderComponent, color: r.Color, line_thickness: f32) void {
+fn drawDebugCollider(
+    renderer: *c.SDL_Renderer,
+    collider: *ecs.ColliderComponent,
+    color: Color,
+    line_thickness: f32,
+) void {
+    _ = line_thickness;
+
     if (collider.entity.transform) |transform| {
         switch (collider.shape) {
             .Square => {
-                r.DrawRectangleLinesEx(
-                    r.Rectangle{
-                        .x = transform.position[X],
-                        .y = transform.position[Y],
-                        .width = transform.size[X],
-                        .height = transform.size[Y],
-                    },
-                    line_thickness,
-                    color,
-                );
+                const collider_rect = c.SDL_FRect{
+                    .x = transform.position[X],
+                    .y = transform.position[Y],
+                    .w = transform.size[X],
+                    .h = transform.size[Y],
+                };
+                _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
+                _ = c.SDL_RenderRect(renderer, &collider_rect);
             },
             .Circle => {
-                const center: r.Vector2 = .{
-                    .x = transform.center()[X],
-                    .y = transform.center()[Y],
+                // TODO: Make a simple circle drawing method.
+                const collider_rect = c.SDL_FRect{
+                    .x = transform.position[X],
+                    .y = transform.position[Y],
+                    .w = transform.size[X],
+                    .h = transform.size[Y],
                 };
-                r.DrawCircleLinesV(
-                    center,
-                    collider.radius,
-                    color,
-                );
+                _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
+                _ = c.SDL_RenderRect(renderer, &collider_rect);
             },
         }
     }
@@ -467,7 +578,7 @@ fn drawDebugOverlay(state: *State) void {
     // Highlight colliders.
     if (state.debug_ui_state.show_colliders) {
         for (state.colliders.items) |collider| {
-            drawDebugCollider(collider, r.GREEN, line_thickness);
+            drawDebugCollider(state.renderer, collider, Color{ 0, 255, 0, 255 }, line_thickness);
         }
 
         // Highlight collisions.
@@ -475,15 +586,19 @@ fn drawDebugOverlay(state: *State) void {
         while (index > 0) {
             index -= 1;
 
-            const show_time: f64 = 1;
+            const show_time: u64 = 1;
             const collision = state.debug_ui_state.collisions.items[index];
-            if (r.GetTime() > collision.time_added + show_time) {
+            if (state.time > collision.time_added + show_time) {
                 _ = state.debug_ui_state.collisions.swapRemove(index);
             } else {
-                const time_remaining: f64 = ((collision.time_added + show_time) - r.GetTime()) / show_time;
-                var color: r.Color = r.ORANGE;
-                color.a = @intFromFloat(255 * time_remaining);
-                drawDebugCollider(collision.collision.other, color, @floatCast(10 * time_remaining));
+                const time_remaining: u64 = ((collision.time_added + show_time) - state.time) / show_time;
+                const color: Color = .{ 255, 128, 0, @intCast(255 * time_remaining) };
+                drawDebugCollider(
+                    state.renderer,
+                    collision.collision.other,
+                    color,
+                    0.01 * @as(f32, @floatFromInt(time_remaining)),
+                );
             }
         }
     }
@@ -492,69 +607,59 @@ fn drawDebugOverlay(state: *State) void {
     if (!state.debug_ui_state.show_level_editor) {
         if (state.hovered_entity) |hovered_entity| {
             if (hovered_entity.transform) |transform| {
-                r.DrawRectangleLinesEx(
-                    r.Rectangle{
-                        .x = transform.position[X],
-                        .y = transform.position[Y],
-                        .width = transform.size[X],
-                        .height = transform.size[Y],
-                    },
-                    line_thickness,
-                    r.RED,
-                );
+                const entity_rect = c.SDL_FRect{
+                    .x = transform.position[X],
+                    .y = transform.position[Y],
+                    .w = transform.size[X],
+                    .h = transform.size[Y],
+                };
+                _ = c.SDL_SetRenderDrawColor(state.renderer, 255, 0, 0, 255);
+                _ = c.SDL_RenderRect(state.renderer, &entity_rect);
             }
         }
 
         // Draw the current mouse position.
-        const mouse_position = r.GetMousePosition();
-        r.DrawCircle(
-            @intFromFloat(mouse_position.x),
-            @intFromFloat(mouse_position.y),
-            line_thickness,
-            r.YELLOW,
-        );
+        const mouse_size: f32 = 8;
+        const mouse_rect: c.SDL_FRect = .{
+            .x = (state.debug_ui_state.input.mouse_position[X] - (mouse_size / 2)) / state.world_scale,
+            .y = (state.debug_ui_state.input.mouse_position[Y] - (mouse_size / 2)) / state.world_scale,
+            .w = mouse_size / state.world_scale,
+            .h = mouse_size / state.world_scale,
+        };
+        _ = c.SDL_SetRenderDrawColor(state.renderer, 255, 255, 0, 255);
+        _ = c.SDL_RenderFillRect(state.renderer, &mouse_rect);
     }
-}
-
-fn updateMouseScale(state: *State) void {
-    if (state.debug_ui_state.show_level_editor) {
-        r.SetMouseOffset(@intFromFloat(-state.camera_ui.offset.x), @intFromFloat(-state.camera_ui.offset.y));
-        r.SetMouseScale(1 / state.ui_scale, 1 / state.ui_scale);
-    } else {
-        r.SetMouseOffset(@intFromFloat(-state.camera.offset.x), @intFromFloat(-state.camera.offset.y));
-        r.SetMouseScale(1 / state.world_scale, 1 / state.world_scale);
-    }
-}
-
-fn drawButtonHighlight(rect: r.Rectangle) void {
-    r.DrawRectangleLinesEx(rect, 1, r.RED);
 }
 
 fn loadAssets(state: *State) void {
-    // state.assets.test_texture = r.LoadTexture("assets/test.png");
-
-    state.assets.test_sprite = loadSprite("assets/test_animation.aseprite", state.allocator);
-    state.assets.ball = loadSprite("assets/ball.aseprite", state.allocator);
-    state.assets.wall_gray = loadSprite("assets/wall_gray.aseprite", state.allocator);
-    state.assets.wall_red = loadSprite("assets/wall_red.aseprite", state.allocator);
-    state.assets.wall_blue = loadSprite("assets/wall_blue.aseprite", state.allocator);
+    state.assets.test_sprite = loadSprite("assets/test_animation.aseprite", state.renderer, state.allocator);
+    state.assets.ball = loadSprite("assets/ball.aseprite", state.renderer, state.allocator);
+    state.assets.wall_gray = loadSprite("assets/wall_gray.aseprite", state.renderer, state.allocator);
+    state.assets.wall_red = loadSprite("assets/wall_red.aseprite", state.renderer, state.allocator);
+    state.assets.wall_blue = loadSprite("assets/wall_blue.aseprite", state.renderer, state.allocator);
 }
 
-fn loadSprite(path: []const u8, allocator: std.mem.Allocator) ?SpriteAsset {
+fn loadSprite(path: []const u8, renderer: *c.SDL_Renderer, allocator: std.mem.Allocator) ?SpriteAsset {
     var result: ?SpriteAsset = null;
 
     if (aseprite.loadDocument(path, allocator) catch undefined) |doc| {
-        var textures = std.ArrayList(r.Texture2D).init(allocator);
+        var textures = std.ArrayList(*c.SDL_Texture).init(allocator);
 
         for (doc.frames) |frame| {
-            const image: r.Image = .{
-                .data = @ptrCast(@constCast(frame.cel_chunk.data.compressedImage.pixels)),
-                .width = frame.cel_chunk.data.compressedImage.width,
-                .height = frame.cel_chunk.data.compressedImage.height,
-                .mipmaps = 1,
-                .format = r.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
-            };
-            textures.append(r.LoadTextureFromImage(image)) catch undefined;
+            const surface = sdlPanicIfNull(c.SDL_CreateSurfaceFrom(
+                frame.cel_chunk.data.compressedImage.width,
+                frame.cel_chunk.data.compressedImage.height,
+                c.SDL_PIXELFORMAT_RGBA32,
+                @ptrCast(@constCast(frame.cel_chunk.data.compressedImage.pixels)),
+                frame.cel_chunk.data.compressedImage.width * @sizeOf(u32),
+            ), "Failed to create surface from data");
+            defer c.SDL_DestroySurface(surface);
+
+            const texture = sdlPanicIfNull(
+                c.SDL_CreateTextureFromSurface(renderer, surface),
+                "Failed to create texture from surface",
+            );
+            textures.append(texture.?) catch undefined;
         }
 
         std.debug.print("loadSprite: {s}: {d}\n", .{ path, doc.frames.len });
@@ -779,10 +884,9 @@ fn removeEntity(state: *State, entity: *ecs.Entity) void {
 
 fn getHoveredEntity(state: *State) ?*ecs.Entity {
     var result: ?*ecs.Entity = null;
-    const mouse_position = r.GetMousePosition();
 
     for (state.transforms.items) |transform| {
-        if (transform.containsPoint(Vector2{mouse_position.x, mouse_position.y})) {
+        if (transform.containsPoint(state.debug_ui_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)))) {
             result = transform.entity;
             break;
         }

@@ -73,37 +73,13 @@ fn linkLibraries(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) void {
-    const raylib_dep = b.dependency("raylib", .{
+    // obj.linkLibCpp();
+
+    const sdl_dep = b.dependency("sdl", .{
         .target = target,
         .optimize = optimize,
-        .shared = true,
+        .preferred_link_mode = .dynamic,
     });
-    const zgui_dep = b.dependency("zgui", .{
-        .target = target,
-        .optimize = optimize,
-        .shared = true,
-    });
-    const rlImGui_dep = b.dependency("rlImGui", .{
-        .target = target,
-        .optimize = optimize,
-    });
-
-    obj.linkLibrary(raylib_dep.artifact("raylib"));
-    b.installArtifact(raylib_dep.artifact("raylib"));
-
-    obj.root_module.addImport("zgui", zgui_dep.module("root"));
-    obj.linkLibrary(zgui_dep.artifact("imgui"));
-    obj.addIncludePath(zgui_dep.path("libs/imgui"));
-
-    obj.linkLibCpp();
-    obj.addCSourceFile(.{
-        .file = rlImGui_dep.path("rlImGui.cpp"),
-        .flags = &.{
-            "-fno-sanitize=undefined",
-            "-std=c++11",
-            "-Wno-deprecated-declarations",
-            "-DNO_FONT_AWESOME",
-        },
-    });
-    obj.addIncludePath(rlImGui_dep.path("."));
+    const sdl_lib = sdl_dep.artifact("SDL3");
+    obj.root_module.linkLibrary(sdl_lib);
 }
