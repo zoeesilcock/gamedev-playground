@@ -53,6 +53,19 @@ pub fn main() !void {
         std.log.debug("Failed to create window", .{});
     }
 
+    if (DEBUG) {
+        var num_displays: i32 = 0;
+        const displays = c.SDL_GetDisplays(&num_displays);
+        if (num_displays > 0) {
+            const display_mode = c.SDL_GetCurrentDisplayMode(displays[0]);
+            const window_offset_x: c_int = 12;
+            const window_offset_y: c_int = 12 + WINDOW_DECORATIONS_HEIGHT;
+
+            _ = c.SDL_SetWindowPosition(window, display_mode[0].w - WINDOW_WIDTH - window_offset_x, window_offset_y);
+        }
+        _ = c.SDL_SetWindowAlwaysOnTop(window, true);
+    }
+
     loadDll() catch @panic("Failed to load the game lib.");
     const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT, window.?, renderer.?);
     initChangeTimes(allocator);
