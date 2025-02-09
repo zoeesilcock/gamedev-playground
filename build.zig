@@ -79,31 +79,33 @@ fn linkLibraries(
         .optimize = optimize,
         .preferred_link_mode = .dynamic,
     });
-    const sdl_lib = sdl_dep.artifact("SDL3");
-    obj.root_module.linkLibrary(sdl_lib);
+    obj.root_module.linkLibrary(sdl_dep.artifact("SDL3"));
 
     const zig_imgui_dep = b.dependency("zig_imgui", .{
         .target = target,
         .optimize = optimize,
     });
     obj.root_module.addImport("zig_imgui", zig_imgui_dep.module("Zig-ImGui"));
+
+    const imgui_sdl = createImGuiSDLLib(b, target, optimize, zig_imgui_dep);
+    obj.linkLibrary(imgui_sdl);
+}
+
+fn createImGuiSDLLib(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    zig_imgui_dep: *std.Build.Dependency,
+) *std.Build.Step.Compile {
+    const sdl_dep = b.dependency("sdl", .{
+        .target = target,
+        .optimize = optimize,
+        .preferred_link_mode = .static,
+    });
     const imgui_dep = zig_imgui_dep.builder.dependency("imgui", .{
         .target = target,
         .optimize = optimize,
     });
-
-    const imgui_sdl = create_imgui_sdl_static_lib(b, target, optimize, imgui_dep, zig_imgui_dep, sdl_dep);
-    obj.linkLibrary(imgui_sdl);
-}
-
-fn create_imgui_sdl_static_lib(
-    b: *std.Build,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    imgui_dep: *std.Build.Dependency,
-    zig_imgui_dep: *std.Build.Dependency,
-    sdl_dep: *std.Build.Dependency,
-) *std.Build.Step.Compile {
     const imgui_sdl = b.addStaticLibrary(.{
         .name = "imgui_sdl",
         .target = target,
@@ -124,7 +126,6 @@ fn create_imgui_sdl_static_lib(
 
     imgui_sdl.addIncludePath(imgui_dep.path("."));
     imgui_sdl.addIncludePath(imgui_dep.path("backends/"));
-
     imgui_sdl.addCSourceFile(.{
         .file = imgui_dep.path("backends/imgui_impl_sdlrenderer3.cpp"),
         .flags = ZigImGui_build_script.IMGUI_C_FLAGS,
