@@ -257,9 +257,7 @@ export fn processInput(state_ptr: *anyopaque) bool {
     var continue_running: bool = true;
     var event: c.SDL_Event = undefined;
     while (c.SDL_PollEvent(&event)) {
-        if (imgui.processEvent(event)) {
-            continue;
-        }
+        const event_used = imgui.processEvent(event);
 
         if (event.type == c.SDL_EVENT_QUIT or (event.type == c.SDL_EVENT_KEY_DOWN and event.key.key == c.SDLK_ESCAPE)) {
             continue_running = false;
@@ -309,6 +307,10 @@ export fn processInput(state_ptr: *anyopaque) bool {
             }
         }
 
+        if (event_used) {
+            continue;
+        }
+
         // Game input.
         if (event.type == c.SDL_EVENT_KEY_DOWN or event.type == c.SDL_EVENT_KEY_UP) {
             const is_down = event.type == c.SDL_EVENT_KEY_DOWN;
@@ -337,7 +339,7 @@ export fn processInput(state_ptr: *anyopaque) bool {
                         } else {
                             removeEntity(state, hovered_entity);
                             const tiled_position = getTiledPosition(
-                                state.debug_ui_state.input.mouse_position,
+                                state.debug_ui_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)),
                                 &state.assets.getWall(editor_wall_color),
                             );
                             _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
@@ -359,7 +361,7 @@ export fn processInput(state_ptr: *anyopaque) bool {
                 if (state.debug_ui_state.mode == .Edit) {
                     if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
                         const tiled_position = getTiledPosition(
-                            state.debug_ui_state.input.mouse_position,
+                            state.debug_ui_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)),
                             &state.assets.getWall(editor_wall_color),
                         );
                         _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
@@ -508,34 +510,30 @@ fn drawDebugUI(state_ptr: *anyopaque) void {
 
     // const screen_bottom: i32 = @intFromFloat(@as(f32, @floatFromInt(state.window_height)) / state.ui_scale);
     // r.DrawFPS(8, screen_bottom - 22);
-    //
-    // ri.rlImGuiBegin();
-    // defer ri.rlImGuiEnd();
-    //
-    // // z.showDemoWindow(&state.debug_ui_state.show_level_editor);
-    //
-    // if (state.debug_ui_state.show_level_editor) {
-    //     _ = z.begin("Editor", .{});
-    //     defer z.end();
-    //
-    //     z.text("Mode:", .{});
-    //     if (z.radioButton("Select", .{ .active = state.debug_ui_state.mode == .Select })) {
-    //         state.debug_ui_state.mode = .Select;
-    //     }
-    //     z.spacing();
-    //     if (z.radioButton("Gray", .{ .active = state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Gray })) {
-    //         state.debug_ui_state.mode = .Edit;
-    //         state.debug_ui_state.current_wall_color = .Gray;
-    //     }
-    //     if (z.radioButton("Red", .{ .active = state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Red })) {
-    //         state.debug_ui_state.mode = .Edit;
-    //         state.debug_ui_state.current_wall_color = .Red;
-    //     }
-    //     if (z.radioButton("Blue", .{ .active = state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Blue })) {
-    //         state.debug_ui_state.mode = .Edit;
-    //         state.debug_ui_state.current_wall_color = .Blue;
-    //     }
-    // }
+
+    if (state.debug_ui_state.show_level_editor) {
+        _ = zimgui.Begin("Editor");
+        defer zimgui.End();
+
+        zimgui.Text("Mode:", .{});
+        if (zimgui.RadioButton_Bool("Select", state.debug_ui_state.mode == .Select)) {
+            state.debug_ui_state.mode = .Select;
+        }
+        zimgui.Spacing();
+        if (zimgui.RadioButton_Bool("Gray", state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Gray)) {
+            state.debug_ui_state.mode = .Edit;
+            state.debug_ui_state.current_wall_color = .Gray;
+        }
+        if (zimgui.RadioButton_Bool("Red", state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Red)) {
+            state.debug_ui_state.mode = .Edit;
+            state.debug_ui_state.current_wall_color = .Red;
+        }
+        if (zimgui.RadioButton_Bool("Blue", state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Blue)) {
+            state.debug_ui_state.mode = .Edit;
+            state.debug_ui_state.current_wall_color = .Blue;
+        }
+    }
+
     imgui.render(state.renderer);
 }
 

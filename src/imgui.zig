@@ -49,7 +49,9 @@ pub fn deinit() void {
 }
 
 pub fn processEvent(event: c.SDL_Event) bool {
-    return ImGui_ImplSDL3_ProcessEvent(event);
+    _ = ImGui_ImplSDL3_ProcessEvent(event);
+    const im_io = zimgui.GetIO();
+    return im_io.WantCaptureMouse or im_io.WantCaptureKeyboard;
 }
 
 pub fn newFrame() void {
@@ -59,7 +61,6 @@ pub fn newFrame() void {
 }
 
 pub fn render(renderer: *c.SDL_Renderer) void {
-    zimgui.ShowDemoWindow();
     zimgui.Render();
     ImGui_ImplSDLRenderer3_RenderDrawData(zimgui.GetDrawData(), renderer);
 }
