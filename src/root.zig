@@ -2,6 +2,8 @@ const std = @import("std");
 const aseprite = @import("aseprite.zig");
 const ecs = @import("ecs.zig");
 const math = @import("math.zig");
+const zimgui = @import("zig_imgui");
+const imgui = @import("imgui.zig");
 
 const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
@@ -196,20 +198,14 @@ export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, ren
     state.last_left_click_entity = null;
 
     setupRenderTexture(state);
-    initImgui(state);
+    imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
 
     return state;
 }
 
 export fn deinit() void {
-    deinitImgui();
+    imgui.deinit();
 }
-
-fn initImgui(state: *State) void {
-    _ = state;
-}
-
-fn deinitImgui() void {}
 
 fn setupRenderTexture(state: *State) void {
     _ = c.SDL_GetWindowSize(state.window, @ptrCast(&state.window_width), @ptrCast(&state.window_height));
@@ -240,13 +236,13 @@ fn setupRenderTexture(state: *State) void {
 
 export fn willReload(state_ptr: *anyopaque) void {
     _ = state_ptr;
-    deinitImgui();
+    imgui.deinit();
 }
 
 export fn reloaded(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
     loadAssets(state);
-    initImgui(state);
+    imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
 
     if (state.ball.transform) |transform| {
         transform.velocity[Y] = if (transform.velocity[Y] > 0) BALL_VELOCITY else -BALL_VELOCITY;
@@ -261,6 +257,10 @@ export fn processInput(state_ptr: *anyopaque) bool {
     var continue_running: bool = true;
     var event: c.SDL_Event = undefined;
     while (c.SDL_PollEvent(&event)) {
+        if (imgui.processEvent(event)) {
+            continue;
+        }
+
         if (event.type == c.SDL_EVENT_QUIT or (event.type == c.SDL_EVENT_KEY_DOWN and event.key.key == c.SDLK_ESCAPE)) {
             continue_running = false;
             break;
@@ -503,8 +503,9 @@ fn drawWorld(state: *State) void {
 }
 
 fn drawDebugUI(state_ptr: *anyopaque) void {
-    _ = state_ptr;
-    // const state: *State = @ptrCast(@alignCast(state_ptr));
+    const state: *State = @ptrCast(@alignCast(state_ptr));
+    imgui.newFrame();
+
     // const screen_bottom: i32 = @intFromFloat(@as(f32, @floatFromInt(state.window_height)) / state.ui_scale);
     // r.DrawFPS(8, screen_bottom - 22);
     //
@@ -535,6 +536,7 @@ fn drawDebugUI(state_ptr: *anyopaque) void {
     //         state.debug_ui_state.current_wall_color = .Blue;
     //     }
     // }
+    imgui.render(state.renderer);
 }
 
 fn drawDebugCollider(
