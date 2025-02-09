@@ -130,6 +130,10 @@ const DebugUIState = struct {
 
     collisions: std.ArrayList(DebugCollision),
 
+    fps_counted_frames: u64,
+    fps_since: u64,
+    fps_average: f32,
+
     pub fn addCollision(self: *DebugUIState, collision: *const ecs.Collision) void {
         self.collisions.append(.{
             .collision = collision.*,
@@ -193,6 +197,9 @@ export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, ren
     state.debug_ui_state.mode = .Select;
     state.debug_ui_state.current_wall_color = .Red;
     state.debug_ui_state.collisions = std.ArrayList(DebugCollision).init(allocator);
+    state.debug_ui_state.fps_counted_frames = 0;
+    state.debug_ui_state.fps_since = 0;
+    state.debug_ui_state.fps_average = 0;
 
     state.last_left_click_time = 0;
     state.last_left_click_entity = null;
@@ -384,6 +391,22 @@ export fn tick(state_ptr: *anyopaque) void {
     }
     state.time = c.SDL_GetTicks();
 
+    if (state.debug_ui_state.fps_counted_frames == 0) {
+        state.debug_ui_state.fps_since = state.time;
+    }
+    state.debug_ui_state.fps_counted_frames += 1;
+    const fps_time_passed = state.time - state.debug_ui_state.fps_since;
+    if (fps_time_passed > 1000) {
+        state.debug_ui_state.fps_average =
+            @as(f32, @floatFromInt(state.debug_ui_state.fps_counted_frames)) /
+            (@as(f32, @floatFromInt(fps_time_passed)) / 1000);
+    } else {
+        state.debug_ui_state.fps_average = 0;
+    }
+    if (state.debug_ui_state.fps_counted_frames > 1000000) {
+        state.debug_ui_state.fps_counted_frames = 0;
+    }
+
     if (state.ball.transform) |transform| {
         if ((state.ball_horizontal_bounce_start_time + BALL_HORIZONTAL_BOUNCE_TIME) < state.time) {
             if (state.input.left) {
@@ -508,8 +531,16 @@ fn drawDebugUI(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
     imgui.newFrame();
 
-    // const screen_bottom: i32 = @intFromFloat(@as(f32, @floatFromInt(state.window_height)) / state.ui_scale);
-    // r.DrawFPS(8, screen_bottom - 22);
+    var show_fps = true;
+    zimgui.SetNextWindowPos(zimgui.Vec2.init(5, 5));
+    zimgui.SetNextWindowSize(zimgui.Vec2.init(100, 10));
+    _ = zimgui.BeginExt(
+        "FPS",
+        &show_fps,
+        .{ .NoMove = true, .NoResize = true, .NoBackground = true, .NoTitleBar = true },
+    );
+    zimgui.TextColored(zimgui.Vec4.init(0, 1, 0, 1), "FPS: %d", @as(u32, @intFromFloat(state.debug_ui_state.fps_average)));
+    zimgui.End();
 
     if (state.debug_ui_state.show_level_editor) {
         _ = zimgui.Begin("Editor");
