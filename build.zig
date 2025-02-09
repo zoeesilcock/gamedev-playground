@@ -20,8 +20,8 @@ pub fn build(b: *std.Build) void {
     });
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
-    linkLibraries(b, lib, target, optimize);
-    linkLibraries(b, lib_unit_tests, target, optimize);
+    linkGameLibraries(b, lib, target, optimize);
+    linkGameLibraries(b, lib_unit_tests, target, optimize);
 
     b.installArtifact(lib);
 
@@ -31,7 +31,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    linkLibraries(b, lib_check, target, optimize);
+    linkGameLibraries(b, lib_check, target, optimize);
     const check = b.step("check", "Check if lib compiles");
     check.dependOn(&lib_check.step);
 
@@ -44,7 +44,7 @@ pub fn build(b: *std.Build) void {
         });
         b.installArtifact(exe);
 
-        linkLibraries(b, exe, target, optimize);
+        linkExecutableLibraries(b, exe, target, optimize);
 
         const run_cmd = b.addRunArtifact(exe);
         run_cmd.step.dependOn(b.getInstallStep());
@@ -67,8 +67,21 @@ pub fn build(b: *std.Build) void {
         test_step.dependOn(&run_exe_unit_tests.step);
     }
 }
+fn linkExecutableLibraries(
+    b: *std.Build,
+    obj: *std.Build.Step.Compile,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) void {
+    const sdl_dep = b.dependency("sdl", .{
+        .target = target,
+        .optimize = optimize,
+        .preferred_link_mode = .dynamic,
+    });
+    obj.root_module.linkLibrary(sdl_dep.artifact("SDL3"));
+}
 
-fn linkLibraries(
+fn linkGameLibraries(
     b: *std.Build,
     obj: *std.Build.Step.Compile,
     target: std.Build.ResolvedTarget,
@@ -86,9 +99,7 @@ fn linkLibraries(
         .optimize = optimize,
     });
     obj.root_module.addImport("zig_imgui", zig_imgui_dep.module("Zig-ImGui"));
-
-    const imgui_sdl = createImGuiSDLLib(b, target, optimize, zig_imgui_dep);
-    obj.linkLibrary(imgui_sdl);
+    obj.linkLibrary(createImGuiSDLLib(b, target, optimize, zig_imgui_dep));
 }
 
 fn createImGuiSDLLib(
@@ -137,4 +148,3 @@ fn createImGuiSDLLib(
 
     return imgui_sdl;
 }
-
