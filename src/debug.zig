@@ -247,7 +247,30 @@ pub fn drawDebugUI(state: *State) void {
         }
     }
 
+    if (state.debug_state.selected_entity) |selected_entity| {
+        zimgui.SetNextWindowPosExt(zimgui.Vec2.init(30, 30), .{ .FirstUseEver = true }, zimgui.Vec2.init(0, 0));
+        zimgui.SetNextWindowSizeExt(zimgui.Vec2.init(250, 150), .{ .FirstUseEver = true });
+
+        _ = zimgui.Begin("Inspector");
+        defer zimgui.End();
+
+        if (selected_entity.transform) |transform| {
+            if (zimgui.CollapsingHeader_BoolPtrExt("Transform", null, .{ .DefaultOpen = true })) {
+                inputVector2("Position", &transform.position);
+                inputVector2("Size", &transform.size);
+                inputVector2("Velocity", &transform.velocity);
+            }
+        }
+    }
+
     imgui.render(state.renderer);
+}
+
+fn inputVector2(heading: ?[*:0]const u8, value: *Vector2) void {
+    zimgui.PushID_Ptr(value);
+    defer zimgui.PopID();
+
+    _ = zimgui.InputFloat2Ext(heading, value, "%.2f", .{});
 }
 
 pub fn drawDebugOverlay(state: *State) void {
