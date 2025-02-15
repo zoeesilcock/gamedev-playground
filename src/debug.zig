@@ -179,6 +179,19 @@ pub fn handleInput(state: *State) void {
     }
 }
 
+fn getHoveredEntity(state: *State) ?*ecs.Entity {
+    var result: ?*ecs.Entity = null;
+
+    for (state.transforms.items) |transform| {
+        if (transform.containsPoint(state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)))) {
+            result = transform.entity;
+            break;
+        }
+    }
+
+    return result;
+}
+
 pub fn calculateFPS(state: *State) void {
     if (state.debug_state.fps_counted_frames == 0) {
         state.debug_state.fps_since = state.time;
@@ -237,6 +250,55 @@ pub fn drawDebugUI(state: *State) void {
     imgui.render(state.renderer);
 }
 
+pub fn drawDebugOverlay(state: *State) void {
+    const line_thickness: f32 = 0.5;
+
+    // Highlight colliders.
+    if (state.debug_state.show_colliders) {
+        for (state.colliders.items) |collider| {
+            drawDebugCollider(state.renderer, collider, Color{ 0, 255, 0, 255 }, line_thickness);
+        }
+
+        // Highlight collisions.
+        var index = state.debug_state.collisions.items.len;
+        while (index > 0) {
+            index -= 1;
+
+            const show_time: u64 = 1;
+            const collision = state.debug_state.collisions.items[index];
+            if (state.time > collision.time_added + show_time) {
+                _ = state.debug_state.collisions.swapRemove(index);
+            } else {
+                const time_remaining: u64 = ((collision.time_added + show_time) - state.time) / show_time;
+                const color: Color = .{ 255, 128, 0, @intCast(255 * time_remaining) };
+                drawDebugCollider(
+                    state.renderer,
+                    collision.collision.other,
+                    color,
+                    0.01 * @as(f32, @floatFromInt(time_remaining)),
+                );
+            }
+        }
+    }
+
+    // Highlight the currently hovered entity.
+    if (!state.debug_state.show_level_editor) {
+        drawEntityHighlight(state.renderer, state.debug_state.selected_entity, Color{ 255, 0, 0, 255 });
+        drawEntityHighlight(state.renderer, state.debug_state.hovered_entity, Color{ 255, 150, 0, 255 });
+
+        // Draw the current mouse position.
+        const mouse_size: f32 = 8;
+        const mouse_rect: c.SDL_FRect = .{
+            .x = (state.debug_state.input.mouse_position[X] - (mouse_size / 2)) / state.world_scale,
+            .y = (state.debug_state.input.mouse_position[Y] - (mouse_size / 2)) / state.world_scale,
+            .w = mouse_size / state.world_scale,
+            .h = mouse_size / state.world_scale,
+        };
+        _ = c.SDL_SetRenderDrawColor(state.renderer, 255, 255, 0, 255);
+        _ = c.SDL_RenderFillRect(state.renderer, &mouse_rect);
+    }
+}
+
 fn drawDebugCollider(
     renderer: *c.SDL_Renderer,
     collider: *ecs.ColliderComponent,
@@ -291,55 +353,6 @@ fn drawEntityHighlight(
     }
 }
 
-pub fn drawDebugOverlay(state: *State) void {
-    const line_thickness: f32 = 0.5;
-
-    // Highlight colliders.
-    if (state.debug_state.show_colliders) {
-        for (state.colliders.items) |collider| {
-            drawDebugCollider(state.renderer, collider, Color{ 0, 255, 0, 255 }, line_thickness);
-        }
-
-        // Highlight collisions.
-        var index = state.debug_state.collisions.items.len;
-        while (index > 0) {
-            index -= 1;
-
-            const show_time: u64 = 1;
-            const collision = state.debug_state.collisions.items[index];
-            if (state.time > collision.time_added + show_time) {
-                _ = state.debug_state.collisions.swapRemove(index);
-            } else {
-                const time_remaining: u64 = ((collision.time_added + show_time) - state.time) / show_time;
-                const color: Color = .{ 255, 128, 0, @intCast(255 * time_remaining) };
-                drawDebugCollider(
-                    state.renderer,
-                    collision.collision.other,
-                    color,
-                    0.01 * @as(f32, @floatFromInt(time_remaining)),
-                );
-            }
-        }
-    }
-
-    // Highlight the currently hovered entity.
-    if (!state.debug_state.show_level_editor) {
-        drawEntityHighlight(state.renderer, state.debug_state.selected_entity, Color{ 255, 0, 0, 255 });
-        drawEntityHighlight(state.renderer, state.debug_state.hovered_entity, Color{ 255, 150, 0, 255 });
-
-        // Draw the current mouse position.
-        const mouse_size: f32 = 8;
-        const mouse_rect: c.SDL_FRect = .{
-            .x = (state.debug_state.input.mouse_position[X] - (mouse_size / 2)) / state.world_scale,
-            .y = (state.debug_state.input.mouse_position[Y] - (mouse_size / 2)) / state.world_scale,
-            .w = mouse_size / state.world_scale,
-            .h = mouse_size / state.world_scale,
-        };
-        _ = c.SDL_SetRenderDrawColor(state.renderer, 255, 255, 0, 255);
-        _ = c.SDL_RenderFillRect(state.renderer, &mouse_rect);
-    }
-}
-
 fn getTiledPosition(position: Vector2, asset: *const SpriteAsset) Vector2 {
     const tile_x = @divFloor(position[X], @as(f32, @floatFromInt(asset.document.header.width)));
     const tile_y = @divFloor(position[Y], @as(f32, @floatFromInt(asset.document.header.height)));
@@ -366,19 +379,6 @@ fn openSprite(state: *State, entity: *ecs.Entity) void {
             std.debug.print("Error spawning process: {}\n", .{err});
         };
     }
-}
-
-fn getHoveredEntity(state: *State) ?*ecs.Entity {
-    var result: ?*ecs.Entity = null;
-
-    for (state.transforms.items) |transform| {
-        if (transform.containsPoint(state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)))) {
-            result = transform.entity;
-            break;
-        }
-    }
-
-    return result;
 }
 
 fn saveLevel(state: *State, path: []const u8) !void {
