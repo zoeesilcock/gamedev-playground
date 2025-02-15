@@ -249,21 +249,67 @@ pub fn drawDebugUI(state: *State) void {
 
     if (state.debug_state.selected_entity) |selected_entity| {
         zimgui.SetNextWindowPosExt(zimgui.Vec2.init(30, 30), .{ .FirstUseEver = true }, zimgui.Vec2.init(0, 0));
-        zimgui.SetNextWindowSizeExt(zimgui.Vec2.init(250, 150), .{ .FirstUseEver = true });
+        zimgui.SetNextWindowSizeExt(zimgui.Vec2.init(300, 400), .{ .FirstUseEver = true });
 
         _ = zimgui.Begin("Inspector");
         defer zimgui.End();
 
-        if (selected_entity.transform) |transform| {
-            if (zimgui.CollapsingHeader_BoolPtrExt("Transform", null, .{ .DefaultOpen = true })) {
-                inputVector2("Position", &transform.position);
-                inputVector2("Size", &transform.size);
-                inputVector2("Velocity", &transform.velocity);
-            }
-        }
+        inspectEntity(selected_entity);
     }
 
     imgui.render(state.renderer);
+}
+
+fn inspectEntity(entity: *ecs.Entity) void {
+    const entity_info = @typeInfo(@TypeOf(entity.*));
+
+    inline for (entity_info.Struct.fields) |entity_field| {
+        if (@field(entity, entity_field.name)) |component| {
+            if (zimgui.CollapsingHeader_BoolPtrExt(entity_field.name, null, .{ .DefaultOpen = true })) {
+                const component_info = @typeInfo(@TypeOf(component.*));
+                inline for (component_info.Struct.fields) |component_field| {
+                    var field = @field(component, component_field.name);
+                    switch (@TypeOf(field)) {
+                        bool => {
+                            inputBool(component_field.name, &field);
+                        },
+                        f32 => {
+                            inputF32(component_field.name, &field);
+                        },
+                        u32 => {
+                            inputU32(component_field.name, &field);
+                        },
+                        Vector2 => {
+                            inputVector2(component_field.name, &field);
+                        },
+                        else => {
+                        },
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn inputBool(heading: ?[*:0]const u8, value: *bool) void {
+    zimgui.PushID_Ptr(value);
+    defer zimgui.PopID();
+
+    _ = zimgui.Checkbox(heading, value);
+}
+
+fn inputF32(heading: ?[*:0]const u8, value: *f32) void {
+    zimgui.PushID_Ptr(value);
+    defer zimgui.PopID();
+
+    _ = zimgui.InputFloatExt(heading, value, 0.1, 1, "%.2f", .{});
+}
+
+fn inputU32(heading: ?[*:0]const u8, value: *u32) void {
+    zimgui.PushID_Ptr(value);
+    defer zimgui.PopID();
+
+    _ = zimgui.InputScalarExt(heading, .U32, @ptrCast(value), null, null, null, .{});
 }
 
 fn inputVector2(heading: ?[*:0]const u8, value: *Vector2) void {

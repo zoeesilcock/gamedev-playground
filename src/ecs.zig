@@ -189,7 +189,7 @@ pub const SpriteComponent = struct {
 
     asset: *const game.SpriteAsset,
     frame_index: u32,
-    duration_shown: f64,
+    duration_shown: f32,
     loop_animation: bool,
     animation_completed: bool,
     current_animation: ?*aseprite.AseTagsChunk,
