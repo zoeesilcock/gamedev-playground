@@ -8,13 +8,13 @@ pub fn build(b: *std.Build) void {
 
     const lib = b.addSharedLibrary(.{
         .name = "playground",
-        .root_source_file = b.path("src/root.zig"),
+        .root_source_file = b.path("src/game.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     const lib_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/root.zig"),
+        .root_source_file = b.path("src/game.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -27,7 +27,7 @@ pub fn build(b: *std.Build) void {
 
     const lib_check = b.addSharedLibrary(.{
         .name = "playground",
-        .root_source_file = b.path("src/root.zig"),
+        .root_source_file = b.path("src/game.zig"),
         .target = target,
         .optimize = optimize,
     });

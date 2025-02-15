@@ -1,7 +1,7 @@
 const std = @import("std");
-const aseprite = @import("aseprite.zig");
-const root = @import("root.zig");
+const game = @import("game.zig");
 const math = @import("math.zig");
+const aseprite = @import("aseprite.zig");
 
 const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
@@ -187,7 +187,7 @@ pub const ColliderComponent = struct {
 pub const SpriteComponent = struct {
     entity: *Entity,
 
-    asset: *const root.SpriteAsset,
+    asset: *const game.SpriteAsset,
     frame_index: u32,
     duration_shown: f64,
     loop_animation: bool,

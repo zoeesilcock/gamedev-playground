@@ -1,7 +1,7 @@
 const std = @import("std");
+const game = @import("game.zig");
 const ecs = @import("ecs.zig");
 const math = @import("math.zig");
-const game = @import("root.zig");
 const zimgui = @import("zig_imgui");
 const imgui = @import("imgui.zig");
 
