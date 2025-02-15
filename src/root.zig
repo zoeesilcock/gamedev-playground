@@ -73,6 +73,7 @@ pub const State = struct {
     last_left_click_time: u64,
     last_left_click_entity: ?*ecs.Entity,
     hovered_entity: ?*ecs.Entity,
+    selected_entity: ?*ecs.Entity,
 
     // Components.
     transforms: std.ArrayList(*ecs.TransformComponent),
@@ -200,6 +201,8 @@ export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, ren
     state.debug_ui_state.fps_counted_frames = 0;
     state.debug_ui_state.fps_since = 0;
     state.debug_ui_state.fps_average = 0;
+    state.selected_entity = null;
+    state.hovered_entity = null;
 
     state.last_left_click_time = 0;
     state.last_left_click_entity = null;
@@ -357,6 +360,8 @@ export fn processInput(state_ptr: *anyopaque) bool {
                         state.last_left_click_entity.? == hovered_entity)
                     {
                         openSprite(state, hovered_entity);
+                    } else {
+                        state.selected_entity = hovered_entity;
                     }
                 }
 
@@ -603,6 +608,25 @@ fn drawDebugCollider(
     }
 }
 
+fn drawEntityHighlight(
+    renderer: *c.SDL_Renderer,
+    opt_entity: ?*ecs.Entity,
+    color: Color,
+) void {
+    if (opt_entity) |entity| {
+        if (entity.transform) |transform| {
+            const entity_rect = c.SDL_FRect{
+                .x = transform.position[X],
+                .y = transform.position[Y],
+                .w = transform.size[X],
+                .h = transform.size[Y],
+            };
+            _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
+            _ = c.SDL_RenderRect(renderer, &entity_rect);
+        }
+    }
+}
+
 fn drawDebugOverlay(state: *State) void {
     const line_thickness: f32 = 0.5;
 
@@ -636,18 +660,8 @@ fn drawDebugOverlay(state: *State) void {
 
     // Highlight the currently hovered entity.
     if (!state.debug_ui_state.show_level_editor) {
-        if (state.hovered_entity) |hovered_entity| {
-            if (hovered_entity.transform) |transform| {
-                const entity_rect = c.SDL_FRect{
-                    .x = transform.position[X],
-                    .y = transform.position[Y],
-                    .w = transform.size[X],
-                    .h = transform.size[Y],
-                };
-                _ = c.SDL_SetRenderDrawColor(state.renderer, 255, 0, 0, 255);
-                _ = c.SDL_RenderRect(state.renderer, &entity_rect);
-            }
-        }
+        drawEntityHighlight(state.renderer, state.selected_entity, Color{ 255, 0, 0, 255 });
+        drawEntityHighlight(state.renderer, state.hovered_entity, Color{ 255, 150, 0, 255 });
 
         // Draw the current mouse position.
         const mouse_size: f32 = 8;
