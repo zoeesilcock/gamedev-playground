@@ -4,8 +4,9 @@ const ecs = @import("ecs.zig");
 const math = @import("math.zig");
 const zimgui = @import("zig_imgui");
 const imgui = @import("imgui.zig");
+const debug = @import("debug.zig");
 
-const c = @cImport({
+pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
     @cInclude("SDL3/SDL.h");
     @cInclude("SDL3/SDL_revision.h");
@@ -24,9 +25,6 @@ const G = math.G;
 const B = math.B;
 const A = math.A;
 
-const PLATFORM = @import("builtin").os.tag;
-
-const DOUBLE_CLICK_THRESHOLD: u64 = 300;
 const DEFAULT_WORLD_SCALE: u32 = 4;
 const WORLD_WIDTH: u32 = 200;
 const WORLD_HEIGHT: u32 = 150;
@@ -42,6 +40,7 @@ const LEVELS: []const []const u8 = &.{
 
 pub const State = struct {
     allocator: std.mem.Allocator,
+    debug_state: debug.DebugState,
 
     window: *c.SDL_Window,
     renderer: *c.SDL_Renderer,
@@ -66,14 +65,6 @@ pub const State = struct {
 
     is_paused: bool,
     fullscreen: bool,
-
-    debug_ui_state: DebugUIState,
-
-    // Debug interactions.
-    last_left_click_time: u64,
-    last_left_click_entity: ?*ecs.Entity,
-    hovered_entity: ?*ecs.Entity,
-    selected_entity: ?*ecs.Entity,
 
     // Components.
     transforms: std.ArrayList(*ecs.TransformComponent),
@@ -114,42 +105,6 @@ pub const SpriteAsset = struct {
     path: []const u8,
 };
 
-const DebugCollision = struct {
-    collision: ecs.Collision,
-    time_added: u64,
-};
-
-const DebugUIState = struct {
-    input: DebugInput,
-    mode: enum {
-        Select,
-        Edit,
-    },
-    current_wall_color: ?ecs.ColorComponentValue,
-    show_level_editor: bool,
-    show_colliders: bool,
-
-    collisions: std.ArrayList(DebugCollision),
-
-    fps_counted_frames: u64,
-    fps_since: u64,
-    fps_average: f32,
-
-    pub fn addCollision(self: *DebugUIState, collision: *const ecs.Collision) void {
-        self.collisions.append(.{
-            .collision = collision.*,
-            // .time_added = r.GetTime(),
-            .time_added = 0,
-        }) catch unreachable;
-    }
-};
-
-const DebugInput = struct {
-    left_mouse_down: bool = false,
-    left_mouse_pressed: bool = false,
-    mouse_position: Vector2 = @splat(0),
-};
-
 fn sdlPanicIfNull(result: anytype, message: []const u8) @TypeOf(result) {
     if (result == null) {
         std.debug.print("{s} error: {s}\n", .{ message, c.SDL_GetError() });
@@ -171,6 +126,8 @@ export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, ren
     var state: *State = allocator.create(State) catch @panic("Out of memory");
 
     state.allocator = allocator;
+    state.debug_state.init(state.allocator);
+
     state.window = window;
     state.renderer = renderer;
 
@@ -194,19 +151,6 @@ export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, ren
     spawnBall(state) catch unreachable;
     loadLevel(state, LEVELS[state.level_index]) catch unreachable;
 
-    state.debug_ui_state.input = DebugInput{};
-    state.debug_ui_state.mode = .Select;
-    state.debug_ui_state.current_wall_color = .Red;
-    state.debug_ui_state.collisions = std.ArrayList(DebugCollision).init(allocator);
-    state.debug_ui_state.fps_counted_frames = 0;
-    state.debug_ui_state.fps_since = 0;
-    state.debug_ui_state.fps_average = 0;
-    state.selected_entity = null;
-    state.hovered_entity = null;
-
-    state.last_left_click_time = 0;
-    state.last_left_click_entity = null;
-
     setupRenderTexture(state);
     imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
 
@@ -217,7 +161,7 @@ export fn deinit() void {
     imgui.deinit();
 }
 
-fn setupRenderTexture(state: *State) void {
+pub fn setupRenderTexture(state: *State) void {
     _ = c.SDL_GetWindowSize(state.window, @ptrCast(&state.window_width), @ptrCast(&state.window_height));
     state.world_scale = @as(f32, @floatFromInt(state.window_height)) / @as(f32, @floatFromInt(state.world_height));
 
@@ -262,64 +206,22 @@ export fn reloaded(state_ptr: *anyopaque) void {
 export fn processInput(state_ptr: *anyopaque) bool {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    state.debug_ui_state.input.left_mouse_pressed = false;
+    state.debug_state.input.reset();
 
     var continue_running: bool = true;
     var event: c.SDL_Event = undefined;
     while (c.SDL_PollEvent(&event)) {
         const event_used = imgui.processEvent(event);
+        if (event_used) {
+            continue;
+        }
 
         if (event.type == c.SDL_EVENT_QUIT or (event.type == c.SDL_EVENT_KEY_DOWN and event.key.key == c.SDLK_ESCAPE)) {
             continue_running = false;
             break;
         }
 
-        // Editor input.
-        if (event.type == c.SDL_EVENT_KEY_DOWN) {
-            switch (event.key.key) {
-                c.SDLK_TAB => {
-                    state.is_paused = !state.is_paused;
-                },
-                c.SDLK_E => {
-                    state.debug_ui_state.show_level_editor = !state.debug_ui_state.show_level_editor;
-                },
-                c.SDLK_F => {
-                    state.fullscreen = !state.fullscreen;
-                    _ = c.SDL_SetWindowFullscreen(state.window, state.fullscreen);
-                    setupRenderTexture(state);
-                },
-                c.SDLK_C => {
-                    state.debug_ui_state.show_colliders = !state.debug_ui_state.show_colliders;
-                },
-                c.SDLK_S => {
-                    saveLevel(state, "assets/level1.lvl") catch unreachable;
-                },
-                c.SDLK_L => {
-                    loadLevel(state, "assets/level1.lvl") catch unreachable;
-                },
-                else => {},
-            }
-        }
-
-        if (event.type == c.SDL_EVENT_MOUSE_MOTION) {
-            state.debug_ui_state.input.mouse_position = Vector2{ event.motion.x - state.dest_rect.x, event.motion.y };
-        } else if (event.type == c.SDL_EVENT_MOUSE_BUTTON_DOWN or event.type == c.SDL_EVENT_MOUSE_BUTTON_UP) {
-            const is_down = event.type == c.SDL_EVENT_MOUSE_BUTTON_DOWN;
-
-            switch (event.button.button) {
-                1 => {
-                    state.debug_ui_state.input.left_mouse_pressed =
-                        (state.debug_ui_state.input.left_mouse_down and !is_down);
-
-                    state.debug_ui_state.input.left_mouse_down = is_down;
-                },
-                else => {},
-            }
-        }
-
-        if (event_used) {
-            continue;
-        }
+        debug.processInputEvent(state, event);
 
         // Game input.
         if (event.type == c.SDL_EVENT_KEY_DOWN or event.type == c.SDL_EVENT_KEY_UP) {
@@ -336,52 +238,7 @@ export fn processInput(state_ptr: *anyopaque) bool {
         }
     }
 
-    state.hovered_entity = getHoveredEntity(state);
-
-    // Level editor.
-    if (!state.debug_ui_state.show_level_editor) {
-        if (state.hovered_entity) |hovered_entity| {
-            if (state.debug_ui_state.input.left_mouse_pressed) {
-                if (state.debug_ui_state.mode == .Edit) {
-                    if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
-                        if (editor_wall_color == hovered_entity.color.?.color) {
-                            removeEntity(state, hovered_entity);
-                        } else {
-                            removeEntity(state, hovered_entity);
-                            const tiled_position = getTiledPosition(
-                                state.debug_ui_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)),
-                                &state.assets.getWall(editor_wall_color),
-                            );
-                            _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
-                        }
-                    }
-                } else {
-                    if (state.time - state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
-                        state.last_left_click_entity.? == hovered_entity)
-                    {
-                        openSprite(state, hovered_entity);
-                    } else {
-                        state.selected_entity = hovered_entity;
-                    }
-                }
-
-                state.last_left_click_time = state.time;
-                state.last_left_click_entity = hovered_entity;
-            }
-        } else {
-            if (state.debug_ui_state.input.left_mouse_pressed) {
-                if (state.debug_ui_state.mode == .Edit) {
-                    if (state.debug_ui_state.current_wall_color) |editor_wall_color| {
-                        const tiled_position = getTiledPosition(
-                            state.debug_ui_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)),
-                            &state.assets.getWall(editor_wall_color),
-                        );
-                        _ = addWall(state, editor_wall_color, tiled_position) catch undefined;
-                    }
-                }
-            }
-        }
-    }
+    debug.handleInput(state);
 
     return continue_running;
 }
@@ -396,21 +253,7 @@ export fn tick(state_ptr: *anyopaque) void {
     }
     state.time = c.SDL_GetTicks();
 
-    if (state.debug_ui_state.fps_counted_frames == 0) {
-        state.debug_ui_state.fps_since = state.time;
-    }
-    state.debug_ui_state.fps_counted_frames += 1;
-    const fps_time_passed = state.time - state.debug_ui_state.fps_since;
-    if (fps_time_passed > 1000) {
-        state.debug_ui_state.fps_average =
-            @as(f32, @floatFromInt(state.debug_ui_state.fps_counted_frames)) /
-            (@as(f32, @floatFromInt(fps_time_passed)) / 1000);
-    } else {
-        state.debug_ui_state.fps_average = 0;
-    }
-    if (state.debug_ui_state.fps_counted_frames > 1000000) {
-        state.debug_ui_state.fps_counted_frames = 0;
-    }
+    debug.calculateFPS(state);
 
     if (state.ball.transform) |transform| {
         if ((state.ball_horizontal_bounce_start_time + BALL_HORIZONTAL_BOUNCE_TIME) < state.time) {
@@ -436,7 +279,7 @@ export fn tick(state_ptr: *anyopaque) void {
                 collision.self.entity.sprite.?.startAnimation(if (transform.velocity[Y] < 0) "bounce_up" else "bounce_down");
                 transform.velocity[Y] = 0;
 
-                state.debug_ui_state.addCollision(&collision);
+                state.debug_state.addCollision(&collision);
 
                 // Check if the other sprite is a wall of the same color as the ball.
                 if (collision.other.entity.color) |other_color| {
@@ -459,7 +302,7 @@ export fn tick(state_ptr: *anyopaque) void {
                 transform.velocity[X] = -transform.velocity[X];
                 state.ball_horizontal_bounce_start_time = state.time;
 
-                state.debug_ui_state.addCollision(&collision);
+                state.debug_state.addCollision(&collision);
 
                 // Check if the other sprite is a wall of the same color as the ball.
                 if (collision.other.entity.color) |other_color| {
@@ -497,7 +340,7 @@ export fn draw(state_ptr: *anyopaque) void {
         _ = c.SDL_SetRenderDrawColor(state.renderer, 0, 0, 0, 255);
         _ = c.SDL_RenderClear(state.renderer);
         drawWorld(state);
-        drawDebugOverlay(state);
+        debug.drawDebugOverlay(state);
     }
 
     _ = c.SDL_SetRenderTarget(state.renderer, null);
@@ -506,7 +349,7 @@ export fn draw(state_ptr: *anyopaque) void {
         _ = c.SDL_RenderClear(state.renderer);
         _ = c.SDL_RenderTexture(state.renderer, state.render_texture, null, &state.dest_rect);
 
-        drawDebugUI(state);
+        debug.drawDebugUI(state);
     }
     _ = c.SDL_RenderPresent(state.renderer);
 }
@@ -529,150 +372,6 @@ fn drawWorld(state: *State) void {
                 _ = c.SDL_RenderTexture(state.renderer, texture, null, &texture_rect);
             }
         }
-    }
-}
-
-fn drawDebugUI(state_ptr: *anyopaque) void {
-    const state: *State = @ptrCast(@alignCast(state_ptr));
-    imgui.newFrame();
-
-    var show_fps = true;
-    zimgui.SetNextWindowPos(zimgui.Vec2.init(5, 5));
-    zimgui.SetNextWindowSize(zimgui.Vec2.init(100, 10));
-    _ = zimgui.BeginExt(
-        "FPS",
-        &show_fps,
-        .{ .NoMove = true, .NoResize = true, .NoBackground = true, .NoTitleBar = true },
-    );
-    zimgui.TextColored(zimgui.Vec4.init(0, 1, 0, 1), "FPS: %d", @as(u32, @intFromFloat(state.debug_ui_state.fps_average)));
-    zimgui.End();
-
-    if (state.debug_ui_state.show_level_editor) {
-        _ = zimgui.Begin("Editor");
-        defer zimgui.End();
-
-        zimgui.Text("Mode:", .{});
-        if (zimgui.RadioButton_Bool("Select", state.debug_ui_state.mode == .Select)) {
-            state.debug_ui_state.mode = .Select;
-        }
-        zimgui.Spacing();
-        if (zimgui.RadioButton_Bool("Gray", state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Gray)) {
-            state.debug_ui_state.mode = .Edit;
-            state.debug_ui_state.current_wall_color = .Gray;
-        }
-        if (zimgui.RadioButton_Bool("Red", state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Red)) {
-            state.debug_ui_state.mode = .Edit;
-            state.debug_ui_state.current_wall_color = .Red;
-        }
-        if (zimgui.RadioButton_Bool("Blue", state.debug_ui_state.mode == .Edit and state.debug_ui_state.current_wall_color == .Blue)) {
-            state.debug_ui_state.mode = .Edit;
-            state.debug_ui_state.current_wall_color = .Blue;
-        }
-    }
-
-    imgui.render(state.renderer);
-}
-
-fn drawDebugCollider(
-    renderer: *c.SDL_Renderer,
-    collider: *ecs.ColliderComponent,
-    color: Color,
-    line_thickness: f32,
-) void {
-    _ = line_thickness;
-
-    if (collider.entity.transform) |transform| {
-        switch (collider.shape) {
-            .Square => {
-                const collider_rect = c.SDL_FRect{
-                    .x = transform.position[X],
-                    .y = transform.position[Y],
-                    .w = transform.size[X],
-                    .h = transform.size[Y],
-                };
-                _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-                _ = c.SDL_RenderRect(renderer, &collider_rect);
-            },
-            .Circle => {
-                // TODO: Make a simple circle drawing method.
-                const collider_rect = c.SDL_FRect{
-                    .x = transform.position[X],
-                    .y = transform.position[Y],
-                    .w = transform.size[X],
-                    .h = transform.size[Y],
-                };
-                _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-                _ = c.SDL_RenderRect(renderer, &collider_rect);
-            },
-        }
-    }
-}
-
-fn drawEntityHighlight(
-    renderer: *c.SDL_Renderer,
-    opt_entity: ?*ecs.Entity,
-    color: Color,
-) void {
-    if (opt_entity) |entity| {
-        if (entity.transform) |transform| {
-            const entity_rect = c.SDL_FRect{
-                .x = transform.position[X],
-                .y = transform.position[Y],
-                .w = transform.size[X],
-                .h = transform.size[Y],
-            };
-            _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-            _ = c.SDL_RenderRect(renderer, &entity_rect);
-        }
-    }
-}
-
-fn drawDebugOverlay(state: *State) void {
-    const line_thickness: f32 = 0.5;
-
-    // Highlight colliders.
-    if (state.debug_ui_state.show_colliders) {
-        for (state.colliders.items) |collider| {
-            drawDebugCollider(state.renderer, collider, Color{ 0, 255, 0, 255 }, line_thickness);
-        }
-
-        // Highlight collisions.
-        var index = state.debug_ui_state.collisions.items.len;
-        while (index > 0) {
-            index -= 1;
-
-            const show_time: u64 = 1;
-            const collision = state.debug_ui_state.collisions.items[index];
-            if (state.time > collision.time_added + show_time) {
-                _ = state.debug_ui_state.collisions.swapRemove(index);
-            } else {
-                const time_remaining: u64 = ((collision.time_added + show_time) - state.time) / show_time;
-                const color: Color = .{ 255, 128, 0, @intCast(255 * time_remaining) };
-                drawDebugCollider(
-                    state.renderer,
-                    collision.collision.other,
-                    color,
-                    0.01 * @as(f32, @floatFromInt(time_remaining)),
-                );
-            }
-        }
-    }
-
-    // Highlight the currently hovered entity.
-    if (!state.debug_ui_state.show_level_editor) {
-        drawEntityHighlight(state.renderer, state.selected_entity, Color{ 255, 0, 0, 255 });
-        drawEntityHighlight(state.renderer, state.hovered_entity, Color{ 255, 150, 0, 255 });
-
-        // Draw the current mouse position.
-        const mouse_size: f32 = 8;
-        const mouse_rect: c.SDL_FRect = .{
-            .x = (state.debug_ui_state.input.mouse_position[X] - (mouse_size / 2)) / state.world_scale,
-            .y = (state.debug_ui_state.input.mouse_position[Y] - (mouse_size / 2)) / state.world_scale,
-            .w = mouse_size / state.world_scale,
-            .h = mouse_size / state.world_scale,
-        };
-        _ = c.SDL_SetRenderDrawColor(state.renderer, 255, 255, 0, 255);
-        _ = c.SDL_RenderFillRect(state.renderer, &mouse_rect);
     }
 }
 
@@ -752,24 +451,6 @@ fn resetBall(state: *State) void {
     state.ball.transform.?.velocity[Y] = BALL_VELOCITY;
 }
 
-fn saveLevel(state: *State, path: []const u8) !void {
-    if (std.fs.cwd().createFile(path, .{ .truncate = true }) catch null) |file| {
-        defer file.close();
-
-        try file.writer().writeInt(u32, @intCast(state.walls.items.len), .little);
-
-        for (state.walls.items) |wall| {
-            if (wall.color) |color| {
-                if (wall.transform) |transform| {
-                    try file.writer().writeInt(u32, @intFromEnum(color.color), .little);
-                    try file.writer().writeInt(i32, @intFromFloat(@round(transform.position[X])), .little);
-                    try file.writer().writeInt(i32, @intFromFloat(@round(transform.position[Y])), .little);
-                }
-            }
-        }
-    }
-}
-
 fn unloadLevel(state: *State) void {
     for (state.walls.items) |wall| {
         removeEntity(state, wall);
@@ -778,7 +459,7 @@ fn unloadLevel(state: *State) void {
     state.walls.clearRetainingCapacity();
 }
 
-fn loadLevel(state: *State, path: []const u8) !void {
+pub fn loadLevel(state: *State, path: []const u8) !void {
     if (std.fs.cwd().openFile(path, .{ .mode = .read_only }) catch null) |file| {
         const wall_count = try file.reader().readInt(u32, .little);
 
@@ -847,7 +528,7 @@ fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: Vector2) !*ecs
     return entity;
 }
 
-fn addWall(state: *State, color: ecs.ColorComponentValue, position: Vector2) !*ecs.Entity {
+pub fn addWall(state: *State, color: ecs.ColorComponentValue, position: Vector2) !*ecs.Entity {
     const sprite_asset = &switch (color) {
         .Gray => state.assets.wall_gray.?,
         .Red => state.assets.wall_red.?,
@@ -877,7 +558,7 @@ fn addWall(state: *State, color: ecs.ColorComponentValue, position: Vector2) !*e
     return new_entity;
 }
 
-fn removeEntity(state: *State, entity: *ecs.Entity) void {
+pub fn removeEntity(state: *State, entity: *ecs.Entity) void {
     if (entity.transform) |_| {
         var opt_remove_at: ?usize = null;
         for (state.transforms.items, 0..) |stored_transform, index| {
@@ -927,43 +608,3 @@ fn removeEntity(state: *State, entity: *ecs.Entity) void {
     }
 }
 
-fn getHoveredEntity(state: *State) ?*ecs.Entity {
-    var result: ?*ecs.Entity = null;
-
-    for (state.transforms.items) |transform| {
-        if (transform.containsPoint(state.debug_ui_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)))) {
-            result = transform.entity;
-            break;
-        }
-    }
-
-    return result;
-}
-
-fn getTiledPosition(position: Vector2, asset: *const SpriteAsset) Vector2 {
-    const tile_x = @divFloor(position[X], @as(f32, @floatFromInt(asset.document.header.width)));
-    const tile_y = @divFloor(position[Y], @as(f32, @floatFromInt(asset.document.header.height)));
-    return Vector2{
-        tile_x * @as(f32, @floatFromInt(asset.document.header.width)),
-        tile_y * @as(f32, @floatFromInt(asset.document.header.height)),
-    };
-}
-
-fn openSprite(state: *State, entity: *ecs.Entity) void {
-    if (entity.sprite) |sprite| {
-        const process_args = if (PLATFORM == .windows) [_][]const u8{
-            // "Aseprite.exe",
-            "explorer.exe",
-            sprite.asset.path,
-            // ".\\assets\\test.aseprite",
-        } else [_][]const u8{
-            "open",
-            sprite.asset.path,
-        };
-
-        var aseprite_process = std.process.Child.init(&process_args, state.allocator);
-        aseprite_process.spawn() catch |err| {
-            std.debug.print("Error spawning process: {}\n", .{err});
-        };
-    }
-}
