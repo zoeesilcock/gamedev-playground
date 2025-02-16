@@ -86,6 +86,53 @@ pub const ColliderComponent = struct {
     radius: f32,
     shape: ColliderShape,
 
+    pub fn top(self: *const ColliderComponent) f32 {
+        return self.offset[Y];
+    }
+
+    pub fn bottom(self: *const ColliderComponent) f32 {
+        switch (self.shape) {
+            .Square => {
+                return self.offset[Y] + self.size[Y];
+            },
+            .Circle => {
+                return self.offset[Y] + self.radius * 2;
+            }
+        }
+    }
+
+    pub fn left(self: *const ColliderComponent) f32 {
+        return self.offset[X];
+    }
+
+    pub fn right(self: *const ColliderComponent) f32 {
+        switch (self.shape) {
+            .Square => {
+                return self.offset[X] + self.size[X];
+            },
+            .Circle => {
+                return self.offset[X] + self.radius * 2;
+            }
+        }
+    }
+
+    pub fn center(self: *const ColliderComponent, transform: *const TransformComponent) Vector2 {
+        switch (self.shape) {
+            .Square => {
+                return Vector2{
+                    transform.position[X] + self.offset[X] + self.size[X] * 0.5,
+                    transform.position[Y] + self.offset[Y] + self.size[Y] * 0.5,
+                };
+            },
+            .Circle => {
+                return Vector2{
+                    transform.position[X] + self.offset[X] + self.radius,
+                    transform.position[Y] + self.offset[Y] + self.radius,
+                };
+            },
+        }
+    }
+
     fn collidesWithAnyAt(self: *ColliderComponent, others: []*ColliderComponent, at: TransformComponent) ?*Entity {
         var result: ?*Entity = null;
 
@@ -119,27 +166,41 @@ pub const ColliderComponent = struct {
             } else {
                 var circle_radius: f32 = 0;
                 var circle_transform: ?*const TransformComponent = null;
+                var circle_collider: *const ColliderComponent = undefined;
                 var square_transform: ?*const TransformComponent = null;
+                var square_collider: *const ColliderComponent = undefined;
 
                 if (self.shape == .Circle) {
+                    circle_collider = self;
                     circle_transform = &at;
                     circle_radius = self.radius;
                 } else {
+                    square_collider = self;
                     square_transform = &at;
                 }
 
                 if (other.shape == .Circle) {
+                    circle_collider = other;
                     circle_transform = other.entity.transform;
                     circle_radius = other.radius;
                 } else {
+                    square_collider = other;
                     square_transform = other.entity.transform;
                 }
 
                 if (circle_transform) |circle| {
                     if (square_transform) |square| {
-                        const circle_position = circle.center();
-                        const closest_x: f32 = std.math.clamp(circle_position[X], square.left(), square.right());
-                        const closest_y: f32 = std.math.clamp(circle_position[Y], square.top(), square.bottom());
+                        const circle_position = circle_collider.center(circle);
+                        const closest_x: f32 = std.math.clamp(
+                            circle_position[X],
+                            square.position[X] + square_collider.left(),
+                            square.position[X] + square_collider.right(),
+                        );
+                        const closest_y: f32 = std.math.clamp(
+                            circle_position[Y],
+                            square.position[Y] + square_collider.top(),
+                            square.position[Y] + square_collider.bottom(),
+                        );
                         const distance_x: f32 = circle_position[X] - closest_x;
                         const distance_y: f32 = circle_position[Y] - closest_y;
                         const distance: f32 = (distance_x * distance_x) + (distance_y * distance_y);

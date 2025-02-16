@@ -345,12 +345,10 @@ fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
 }
 
 pub fn drawDebugOverlay(state: *State) void {
-    const line_thickness: f32 = 0.5;
-
     // Highlight colliders.
     if (state.debug_state.show_colliders) {
         for (state.colliders.items) |collider| {
-            drawDebugCollider(state.renderer, collider, Color{ 0, 255, 0, 255 }, line_thickness);
+            drawDebugCollider(state.renderer, collider, Color{ 0, 255, 0, 255 });
         }
 
         // Highlight collisions.
@@ -397,34 +395,36 @@ fn drawDebugCollider(
     renderer: *c.SDL_Renderer,
     collider: *ecs.ColliderComponent,
     color: Color,
-    line_thickness: f32,
 ) void {
-    _ = line_thickness;
-
     if (collider.entity.transform) |transform| {
+        const center = collider.center(transform);
+        const center_rect = c.SDL_FRect{
+            .x = center[X] - 0.5,
+            .y = center[Y] - 0.5,
+            .w = 1,
+            .h = 1,
+        };
+        const collider_rect = c.SDL_FRect{
+            .x = transform.position[X] + collider.left(),
+            .y = transform.position[Y] + collider.top(),
+            .w = collider.right() - collider.left(),
+            .h = collider.bottom() - collider.top(),
+        };
+
         switch (collider.shape) {
             .Square => {
-                const collider_rect = c.SDL_FRect{
-                    .x = transform.position[X],
-                    .y = transform.position[Y],
-                    .w = transform.size[X],
-                    .h = transform.size[Y],
-                };
                 _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
                 _ = c.SDL_RenderRect(renderer, &collider_rect);
             },
             .Circle => {
                 // TODO: Make a simple circle drawing method.
-                const collider_rect = c.SDL_FRect{
-                    .x = transform.position[X],
-                    .y = transform.position[Y],
-                    .w = transform.size[X],
-                    .h = transform.size[Y],
-                };
                 _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
                 _ = c.SDL_RenderRect(renderer, &collider_rect);
             },
         }
+
+        _ = c.SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
+        _ = c.SDL_RenderRect(renderer, &center_rect);
     }
 }
 
