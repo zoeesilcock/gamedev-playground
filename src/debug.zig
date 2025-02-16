@@ -426,14 +426,45 @@ fn drawDebugCollider(
                 _ = c.SDL_RenderRect(renderer, &collider_rect);
             },
             .Circle => {
-                // TODO: Make a simple circle drawing method.
                 _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-                _ = c.SDL_RenderRect(renderer, &collider_rect);
+                drawDebugCircle(renderer, center, collider.radius);
             },
         }
 
         _ = c.SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
         _ = c.SDL_RenderRect(renderer, &center_rect);
+    }
+}
+
+fn drawDebugCircle(renderer: *c.SDL_Renderer, center: Vector2, radius: f32) void {
+    const diameter: f32 = radius * 2;
+    var x: f32 = (radius - 1);
+    var y: f32 = 0;
+    var dx: f32 = 1;
+    var dy: f32 = 1;
+    var err: f32 = (dx - diameter);
+
+    while (x >= y) {
+        _ = c.SDL_RenderPoint(renderer, center[X] + x, center[Y] - y);
+        _ = c.SDL_RenderPoint(renderer, center[X] + x, center[Y] + y);
+        _ = c.SDL_RenderPoint(renderer, center[X] - x, center[Y] - y);
+        _ = c.SDL_RenderPoint(renderer, center[X] - x, center[Y] + y);
+        _ = c.SDL_RenderPoint(renderer, center[X] + y, center[Y] - x);
+        _ = c.SDL_RenderPoint(renderer, center[X] + y, center[Y] + x);
+        _ = c.SDL_RenderPoint(renderer, center[X] - y, center[Y] - x);
+        _ = c.SDL_RenderPoint(renderer, center[X] - y, center[Y] + x);
+
+        if(err <= 0) {
+            y += 1;
+            err += dy;
+            dy += 2;
+        }
+
+        if(err > 0) {
+            x -= 1;
+            dx += 2;
+            err += (dx - diameter);
+        }
     }
 }
 
