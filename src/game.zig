@@ -424,8 +424,8 @@ fn spawnBall(state: *State) !void {
             var collider_component: *ecs.ColliderComponent = state.allocator.create(ecs.ColliderComponent) catch undefined;
             collider_component.entity = entity;
             collider_component.shape = .Circle;
-            collider_component.radius = 8;
-            collider_component.offset = @splat(0);
+            collider_component.radius = 6;
+            collider_component.offset = @splat(1);
 
             var color_component: *ecs.ColorComponent = state.allocator.create(ecs.ColorComponent) catch undefined;
             color_component.entity = entity;
