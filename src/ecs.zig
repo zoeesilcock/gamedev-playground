@@ -16,11 +16,24 @@ const X = math.X;
 const Y = math.Y;
 const Z = math.Z;
 
+pub const EntityType = enum(u8) {
+    Ball,
+    Wall,
+};
+
+pub const Entity = struct {
+    entity_type: EntityType,
+    transform: ?*TransformComponent,
+    collider: ?*ColliderComponent,
+    sprite: ?*SpriteComponent,
+    color: ?*ColorComponent,
+};
+
 pub const TransformComponent = struct {
     entity: *Entity,
 
     position: Vector2,
-    size: Vector2,
+    // size: Vector2,
     velocity: Vector2,
     next_velocity: Vector2,
 
@@ -30,37 +43,25 @@ pub const TransformComponent = struct {
         }
     }
 
-    pub fn top(self: *const TransformComponent) f32 {
-        return self.position[Y];
-    }
-
-    pub fn bottom(self: *const TransformComponent) f32 {
-        return self.position[Y] + self.size[Y];
-    }
-
-    pub fn left(self: *const TransformComponent) f32 {
-        return self.position[X];
-    }
-
-    pub fn right(self: *const TransformComponent) f32 {
-        return self.position[X] + self.size[X];
-    }
-
-    pub fn center(self: *const TransformComponent) Vector2 {
-        return Vector2{ self.position[X] + self.size[X] * 0.5, self.position[Y] + self.size[Y] * 0.5 };
-    }
-
-    pub fn containsPoint(self: *const TransformComponent, point: Vector2) bool {
-        var contains_point = false;
-
-        if ((point[X] <= self.right() and point[X] >= self.left()) and
-            (point[Y] <= self.bottom() and point[Y] >= self.top()))
-        {
-            contains_point = true;
-        }
-
-        return contains_point;
-    }
+    // pub fn top(self: *const TransformComponent) f32 {
+    //     return self.position[Y];
+    // }
+    //
+    // pub fn bottom(self: *const TransformComponent) f32 {
+    //     return self.position[Y] + self.size[Y];
+    // }
+    //
+    // pub fn left(self: *const TransformComponent) f32 {
+    //     return self.position[X];
+    // }
+    //
+    // pub fn right(self: *const TransformComponent) f32 {
+    //     return self.position[X] + self.size[X];
+    // }
+    //
+    // pub fn center(self: *const TransformComponent) Vector2 {
+    //     return Vector2{ self.position[X] + self.size[X] * 0.5, self.position[Y] + self.size[Y] * 0.5 };
+    // }
 };
 
 const ColliderShape = enum {
@@ -97,7 +98,7 @@ pub const ColliderComponent = struct {
             },
             .Circle => {
                 return self.offset[Y] + self.radius * 2;
-            }
+            },
         }
     }
 
@@ -112,7 +113,7 @@ pub const ColliderComponent = struct {
             },
             .Circle => {
                 return self.offset[X] + self.radius * 2;
-            }
+            },
         }
     }
 
@@ -131,6 +132,23 @@ pub const ColliderComponent = struct {
                 };
             },
         }
+    }
+
+    pub fn containsPoint(self: *const ColliderComponent, point: Vector2) bool {
+        var contains_point = false;
+        var position: Vector2 = .{ 0, 0 };
+
+        if (self.entity.transform) |transform| {
+            position = transform.position;
+        }
+
+        if ((point[X] <= position[X] + self.right() and point[X] >= position[X] + self.left()) and
+            (point[Y] <= position[Y] + self.bottom() and point[Y] >= position[Y] + self.top()))
+        {
+            contains_point = true;
+        }
+
+        return contains_point;
     }
 
     fn collidesWithAnyAt(self: *ColliderComponent, others: []*ColliderComponent, at: TransformComponent) ?*Entity {
@@ -154,10 +172,10 @@ pub const ColliderComponent = struct {
                 switch (self.shape) {
                     .Circle => unreachable,
                     .Square => {
-                        if (((at.left() >= other_at.left() and at.left() <= other_at.right()) or
-                            (at.right() >= other_at.left() and at.right() <= other_at.right())) and
-                            ((at.bottom() >= other_at.top() and at.bottom() <= other_at.bottom()) or
-                            (at.top() <= other_at.bottom() and at.top() >= other_at.top())))
+                        if (((at.position[X] + self.left() >= other_at.position[X] + other.left() and at.position[X] + self.left() <= other_at.position[X] + other.right()) or
+                            (at.position[X] + self.right() >= other_at.position[X] + other.left() and at.position[X] + self.right() <= other_at.position[X] + other.right())) and
+                            ((at.position[Y] + self.bottom() >= other_at.position[Y] + other.top() and at.position[Y] + self.bottom() <= other_at.position[Y] + other.bottom()) or
+                            (at.position[Y] + self.top() <= other_at.position[Y] + other.bottom() and at.position[Y] + self.top() >= other_at.position[Y] + other.top())))
                         {
                             collides = true;
                         }
@@ -248,91 +266,98 @@ pub const ColliderComponent = struct {
 pub const SpriteComponent = struct {
     entity: *Entity,
 
-    asset: *const game.SpriteAsset,
     frame_index: u32,
     duration_shown: f32,
     loop_animation: bool,
     animation_completed: bool,
     current_animation: ?*aseprite.AseTagsChunk,
 
-    pub fn tick(sprites: []*SpriteComponent, delta_time: f32) void {
+    pub fn tick(assets: *game.Assets, sprites: []*SpriteComponent, delta_time: f32) void {
         for (sprites) |sprite| {
-            if (sprite.asset.document.frames.len > 1) {
-                const current_frame = sprite.asset.document.frames[sprite.frame_index];
-                var from_frame: u16 = 0;
-                var to_frame: u16 = @intCast(sprite.asset.document.frames.len);
+            if (assets.getSpriteAsset(sprite)) |sprite_asset| {
+                if (sprite_asset.document.frames.len > 1) {
+                    const current_frame = sprite_asset.document.frames[sprite.frame_index];
+                    var from_frame: u16 = 0;
+                    var to_frame: u16 = @intCast(sprite_asset.document.frames.len);
 
-                if (sprite.current_animation) |tag| {
-                    from_frame = tag.from_frame;
-                    to_frame = tag.to_frame;
-                }
-
-                sprite.duration_shown += delta_time;
-
-                if (sprite.duration_shown * 1000 >= @as(f64, @floatFromInt(current_frame.header.frame_duration))) {
-                    var next_frame = sprite.frame_index + 1;
-                    if (next_frame > to_frame) {
-                        if (sprite.loop_animation) {
-                            next_frame = from_frame;
-                        } else {
-                            sprite.animation_completed = true;
-                            next_frame = to_frame;
-                            continue;
-                        }
+                    if (sprite.current_animation) |tag| {
+                        from_frame = tag.from_frame;
+                        to_frame = tag.to_frame;
                     }
 
-                    sprite.setFrame(next_frame);
+                    sprite.duration_shown += delta_time;
+
+                    if (sprite.duration_shown * 1000 >= @as(f64, @floatFromInt(current_frame.header.frame_duration))) {
+                        var next_frame = sprite.frame_index + 1;
+                        if (next_frame > to_frame) {
+                            if (sprite.loop_animation) {
+                                next_frame = from_frame;
+                            } else {
+                                sprite.animation_completed = true;
+                                next_frame = to_frame;
+                                continue;
+                            }
+                        }
+
+                        sprite.setFrame(next_frame, sprite_asset);
+                    }
                 }
             }
         }
     }
 
-    pub fn setFrame(self: *SpriteComponent, index: u32) void {
-        if (index < self.asset.document.frames.len) {
+    pub fn setFrame(self: *SpriteComponent, index: u32, sprite_asset: *game.SpriteAsset) void {
+        if (index < sprite_asset.document.frames.len) {
             self.duration_shown = 0;
             self.frame_index = index;
         }
     }
 
-    pub fn getTexture(self: *SpriteComponent) ?*c.SDL_Texture {
+    pub fn getTexture(self: *SpriteComponent, assets: *game.Assets) ?*c.SDL_Texture {
         var result: ?*c.SDL_Texture = null;
 
-        if (self.frame_index < self.asset.frames.len) {
-            result = self.asset.frames[self.frame_index];
-        }
-
-        return result;
-    }
-
-    pub fn getOffset(self: *SpriteComponent) Vector2 {
-        var result: Vector2 = .{ 0, 0 };
-
-        if (self.frame_index < self.asset.frames.len) {
-            const cel_chunk = self.asset.document.frames[self.frame_index].cel_chunk;
-            result[0] = @floatFromInt(cel_chunk.x);
-            result[1] = @floatFromInt(cel_chunk.y);
-        }
-
-        return result;
-    }
-
-    pub fn startAnimation(self: *SpriteComponent, name: []const u8) void {
-        var opt_tag: ?*aseprite.AseTagsChunk = null;
-
-        outer: for (self.asset.document.frames) |frame| {
-            for (frame.tags) |tag| {
-                if (std.mem.eql(u8, tag.tag_name, name)) {
-                    opt_tag = tag;
-                    break :outer;
-                }
+        if (assets.getSpriteAsset(self)) |sprite_asset| {
+            if (self.frame_index < sprite_asset.frames.len) {
+                result = sprite_asset.frames[self.frame_index];
             }
         }
 
-        if (opt_tag) |tag| {
-            self.current_animation = tag;
-            self.loop_animation = false;
-            self.animation_completed = false;
-            self.setFrame(tag.from_frame);
+        return result;
+    }
+
+    pub fn getOffset(self: *SpriteComponent, assets: *game.Assets) Vector2 {
+        var result: Vector2 = .{ 0, 0 };
+
+        if (assets.getSpriteAsset(self)) |sprite_asset| {
+            if (self.frame_index < sprite_asset.frames.len) {
+                const cel_chunk = sprite_asset.document.frames[self.frame_index].cel_chunk;
+                result[0] = @floatFromInt(cel_chunk.x);
+                result[1] = @floatFromInt(cel_chunk.y);
+            }
+        }
+
+        return result;
+    }
+
+    pub fn startAnimation(self: *SpriteComponent, name: []const u8, assets: *game.Assets) void {
+        var opt_tag: ?*aseprite.AseTagsChunk = null;
+
+        if (assets.getSpriteAsset(self)) |sprite_asset| {
+            outer: for (sprite_asset.document.frames) |frame| {
+                for (frame.tags) |tag| {
+                    if (std.mem.eql(u8, tag.tag_name, name)) {
+                        opt_tag = tag;
+                        break :outer;
+                    }
+                }
+            }
+
+            if (opt_tag) |tag| {
+                self.current_animation = tag;
+                self.loop_animation = false;
+                self.animation_completed = false;
+                self.setFrame(tag.from_frame, sprite_asset);
+            }
         }
     }
 
@@ -359,11 +384,4 @@ pub const ColorComponent = struct {
     entity: *Entity,
 
     color: ColorComponentValue,
-};
-
-pub const Entity = struct {
-    transform: ?*TransformComponent,
-    collider: ?*ColliderComponent,
-    sprite: ?*SpriteComponent,
-    color: ?*ColorComponent,
 };

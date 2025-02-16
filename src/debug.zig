@@ -144,7 +144,7 @@ pub fn handleInput(state: *State) void {
                             game.removeEntity(state, hovered_entity);
                             const tiled_position = getTiledPosition(
                                 input.mouse_position / @as(Vector2, @splat(state.world_scale)),
-                                &state.assets.getWall(editor_wall_color),
+                                state.assets.getWall(editor_wall_color),
                             );
                             _ = game.addWall(state, editor_wall_color, tiled_position) catch undefined;
                         }
@@ -168,7 +168,7 @@ pub fn handleInput(state: *State) void {
                     if (state.debug_state.current_wall_color) |editor_wall_color| {
                         const tiled_position = getTiledPosition(
                             input.mouse_position / @as(Vector2, @splat(state.world_scale)),
-                            &state.assets.getWall(editor_wall_color),
+                            state.assets.getWall(editor_wall_color),
                         );
                         _ = game.addWall(state, editor_wall_color, tiled_position) catch undefined;
                     }
@@ -181,9 +181,9 @@ pub fn handleInput(state: *State) void {
 fn getHoveredEntity(state: *State) ?*ecs.Entity {
     var result: ?*ecs.Entity = null;
 
-    for (state.transforms.items) |transform| {
-        if (transform.containsPoint(state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)))) {
-            result = transform.entity;
+    for (state.colliders.items) |colldier| {
+        if (colldier.containsPoint(state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)))) {
+            result = colldier.entity;
             break;
         }
     }
@@ -268,7 +268,14 @@ fn runtimeFieldPointer(ptr: anytype, comptime field_name: []const u8) *@TypeOf(@
 fn inspectEntity(entity: *ecs.Entity) void {
     const entity_info = @typeInfo(@TypeOf(entity.*));
     inline for (entity_info.Struct.fields) |entity_field| {
-        if (runtimeFieldPointer(entity, entity_field.name).*) |component| {
+        if (entity_field.type == ecs.EntityType) {
+            const entity_type = runtimeFieldPointer(entity, entity_field.name);
+            inline for (@typeInfo(ecs.EntityType).Enum.fields, 0..) |field, i| {
+                if (@intFromEnum(entity_type.*) == i) {
+                    zimgui.Text("Type: " ++ field.name);
+                }
+            }
+        } else if (runtimeFieldPointer(entity, entity_field.name).*) |component| {
             if (zimgui.CollapsingHeader_BoolPtrExt(entity_field.name, null, .{ .DefaultOpen = true })) {
                 const component_info = @typeInfo(@TypeOf(component.*));
                 inline for (component_info.Struct.fields) |component_field| {
@@ -431,14 +438,16 @@ fn drawEntityHighlight(
 ) void {
     if (opt_entity) |entity| {
         if (entity.transform) |transform| {
-            const entity_rect = c.SDL_FRect{
-                .x = transform.position[X],
-                .y = transform.position[Y],
-                .w = transform.size[X],
-                .h = transform.size[Y],
-            };
-            _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-            _ = c.SDL_RenderRect(renderer, &entity_rect);
+            if (entity.collider) |collider| {
+                const entity_rect = c.SDL_FRect{
+                    .x = transform.position[X] + collider.left(),
+                    .y = transform.position[Y] + collider.top(),
+                    .w = collider.right() - collider.left(),
+                    .h = collider.bottom() - collider.top(),
+                };
+                _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
+                _ = c.SDL_RenderRect(renderer, &entity_rect);
+            }
         }
     }
 }
@@ -454,20 +463,22 @@ fn getTiledPosition(position: Vector2, asset: *const SpriteAsset) Vector2 {
 
 fn openSprite(state: *State, entity: *ecs.Entity) void {
     if (entity.sprite) |sprite| {
-        const process_args = if (PLATFORM == .windows) [_][]const u8{
-            // "Aseprite.exe",
-            "explorer.exe",
-            sprite.asset.path,
-            // ".\\assets\\test.aseprite",
-        } else [_][]const u8{
-            "open",
-            sprite.asset.path,
-        };
+        if (state.assets.getSpriteAsset(sprite)) |sprite_asset| {
+            const process_args = if (PLATFORM == .windows) [_][]const u8{
+                // "Aseprite.exe",
+                "explorer.exe",
+                sprite.asset.path,
+                // ".\\assets\\test.aseprite",
+            } else [_][]const u8{
+                "open",
+                sprite_asset.path,
+            };
 
-        var aseprite_process = std.process.Child.init(&process_args, state.allocator);
-        aseprite_process.spawn() catch |err| {
-            std.debug.print("Error spawning process: {}\n", .{err});
-        };
+            var aseprite_process = std.process.Child.init(&process_args, state.allocator);
+            aseprite_process.spawn() catch |err| {
+                std.debug.print("Error spawning process: {}\n", .{err});
+            };
+        }
     }
 }
 

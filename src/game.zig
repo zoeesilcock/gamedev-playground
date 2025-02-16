@@ -83,18 +83,40 @@ const Input = struct {
     right: bool = false,
 };
 
-const Assets = struct {
+pub const Assets = struct {
     test_sprite: ?SpriteAsset,
     wall_gray: ?SpriteAsset,
     wall_red: ?SpriteAsset,
     wall_blue: ?SpriteAsset,
-    ball: ?SpriteAsset,
+    ball_red: ?SpriteAsset,
+    ball_blue: ?SpriteAsset,
 
-    pub fn getWall(self: *Assets, color: ecs.ColorComponentValue) SpriteAsset {
+    pub fn getSpriteAsset(self: *Assets, sprite: *ecs.SpriteComponent) ?*SpriteAsset {
+        var result: ?*SpriteAsset = null;
+
+        if (sprite.entity.color) |color| {
+            result = switch (sprite.entity.entity_type) {
+                .Ball => self.getBall(color.color),
+                .Wall => self.getWall(color.color),
+            };
+        }
+
+        return result;
+    }
+
+    pub fn getWall(self: *Assets, color: ecs.ColorComponentValue) *SpriteAsset {
         return switch (color) {
-            .Red => self.wall_red.?,
-            .Blue => self.wall_blue.?,
-            .Gray => self.wall_gray.?,
+            .Red => &self.wall_red.?,
+            .Blue => &self.wall_blue.?,
+            .Gray => &self.wall_gray.?,
+        };
+    }
+
+    pub fn getBall(self: *Assets, color: ecs.ColorComponentValue) *SpriteAsset {
+        return switch (color) {
+            .Red => &self.ball_red.?,
+            .Blue => &self.ball_blue.?,
+            .Gray => unreachable,
         };
     }
 };
@@ -276,7 +298,10 @@ export fn tick(state_ptr: *anyopaque) void {
                 transform.next_velocity = transform.velocity;
                 transform.next_velocity[Y] = -transform.next_velocity[Y];
 
-                collision.self.entity.sprite.?.startAnimation(if (transform.velocity[Y] < 0) "bounce_up" else "bounce_down");
+                collision.self.entity.sprite.?.startAnimation(
+                    if (transform.velocity[Y] < 0) "bounce_up" else "bounce_down",
+                    &state.assets,
+                );
                 transform.velocity[Y] = 0;
 
                 state.debug_state.addCollision(&collision, state.time);
@@ -319,13 +344,13 @@ export fn tick(state_ptr: *anyopaque) void {
         if (state.ball.transform) |transform| {
             if ((sprite.isAnimating("bounce_up") or sprite.isAnimating("bounce_down")) and sprite.animation_completed) {
                 transform.velocity = transform.next_velocity;
-                sprite.startAnimation("idle");
+                sprite.startAnimation("idle", &state.assets);
             }
         }
     }
 
     ecs.TransformComponent.tick(state.transforms.items, state.deltaTime());
-    ecs.SpriteComponent.tick(state.sprites.items, state.deltaTime());
+    ecs.SpriteComponent.tick(&state.assets, state.sprites.items, state.deltaTime());
 
     if (isLevelCompleted(state)) {
         nextLevel(state);
@@ -357,8 +382,8 @@ export fn draw(state_ptr: *anyopaque) void {
 fn drawWorld(state: *State) void {
     for (state.sprites.items) |sprite| {
         if (sprite.entity.transform) |transform| {
-            if (sprite.getTexture()) |texture| {
-                const offset = sprite.getOffset();
+            if (sprite.getTexture(&state.assets)) |texture| {
+                const offset = sprite.getOffset(&state.assets);
                 var position = transform.position;
                 position += offset;
 
@@ -377,7 +402,8 @@ fn drawWorld(state: *State) void {
 
 fn loadAssets(state: *State) void {
     state.assets.test_sprite = loadSprite("assets/test_animation.aseprite", state.renderer, state.allocator);
-    state.assets.ball = loadSprite("assets/ball.aseprite", state.renderer, state.allocator);
+    state.assets.ball_red = loadSprite("assets/ball_red.aseprite", state.renderer, state.allocator);
+    state.assets.ball_blue = loadSprite("assets/ball_blue.aseprite", state.renderer, state.allocator);
     state.assets.wall_gray = loadSprite("assets/wall_gray.aseprite", state.renderer, state.allocator);
     state.assets.wall_red = loadSprite("assets/wall_red.aseprite", state.renderer, state.allocator);
     state.assets.wall_blue = loadSprite("assets/wall_blue.aseprite", state.renderer, state.allocator);
@@ -419,30 +445,29 @@ fn loadSprite(path: []const u8, renderer: *c.SDL_Renderer, allocator: std.mem.Al
 }
 
 fn spawnBall(state: *State) !void {
-    if (state.assets.ball) |*sprite| {
-        if (addSprite(state, sprite, BALL_SPAWN) catch null) |entity| {
-            var collider_component: *ecs.ColliderComponent = state.allocator.create(ecs.ColliderComponent) catch undefined;
-            collider_component.entity = entity;
-            collider_component.shape = .Circle;
-            collider_component.radius = 6;
-            collider_component.offset = @splat(1);
+    if (addSprite(state, BALL_SPAWN) catch null) |entity| {
+        var collider_component: *ecs.ColliderComponent = state.allocator.create(ecs.ColliderComponent) catch undefined;
+        entity.entity_type = .Ball;
+        collider_component.entity = entity;
+        collider_component.shape = .Circle;
+        collider_component.radius = 6;
+        collider_component.offset = @splat(1);
 
-            var color_component: *ecs.ColorComponent = state.allocator.create(ecs.ColorComponent) catch undefined;
-            color_component.entity = entity;
-            color_component.color = .Red;
+        var color_component: *ecs.ColorComponent = state.allocator.create(ecs.ColorComponent) catch undefined;
+        color_component.entity = entity;
+        color_component.color = .Red;
 
-            entity.color = color_component;
-            entity.collider = collider_component;
+        entity.color = color_component;
+        entity.collider = collider_component;
 
-            state.ball = entity;
-            try state.colliders.append(collider_component);
+        state.ball = entity;
+        try state.colliders.append(collider_component);
 
-            if (entity.sprite) |ball_sprite| {
-                ball_sprite.startAnimation("idle");
-            }
-
-            resetBall(state);
+        if (entity.sprite) |ball_sprite| {
+            ball_sprite.startAnimation("idle", &state.assets);
         }
+
+        resetBall(state);
     }
 }
 
@@ -497,13 +522,12 @@ fn isLevelCompleted(state: *State) bool {
     return result;
 }
 
-fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: Vector2) !*ecs.Entity {
+fn addSprite(state: *State, position: Vector2) !*ecs.Entity {
     var entity: *ecs.Entity = try state.allocator.create(ecs.Entity);
     var sprite: *ecs.SpriteComponent = try state.allocator.create(ecs.SpriteComponent);
     var transform: *ecs.TransformComponent = try state.allocator.create(ecs.TransformComponent);
 
     sprite.entity = entity;
-    sprite.asset = sprite_asset;
     sprite.frame_index = 0;
     sprite.duration_shown = 0;
     sprite.loop_animation = false;
@@ -511,10 +535,10 @@ fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: Vector2) !*ecs
     sprite.current_animation = null;
 
     transform.entity = entity;
-    transform.size = Vector2{
-        @floatFromInt(sprite_asset.document.header.width),
-        @floatFromInt(sprite_asset.document.header.height),
-    };
+    // transform.size = Vector2{
+    //     @floatFromInt(sprite_asset.document.header.width),
+    //     @floatFromInt(sprite_asset.document.header.height),
+    // };
     transform.position = position;
     transform.velocity = @splat(0);
 
@@ -529,14 +553,11 @@ fn addSprite(state: *State, sprite_asset: *SpriteAsset, position: Vector2) !*ecs
 }
 
 pub fn addWall(state: *State, color: ecs.ColorComponentValue, position: Vector2) !*ecs.Entity {
-    const sprite_asset = &switch (color) {
-        .Gray => state.assets.wall_gray.?,
-        .Red => state.assets.wall_red.?,
-        .Blue => state.assets.wall_blue.?,
-    };
-    const new_entity = try addSprite(state, sprite_asset, position);
+    const new_entity = try addSprite(state, position);
 
+    const sprite_asset = state.assets.getWall(color);
     var collider_component: *ecs.ColliderComponent = state.allocator.create(ecs.ColliderComponent) catch undefined;
+    new_entity.entity_type = .Wall;
     collider_component.entity = new_entity;
     collider_component.shape = .Square;
     collider_component.size = Vector2{
@@ -607,4 +628,3 @@ pub fn removeEntity(state: *State, entity: *ecs.Entity) void {
         }
     }
 }
-
