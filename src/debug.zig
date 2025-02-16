@@ -249,7 +249,7 @@ pub fn drawDebugUI(state: *State) void {
 
     if (state.debug_state.selected_entity) |selected_entity| {
         zimgui.SetNextWindowPosExt(zimgui.Vec2.init(30, 30), .{ .FirstUseEver = true }, zimgui.Vec2.init(0, 0));
-        zimgui.SetNextWindowSizeExt(zimgui.Vec2.init(300, 400), .{ .FirstUseEver = true });
+        zimgui.SetNextWindowSizeExt(zimgui.Vec2.init(300, 460), .{ .FirstUseEver = true });
 
         _ = zimgui.Begin("Inspector");
         defer zimgui.End();
@@ -260,29 +260,37 @@ pub fn drawDebugUI(state: *State) void {
     imgui.render(state.renderer);
 }
 
+fn runtimeFieldPointer(ptr: anytype, comptime field_name: []const u8) *@TypeOf(@field(ptr.*, field_name)) {
+    const field_offset = @offsetOf(@TypeOf(ptr.*), field_name);
+    const base_ptr: [*]u8 = @ptrCast(ptr);
+    return @ptrCast(@alignCast(&base_ptr[field_offset]));
+}
+
 fn inspectEntity(entity: *ecs.Entity) void {
     const entity_info = @typeInfo(@TypeOf(entity.*));
-
     inline for (entity_info.Struct.fields) |entity_field| {
-        if (@field(entity, entity_field.name)) |component| {
+        if (runtimeFieldPointer(entity, entity_field.name).*) |component| {
             if (zimgui.CollapsingHeader_BoolPtrExt(entity_field.name, null, .{ .DefaultOpen = true })) {
                 const component_info = @typeInfo(@TypeOf(component.*));
                 inline for (component_info.Struct.fields) |component_field| {
-                    var field = @field(component, component_field.name);
-                    switch (@TypeOf(field)) {
+                    const field_ptr = runtimeFieldPointer(component, component_field.name);
+                    switch (@TypeOf(field_ptr.*)) {
                         bool => {
-                            inputBool(component_field.name, &field);
+                            inputBool(component_field.name, field_ptr);
                         },
                         f32 => {
-                            inputF32(component_field.name, &field);
+                            inputF32(component_field.name, field_ptr);
                         },
                         u32 => {
-                            inputU32(component_field.name, &field);
+                            inputU32(component_field.name, field_ptr);
                         },
                         Vector2 => {
-                            inputVector2(component_field.name, &field);
+                            inputVector2(component_field.name, field_ptr);
                         },
-                        else => {
+                        else => |field_type| {
+                            if (@typeInfo(field_type) == .Enum) {
+                                inputEnum(component_field.name, field_ptr);
+                            }
                         },
                     }
                 }
@@ -317,6 +325,23 @@ fn inputVector2(heading: ?[*:0]const u8, value: *Vector2) void {
     defer zimgui.PopID();
 
     _ = zimgui.InputFloat2Ext(heading, value, "%.2f", .{});
+}
+
+fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
+    const field_info = @typeInfo(@TypeOf(value.*));
+    const count: u32 = field_info.Enum.fields.len;
+    var items: [count][*:0]const u8 = [1][*:0]const u8{undefined} ** count;
+    inline for (field_info.Enum.fields, 0..) |enum_field, i| {
+        items[i] = enum_field.name;
+    }
+
+    zimgui.PushID_Ptr(value);
+    defer zimgui.PopID();
+
+    var current_item: i32 = @intFromEnum(value.*);
+    if (zimgui.Combo_Str_arr(heading, &current_item, &items, count)) {
+        value.* = @enumFromInt(current_item);
+    }
 }
 
 pub fn drawDebugOverlay(state: *State) void {
@@ -467,4 +492,3 @@ fn saveLevel(state: *State, path: []const u8) !void {
         }
     }
 }
-
