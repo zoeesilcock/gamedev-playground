@@ -226,10 +226,14 @@ pub fn drawDebugUI(state: *State) void {
     zimgui.End();
 
     if (state.debug_state.show_level_editor) {
-        _ = zimgui.Begin("Editor");
+        _ = zimgui.BeginExt("Level editor", null, .{
+            .NoFocusOnAppearing = true,
+            .NoNavFocus = true,
+            .NoNavInputs = true,
+        });
         defer zimgui.End();
 
-        zimgui.Text("Mode:", .{});
+        zimgui.Text("Mode:");
         if (zimgui.RadioButton_Bool("Select", state.debug_state.mode == .Select)) {
             state.debug_state.mode = .Select;
         }
@@ -252,7 +256,7 @@ pub fn drawDebugUI(state: *State) void {
         zimgui.SetNextWindowPosExt(zimgui.Vec2.init(30, 30), .{ .FirstUseEver = true }, zimgui.Vec2.init(0, 0));
         zimgui.SetNextWindowSizeExt(zimgui.Vec2.init(300, 460), .{ .FirstUseEver = true });
 
-        _ = zimgui.Begin("Inspector");
+        _ = zimgui.BeginExt("Inspector", null, .{ .NoFocusOnAppearing = true });
         defer zimgui.End();
 
         inspectEntity(selected_entity);
