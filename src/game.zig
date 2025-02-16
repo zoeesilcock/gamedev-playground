@@ -363,8 +363,8 @@ fn drawWorld(state: *State) void {
                 position += offset;
 
                 const texture_rect = c.SDL_FRect{
-                    .x = position[X],
-                    .y = position[Y],
+                    .x = @round(position[X]),
+                    .y = @round(position[Y]),
                     .w = @floatFromInt(texture.w),
                     .h = @floatFromInt(texture.h),
                 };
