@@ -172,6 +172,8 @@ pub fn handleInput(state: *State) void {
                         );
                         _ = game.addWall(state, editor_wall_color, tiled_position) catch undefined;
                     }
+                } else {
+                    state.debug_state.selected_entity = null;
                 }
             }
         }
