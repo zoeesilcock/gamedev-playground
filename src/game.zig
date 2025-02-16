@@ -279,7 +279,7 @@ export fn tick(state_ptr: *anyopaque) void {
                 collision.self.entity.sprite.?.startAnimation(if (transform.velocity[Y] < 0) "bounce_up" else "bounce_down");
                 transform.velocity[Y] = 0;
 
-                state.debug_state.addCollision(&collision);
+                state.debug_state.addCollision(&collision, state.time);
 
                 // Check if the other sprite is a wall of the same color as the ball.
                 if (collision.other.entity.color) |other_color| {
@@ -302,7 +302,7 @@ export fn tick(state_ptr: *anyopaque) void {
                 transform.velocity[X] = -transform.velocity[X];
                 state.ball_horizontal_bounce_start_time = state.time;
 
-                state.debug_state.addCollision(&collision);
+                state.debug_state.addCollision(&collision, state.time);
 
                 // Check if the other sprite is a wall of the same color as the ball.
                 if (collision.other.entity.color) |other_color| {

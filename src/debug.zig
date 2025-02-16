@@ -63,11 +63,10 @@ pub const DebugState = struct {
         self.last_left_click_entity = null;
     }
 
-    pub fn addCollision(self: *DebugState, collision: *const ecs.Collision) void {
+    pub fn addCollision(self: *DebugState, collision: *const ecs.Collision, time: u64) void {
         self.collisions.append(.{
             .collision = collision.*,
-            // .time_added = r.GetTime(),
-            .time_added = 0,
+            .time_added = time,
         }) catch unreachable;
     }
 };
@@ -356,19 +355,16 @@ pub fn drawDebugOverlay(state: *State) void {
         while (index > 0) {
             index -= 1;
 
-            const show_time: u64 = 1;
+            const show_time: u64 = 500;
             const collision = state.debug_state.collisions.items[index];
             if (state.time > collision.time_added + show_time) {
                 _ = state.debug_state.collisions.swapRemove(index);
             } else {
-                const time_remaining: u64 = ((collision.time_added + show_time) - state.time) / show_time;
-                const color: Color = .{ 255, 128, 0, @intCast(255 * time_remaining) };
-                drawDebugCollider(
-                    state.renderer,
-                    collision.collision.other,
-                    color,
-                    0.01 * @as(f32, @floatFromInt(time_remaining)),
-                );
+                const time_remaining: f32 =
+                    @as(f32, @floatFromInt(((collision.time_added + show_time) - state.time))) /
+                    @as(f32, @floatFromInt(show_time));
+                const color: Color = .{ 255, 128, 0, @intFromFloat(255 * time_remaining) };
+                drawDebugCollider(state.renderer, collision.collision.other, color);
             }
         }
     }
