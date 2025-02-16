@@ -9,10 +9,12 @@ This approach aims to do as much of the editing directly in-game and offload to 
 
 Hovering over entities with the mouse will highlight them.
 
+Clicking on them will bring up the inspector which shows all components and their fields and allows editing them.
+
 Double clicking on an entity will open it's sprite in Aseprite. This works particularly well together with hot reloading since you can double click a sprite, edit it, save it, and instantly see the result in-game.
 
 ### Keys
-* Tab: Toggle pause.
+* P: Toggle pause.
 * F: Toggle fullscreen.
 * E: Toggle level editor.
 * C: Toggle collider outlines.
