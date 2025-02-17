@@ -502,10 +502,8 @@ fn openSprite(state: *State, entity: *ecs.Entity) void {
     if (entity.sprite) |sprite| {
         if (state.assets.getSpriteAsset(sprite)) |sprite_asset| {
             const process_args = if (PLATFORM == .windows) [_][]const u8{
-                // "Aseprite.exe",
-                "explorer.exe",
-                sprite.asset.path,
-                // ".\\assets\\test.aseprite",
+                "Aseprite.exe",
+                sprite_asset.path,
             } else [_][]const u8{
                 "open",
                 sprite_asset.path,
