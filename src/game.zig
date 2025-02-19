@@ -2,7 +2,6 @@ const std = @import("std");
 const aseprite = @import("aseprite.zig");
 const ecs = @import("ecs.zig");
 const math = @import("math.zig");
-const zimgui = @import("zig_imgui");
 const imgui = @import("imgui.zig");
 const debug = @import("debug.zig");
 
@@ -12,6 +11,9 @@ pub const c = @cImport({
     @cInclude("SDL3/SDL_revision.h");
     @cDefine("SDL_MAIN_HANDLED", {});
     @cInclude("SDL3/SDL_main.h");
+
+    @cDefine("CIMGUI_DEFINE_ENUMS_AND_STRUCTS", {});
+    @cInclude("cimgui.h");
 });
 
 const Vector2 = math.Vector2;

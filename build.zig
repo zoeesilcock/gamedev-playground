@@ -98,7 +98,7 @@ fn linkGameLibraries(
         .target = target,
         .optimize = optimize,
     });
-    obj.root_module.addImport("zig_imgui", zig_imgui_dep.module("Zig-ImGui"));
+    obj.addIncludePath(zig_imgui_dep.path("src/generated"));
     obj.linkLibrary(createImGuiSDLLib(b, target, optimize, zig_imgui_dep));
 }
 

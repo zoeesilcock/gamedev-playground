@@ -2,7 +2,6 @@ const std = @import("std");
 const game = @import("game.zig");
 const ecs = @import("ecs.zig");
 const math = @import("math.zig");
-const zimgui = @import("zig_imgui");
 const imgui = @import("imgui.zig");
 
 const c = game.c;
@@ -215,49 +214,61 @@ pub fn drawDebugUI(state: *State) void {
     imgui.newFrame();
 
     var show_fps = true;
-    zimgui.SetNextWindowPos(zimgui.Vec2.init(5, 5));
-    zimgui.SetNextWindowSize(zimgui.Vec2.init(100, 10));
-    _ = zimgui.BeginExt(
+
+    c.igSetNextWindowPos(c.ImVec2{ .x = 5, .y = 5 }, 0, c.ImVec2{ .x = 0, .y = 0 });
+    c.igSetNextWindowSize(c.ImVec2{ .x = 100, .y = 10 }, 0);
+    _ = c.igBegin(
         "FPS",
         &show_fps,
-        .{ .NoMove = true, .NoResize = true, .NoBackground = true, .NoTitleBar = true },
+        c.ImGuiWindowFlags_NoMove |
+            c.ImGuiWindowFlags_NoResize |
+            c.ImGuiWindowFlags_NoBackground |
+            c.ImGuiWindowFlags_NoTitleBar,
     );
-    zimgui.TextColored(zimgui.Vec4.init(0, 1, 0, 1), "FPS: %d", @as(u32, @intFromFloat(state.debug_state.fps_average)));
-    zimgui.End();
+    c.igTextColored(
+        c.ImVec4{ .x = 0, .y = 1, .z = 0, .w = 1 },
+        "FPS: %d",
+        @as(u32, @intFromFloat(state.debug_state.fps_average)),
+    );
+    c.igEnd();
 
     if (state.debug_state.show_level_editor) {
-        _ = zimgui.BeginExt("Level editor", null, .{
-            .NoFocusOnAppearing = true,
-            .NoNavFocus = true,
-            .NoNavInputs = true,
-        });
-        defer zimgui.End();
+        _ = c.igBegin("Level editor", null, c.ImGuiViewportFlags_NoFocusOnAppearing |
+            c.ImGuiWindowFlags_NoNavFocus |
+            c.ImGuiWindowFlags_NoNavInputs);
+        defer c.igEnd();
 
-        zimgui.Text("Mode:");
-        if (zimgui.RadioButton_Bool("Select", state.debug_state.mode == .Select)) {
+        c.igText("Mode:");
+        if (c.igRadioButton_Bool("Select", state.debug_state.mode == .Select)) {
             state.debug_state.mode = .Select;
         }
-        zimgui.Spacing();
-        if (zimgui.RadioButton_Bool("Gray", state.debug_state.mode == .Edit and state.debug_state.current_wall_color == .Gray)) {
+        c.igSpacing();
+        if (c.igRadioButton_Bool("Gray", state.debug_state.mode == .Edit and
+            state.debug_state.current_wall_color == .Gray))
+        {
             state.debug_state.mode = .Edit;
             state.debug_state.current_wall_color = .Gray;
         }
-        if (zimgui.RadioButton_Bool("Red", state.debug_state.mode == .Edit and state.debug_state.current_wall_color == .Red)) {
+        if (c.igRadioButton_Bool("Red", state.debug_state.mode == .Edit and
+            state.debug_state.current_wall_color == .Red))
+        {
             state.debug_state.mode = .Edit;
             state.debug_state.current_wall_color = .Red;
         }
-        if (zimgui.RadioButton_Bool("Blue", state.debug_state.mode == .Edit and state.debug_state.current_wall_color == .Blue)) {
+        if (c.igRadioButton_Bool("Blue", state.debug_state.mode == .Edit and
+            state.debug_state.current_wall_color == .Blue))
+        {
             state.debug_state.mode = .Edit;
             state.debug_state.current_wall_color = .Blue;
         }
     }
 
     if (state.debug_state.selected_entity) |selected_entity| {
-        zimgui.SetNextWindowPosExt(zimgui.Vec2.init(30, 30), .{ .FirstUseEver = true }, zimgui.Vec2.init(0, 0));
-        zimgui.SetNextWindowSizeExt(zimgui.Vec2.init(300, 460), .{ .FirstUseEver = true });
+        c.igSetNextWindowPos(c.ImVec2{ .x = 30, .y = 30 }, c.ImGuiCond_FirstUseEver, c.ImVec2{ .x = 0, .y = 0 });
+        c.igSetNextWindowSize(c.ImVec2{ .x = 300, .y = 460 }, c.ImGuiCond_FirstUseEver);
 
-        _ = zimgui.BeginExt("Inspector", null, .{ .NoFocusOnAppearing = true });
-        defer zimgui.End();
+        _ = c.igBegin("Inspector", null, c.ImGuiWindowFlags_NoFocusOnAppearing);
+        defer c.igEnd();
 
         inspectEntity(selected_entity);
     }
@@ -278,11 +289,11 @@ fn inspectEntity(entity: *ecs.Entity) void {
             const entity_type = runtimeFieldPointer(entity, entity_field.name);
             inline for (@typeInfo(ecs.EntityType).Enum.fields, 0..) |field, i| {
                 if (@intFromEnum(entity_type.*) == i) {
-                    zimgui.Text("Type: " ++ field.name);
+                    c.igText("Type: " ++ field.name);
                 }
             }
         } else if (runtimeFieldPointer(entity, entity_field.name).*) |component| {
-            if (zimgui.CollapsingHeader_BoolPtrExt(entity_field.name, null, .{ .DefaultOpen = true })) {
+            if (c.igCollapsingHeader_BoolPtr(entity_field.name, null, c.ImGuiTreeNodeFlags_DefaultOpen)) {
                 const component_info = @typeInfo(@TypeOf(component.*));
                 inline for (component_info.Struct.fields) |component_field| {
                     const field_ptr = runtimeFieldPointer(component, component_field.name);
@@ -312,31 +323,31 @@ fn inspectEntity(entity: *ecs.Entity) void {
 }
 
 fn inputBool(heading: ?[*:0]const u8, value: *bool) void {
-    zimgui.PushID_Ptr(value);
-    defer zimgui.PopID();
+    c.igPushID_Ptr(value);
+    defer c.igPopID();
 
-    _ = zimgui.Checkbox(heading, value);
+    _ = c.igCheckbox(heading, value);
 }
 
 fn inputF32(heading: ?[*:0]const u8, value: *f32) void {
-    zimgui.PushID_Ptr(value);
-    defer zimgui.PopID();
+    c.igPushID_Ptr(value);
+    defer c.igPopID();
 
-    _ = zimgui.InputFloatExt(heading, value, 0.1, 1, "%.2f", .{});
+    _ = c.igInputFloat(heading, value, 0.1, 1, "%.2f", 0);
 }
 
 fn inputU32(heading: ?[*:0]const u8, value: *u32) void {
-    zimgui.PushID_Ptr(value);
-    defer zimgui.PopID();
+    c.igPushID_Ptr(value);
+    defer c.igPopID();
 
-    _ = zimgui.InputScalarExt(heading, .U32, @ptrCast(value), null, null, null, .{});
+    _ = c.igInputScalar(heading, c.ImGuiDataType_U32, @ptrCast(value), null, null, null, 0);
 }
 
 fn inputVector2(heading: ?[*:0]const u8, value: *Vector2) void {
-    zimgui.PushID_Ptr(value);
-    defer zimgui.PopID();
+    c.igPushID_Ptr(value);
+    defer c.igPopID();
 
-    _ = zimgui.InputFloat2Ext(heading, value, "%.2f", .{});
+    _ = c.igInputFloat2(heading, @ptrCast(value), "%.2f", 0);
 }
 
 fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
@@ -347,11 +358,11 @@ fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
         items[i] = enum_field.name;
     }
 
-    zimgui.PushID_Ptr(value);
-    defer zimgui.PopID();
+    c.igPushID_Ptr(value);
+    defer c.igPopID();
 
     var current_item: i32 = @intFromEnum(value.*);
-    if (zimgui.Combo_Str_arr(heading, &current_item, &items, count)) {
+    if (c.igCombo_Str_arr(heading, &current_item, &items, count, 0)) {
         value.* = @enumFromInt(current_item);
     }
 }
@@ -454,13 +465,13 @@ fn drawDebugCircle(renderer: *c.SDL_Renderer, center: Vector2, radius: f32) void
         _ = c.SDL_RenderPoint(renderer, center[X] - y, center[Y] - x);
         _ = c.SDL_RenderPoint(renderer, center[X] - y, center[Y] + x);
 
-        if(err <= 0) {
+        if (err <= 0) {
             y += 1;
             err += dy;
             dy += 2;
         }
 
-        if(err > 0) {
+        if (err > 0) {
             x -= 1;
             dx += 2;
             err += (dx - diameter);

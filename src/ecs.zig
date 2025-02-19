@@ -3,13 +3,7 @@ const game = @import("game.zig");
 const math = @import("math.zig");
 const aseprite = @import("aseprite.zig");
 
-const c = @cImport({
-    @cDefine("SDL_DISABLE_OLD_NAMES", {});
-    @cInclude("SDL3/SDL.h");
-    @cInclude("SDL3/SDL_revision.h");
-    @cDefine("SDL_MAIN_HANDLED", {});
-    @cInclude("SDL3/SDL_main.h");
-});
+const c = game.c;
 
 const Vector2 = math.Vector2;
 const X = math.X;
