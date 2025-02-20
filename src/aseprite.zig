@@ -45,13 +45,13 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
 
         if (opt_header) |header| {
             std.debug.assert(header.magic_number == 0xA5E0);
-            std.debug.print("Frame count: {d}\n", .{header.frames});
+            std.log.info("Frame count: {d}", .{header.frames});
 
             for (0..header.frames) |_| {
                 if (try parseFrameHeader(&file, allocator)) |frame_header| {
                     std.debug.assert(frame_header.magic_number == 0xF1FA);
-                    std.debug.print(
-                        "Frame size: {d}, chunks: {d}\n",
+                    std.log.info(
+                        "Frame size: {d}, chunks: {d}",
                         .{ frame_header.byte_count, frame_header.chunkCount() },
                     );
 
@@ -61,8 +61,8 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
                     for (0..frame_header.chunkCount()) |_| {
                         if (try parseChunkHeader(&file, allocator)) |chunk_header| {
                             defer allocator.destroy(chunk_header);
-                            std.debug.print(
-                                "Chunk size: {d}, chunk_type: {}\n",
+                            std.log.info(
+                                "Chunk size: {d}, chunk_type: {}",
                                 .{ chunk_header.chunkSize(), chunk_header.chunk_type },
                             );
 
@@ -99,7 +99,7 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
             }
         }
     } else |err| {
-        std.debug.print("Cannot find file '{s}': {s}", .{ path, @errorName(err) });
+        std.log.info("Cannot find file '{s}': {s}", .{ path, @errorName(err) });
     }
 
     return result;
@@ -351,7 +351,7 @@ fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: s
     chunk.cel_type = @enumFromInt(try file.reader().readInt(u16, .little));
     chunk.z_index = try file.reader().readInt(i16, .little);
 
-    std.debug.print("Cel x: {d}, y: {d}, type: {}\n", .{ chunk.x, chunk.y, chunk.cel_type });
+    std.log.info("Cel x: {d}, y: {d}, type: {}", .{ chunk.x, chunk.y, chunk.cel_type });
 
     _ = try file.reader().skipBytes(5, .{});
 
@@ -363,14 +363,14 @@ fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: s
                 .pixels = undefined,
             } };
 
-            std.debug.print(
-                "Cel width: {d}, height: {d}\n",
+            std.log.info(
+                "Cel width: {d}, height: {d}",
                 .{ chunk.data.compressedImage.width, chunk.data.compressedImage.height },
             );
 
             const data_size = header.chunkSize() - AseCelChunk.headerSize(chunk.cel_type);
-            std.debug.print(
-                "Data size: {d}, chunk size: {d}, header size: {d}\n",
+            std.log.info(
+                "Data size: {d}, chunk size: {d}, header size: {d}",
                 .{ data_size, header.chunkSize(), AseCelChunk.headerSize(chunk.cel_type) },
             );
 
@@ -378,7 +378,7 @@ fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: s
             defer allocator.free(compressed_data);
             const bytes_read = try file.reader().read(compressed_data);
 
-            std.debug.print("Read: {d}, expected: {d}\n", .{ bytes_read, data_size });
+            std.log.info("Read: {d}, expected: {d}", .{ bytes_read, data_size });
             std.debug.assert(bytes_read == data_size);
 
             var compressed_stream = std.io.fixedBufferStream(compressed_data);
@@ -386,7 +386,7 @@ fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: s
             chunk.data.compressedImage.pixels =
                 try decompress_stream.reader().readAllAlloc(allocator, std.math.maxInt(usize));
 
-            std.debug.print("Decompressed: {d}\n", .{chunk.data.compressedImage.pixels.len});
+            std.log.info("Decompressed: {d}", .{chunk.data.compressedImage.pixels.len});
         },
         else => {
             _ = try file.reader().skipBytes(AseCelChunk.headerSize(chunk.cel_type), .{});

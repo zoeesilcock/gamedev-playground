@@ -111,7 +111,7 @@ fn checkForChanges(state: GameStatePtr, allocator: std.mem.Allocator) void {
     if (dllHasChanged()) {
         if (build_process != null) {
             checkRecompileResult() catch {
-                std.debug.print("Failed to recompile the game lib.\n", .{});
+                @panic("Failed to recompile the game lib.");
             };
         }
 
@@ -194,7 +194,7 @@ fn loadDll() !void {
     gameTick = dyn_lib.lookup(@TypeOf(gameTick), "tick") orelse return error.LookupFail;
     gameDraw = dyn_lib.lookup(@TypeOf(gameDraw), "draw") orelse return error.LookupFail;
 
-    std.debug.print("Game lib loaded.\n", .{});
+    std.log.info("Game lib loaded.", .{});
 }
 
 fn recompileDll(allocator: std.mem.Allocator) !void {

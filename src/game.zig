@@ -134,7 +134,7 @@ pub const SpriteAsset = struct {
 
 fn sdlPanicIfNull(result: anytype, message: []const u8) @TypeOf(result) {
     if (result == null) {
-        std.debug.print("{s} error: {s}\n", .{ message, c.SDL_GetError() });
+        std.log.err("{s} SDL error: {s}", .{ message, c.SDL_GetError() });
         @panic(message);
     }
 
@@ -143,7 +143,7 @@ fn sdlPanicIfNull(result: anytype, message: []const u8) @TypeOf(result) {
 
 fn sdlPanic(result: bool, message: []const u8) void {
     if (result == false) {
-        std.debug.print("{s} error: {s}\n", .{ message, c.SDL_GetError() });
+        std.log.err("{s} SDL error: {s}", .{ message, c.SDL_GetError() });
         @panic(message);
     }
 }
@@ -457,7 +457,7 @@ fn loadSprite(path: []const u8, renderer: *c.SDL_Renderer, allocator: std.mem.Al
             textures.append(texture.?) catch undefined;
         }
 
-        std.debug.print("loadSprite: {s}: {d}\n", .{ path, doc.frames.len });
+        std.log.info("loadSprite: {s}: {d}", .{ path, doc.frames.len });
 
         result = SpriteAsset{
             .path = path,
