@@ -5,6 +5,10 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const lib_only = b.option(bool, "lib_only", "only build the shared library") orelse false;
+    const internal = b.option(bool, "internal", "include debug interface") orelse true;
+
+    const build_options = b.addOptions();
+    build_options.addOption(bool, "internal", internal);
 
     const lib = b.addSharedLibrary(.{
         .name = "playground",
@@ -12,6 +16,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    lib.root_module.addOptions("build_options", build_options);
 
     const lib_unit_tests = b.addTest(.{
         .root_source_file = b.path("src/game.zig"),

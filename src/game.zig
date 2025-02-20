@@ -3,7 +3,9 @@ const aseprite = @import("aseprite.zig");
 const ecs = @import("ecs.zig");
 const math = @import("math.zig");
 const imgui = @import("imgui.zig");
-const debug = @import("debug.zig");
+const debug = if (INTERNAL) @import("debug.zig") else struct {
+    pub const DebugState = void;
+};
 
 pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
@@ -27,6 +29,7 @@ const G = math.G;
 const B = math.B;
 const A = math.A;
 
+const INTERNAL: bool = @import("build_options").internal;
 const DEFAULT_WORLD_SCALE: u32 = 4;
 const WORLD_WIDTH: u32 = 200;
 const WORLD_HEIGHT: u32 = 150;
@@ -150,7 +153,10 @@ export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, ren
     var state: *State = allocator.create(State) catch @panic("Out of memory");
 
     state.allocator = allocator;
-    state.debug_state.init(state.allocator);
+
+    if (INTERNAL) {
+        state.debug_state.init(state.allocator);
+    }
 
     state.window = window;
     state.renderer = renderer;
@@ -230,7 +236,9 @@ export fn reloaded(state_ptr: *anyopaque) void {
 export fn processInput(state_ptr: *anyopaque) bool {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    state.debug_state.input.reset();
+    if (INTERNAL) {
+        state.debug_state.input.reset();
+    }
 
     var continue_running: bool = true;
     var event: c.SDL_Event = undefined;
@@ -245,7 +253,9 @@ export fn processInput(state_ptr: *anyopaque) bool {
             break;
         }
 
-        debug.processInputEvent(state, event);
+        if (INTERNAL) {
+            debug.processInputEvent(state, event);
+        }
 
         // Game input.
         if (event.type == c.SDL_EVENT_KEY_DOWN or event.type == c.SDL_EVENT_KEY_UP) {
@@ -262,7 +272,9 @@ export fn processInput(state_ptr: *anyopaque) bool {
         }
     }
 
-    debug.handleInput(state);
+    if (INTERNAL) {
+        debug.handleInput(state);
+    }
 
     return continue_running;
 }
@@ -277,7 +289,9 @@ export fn tick(state_ptr: *anyopaque) void {
     }
     state.time = c.SDL_GetTicks();
 
-    debug.calculateFPS(state);
+    if (INTERNAL) {
+        debug.calculateFPS(state);
+    }
 
     if (state.ball.transform) |transform| {
         if ((state.ball_horizontal_bounce_start_time + BALL_HORIZONTAL_BOUNCE_TIME) < state.time) {
@@ -306,7 +320,9 @@ export fn tick(state_ptr: *anyopaque) void {
                 );
                 transform.velocity[Y] = 0;
 
-                state.debug_state.addCollision(&collision, state.time);
+                if (INTERNAL) {
+                    state.debug_state.addCollision(&collision, state.time);
+                }
 
                 // Check if the other sprite is a wall of the same color as the ball.
                 if (collision.other.entity.color) |other_color| {
@@ -329,7 +345,9 @@ export fn tick(state_ptr: *anyopaque) void {
                 transform.velocity[X] = -transform.velocity[X];
                 state.ball_horizontal_bounce_start_time = state.time;
 
-                state.debug_state.addCollision(&collision, state.time);
+                if (INTERNAL) {
+                    state.debug_state.addCollision(&collision, state.time);
+                }
 
                 // Check if the other sprite is a wall of the same color as the ball.
                 if (collision.other.entity.color) |other_color| {
@@ -367,7 +385,10 @@ export fn draw(state_ptr: *anyopaque) void {
         _ = c.SDL_SetRenderDrawColor(state.renderer, 0, 0, 0, 255);
         _ = c.SDL_RenderClear(state.renderer);
         drawWorld(state);
-        debug.drawDebugOverlay(state);
+
+        if (INTERNAL) {
+            debug.drawDebugOverlay(state);
+        }
     }
 
     _ = c.SDL_SetRenderTarget(state.renderer, null);
@@ -376,7 +397,9 @@ export fn draw(state_ptr: *anyopaque) void {
         _ = c.SDL_RenderClear(state.renderer);
         _ = c.SDL_RenderTexture(state.renderer, state.render_texture, null, &state.dest_rect);
 
-        debug.drawDebugUI(state);
+        if (INTERNAL) {
+            debug.drawDebugUI(state);
+        }
     }
     _ = c.SDL_RenderPresent(state.renderer);
 }
