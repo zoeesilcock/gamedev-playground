@@ -22,17 +22,7 @@ const A = math.A;
 const PLATFORM = @import("builtin").os.tag;
 const DOUBLE_CLICK_THRESHOLD: u64 = 300;
 
-const DebugCollision = struct {
-    collision: ecs.Collision,
-    time_added: u64,
-};
-
 pub const DebugState = struct {
-    last_left_click_time: u64,
-    last_left_click_entity: ?*ecs.Entity,
-    hovered_entity: ?*ecs.Entity,
-    selected_entity: ?*ecs.Entity,
-
     input: DebugInput,
     mode: enum {
         Select,
@@ -40,9 +30,14 @@ pub const DebugState = struct {
     },
     current_wall_color: ?ecs.ColorComponentValue,
     show_level_editor: bool,
-    show_colliders: bool,
 
+    show_colliders: bool,
     collisions: std.ArrayList(DebugCollision),
+
+    last_left_click_time: u64,
+    last_left_click_entity: ?*ecs.Entity,
+    hovered_entity: ?*ecs.Entity,
+    selected_entity: ?*ecs.Entity,
 
     fps_counted_frames: u64,
     fps_since: u64,
@@ -52,14 +47,19 @@ pub const DebugState = struct {
         self.input = DebugInput{};
         self.mode = .Select;
         self.current_wall_color = .Red;
+        self.show_level_editor = false;
+
+        self.show_colliders = false;
         self.collisions = std.ArrayList(DebugCollision).init(allocator);
-        self.fps_counted_frames = 0;
-        self.fps_since = 0;
-        self.fps_average = 0;
+
         self.selected_entity = null;
         self.hovered_entity = null;
         self.last_left_click_time = 0;
         self.last_left_click_entity = null;
+
+        self.fps_counted_frames = 0;
+        self.fps_since = 0;
+        self.fps_average = 0;
     }
 
     pub fn addCollision(self: *DebugState, collision: *const ecs.Collision, time: u64) void {
@@ -78,6 +78,11 @@ const DebugInput = struct {
     pub fn reset(self: *DebugInput) void {
         self.left_mouse_pressed = false;
     }
+};
+
+const DebugCollision = struct {
+    collision: ecs.Collision,
+    time_added: u64,
 };
 
 pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
