@@ -15,8 +15,8 @@ const LIB_OUTPUT_DIR = if (PLATFORM == .windows) "zig-out/bin/" else "zig-out/li
 const LIB_PATH = if (PLATFORM == .windows) "zig-out/bin/playground.dll" else "zig-out/lib/libplayground.dylib";
 const LIB_PATH_RUNTIME = if (PLATFORM == .windows) "zig-out/bin/playground_temp.dll" else LIB_PATH;
 
-const WINDOW_WIDTH = if (DEBUG) 800 else 1200;
-const WINDOW_HEIGHT = if (DEBUG) 600 else 800;
+const WINDOW_WIDTH = if (DEBUG) 800 else 1600;
+const WINDOW_HEIGHT = if (DEBUG) 600 else 1200;
 const WINDOW_DECORATIONS_WIDTH = if (PLATFORM == .windows) 16 else 0;
 const WINDOW_DECORATIONS_HEIGHT = if (PLATFORM == .windows) 39 else 0;
 const TARGET_FPS = 120;
