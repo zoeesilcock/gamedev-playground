@@ -97,11 +97,6 @@ pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
             c.SDLK_E => {
                 state.debug_state.show_level_editor = !state.debug_state.show_level_editor;
             },
-            c.SDLK_F => {
-                state.fullscreen = !state.fullscreen;
-                _ = c.SDL_SetWindowFullscreen(state.window, state.fullscreen);
-                game.setupRenderTexture(state);
-            },
             c.SDLK_C => {
                 state.debug_state.show_colliders = !state.debug_state.show_colliders;
             },

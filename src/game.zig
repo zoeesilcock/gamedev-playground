@@ -267,8 +267,18 @@ export fn processInput(state_ptr: *anyopaque) bool {
                 c.SDLK_RIGHT => {
                     state.input.right = is_down;
                 },
+                c.SDLK_F => {
+                    if (is_down) {
+                        state.fullscreen = !state.fullscreen;
+                        _ = c.SDL_SetWindowFullscreen(state.window, state.fullscreen);
+                    }
+                },
                 else => {},
             }
+        }
+
+        if (event.type == c.SDL_EVENT_WINDOW_RESIZED) {
+            setupRenderTexture(state);
         }
     }
 
