@@ -235,7 +235,13 @@ pub fn drawDebugUI(state: *State) void {
             null,
             c.ImGuiViewportFlags_NoFocusOnAppearing | c.ImGuiWindowFlags_NoNavFocus | c.ImGuiWindowFlags_NoNavInputs,
         );
-        defer c.igEnd();
+
+        if (c.igButton("Restart", c.ImVec2{ .x = 100, .y = 20 })) {
+            c.igEnd();
+
+            game.restart(state);
+            return;
+        }
 
         c.igText("Mode:");
         if (c.igRadioButton_Bool("Select", state.debug_state.mode == .Select)) {
@@ -260,6 +266,8 @@ pub fn drawDebugUI(state: *State) void {
             state.debug_state.mode = .Edit;
             state.debug_state.current_wall_color = .Blue;
         }
+
+        c.igEnd();
     }
 
     if (state.debug_state.selected_entity) |selected_entity| {

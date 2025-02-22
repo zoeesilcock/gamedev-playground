@@ -166,7 +166,7 @@ export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, ren
     state.world_width = WORLD_WIDTH;
     state.world_height = WORLD_HEIGHT;
 
-    state.time = 0;
+    state.time = c.SDL_GetTicks();
     state.delta_time = 0;
     state.input = Input{};
     state.ball_horizontal_bounce_start_time = 0;
@@ -185,6 +185,23 @@ export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, ren
     imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
 
     return state;
+}
+
+pub fn restart(state: *State) void {
+    deinit();
+    state.* = @as(
+        *State,
+        @ptrCast(
+            @alignCast(
+                init(
+                    state.window_width,
+                    state.window_height,
+                    state.window,
+                    state.renderer,
+                ),
+            ),
+        ),
+    ).*;
 }
 
 export fn deinit() void {
