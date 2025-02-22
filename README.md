@@ -16,7 +16,7 @@ Double clicking on an entity will open it's sprite in Aseprite. This works parti
 ### Keys
 * P: Toggle pause.
 * F: Toggle fullscreen.
-* E: Toggle level editor.
+* E: Toggle editor.
 * C: Toggle collider outlines.
 * S: Save level.
 * L: Load level.

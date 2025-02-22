@@ -29,7 +29,7 @@ pub const DebugState = struct {
         Edit,
     },
     current_wall_color: ?ecs.ColorComponentValue,
-    show_level_editor: bool,
+    show_editor: bool,
 
     show_colliders: bool,
     collisions: std.ArrayList(DebugCollision),
@@ -47,7 +47,7 @@ pub const DebugState = struct {
         self.input = DebugInput{};
         self.mode = .Select;
         self.current_wall_color = .Red;
-        self.show_level_editor = false;
+        self.show_editor = false;
 
         self.show_colliders = false;
         self.collisions = std.ArrayList(DebugCollision).init(allocator);
@@ -95,7 +95,7 @@ pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
                 state.is_paused = !state.is_paused;
             },
             c.SDLK_E => {
-                state.debug_state.show_level_editor = !state.debug_state.show_level_editor;
+                state.debug_state.show_editor = !state.debug_state.show_editor;
             },
             c.SDLK_C => {
                 state.debug_state.show_colliders = !state.debug_state.show_colliders;
@@ -131,49 +131,46 @@ pub fn handleInput(state: *State) void {
 
     const input: *DebugInput = &state.debug_state.input;
 
-    // Level editor.
-    if (!state.debug_state.show_level_editor) {
-        if (state.debug_state.hovered_entity) |hovered_entity| {
-            if (input.left_mouse_pressed) {
-                if (state.debug_state.mode == .Edit) {
-                    if (state.debug_state.current_wall_color) |editor_wall_color| {
-                        if (editor_wall_color == hovered_entity.color.?.color) {
-                            game.removeEntity(state, hovered_entity);
-                        } else {
-                            game.removeEntity(state, hovered_entity);
-                            const tiled_position = getTiledPosition(
-                                input.mouse_position / @as(Vector2, @splat(state.world_scale)),
-                                state.assets.getWall(editor_wall_color),
-                            );
-                            _ = game.addWall(state, editor_wall_color, tiled_position) catch undefined;
-                        }
-                    }
-                } else {
-                    if (state.time - state.debug_state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
-                        state.debug_state.last_left_click_entity.? == hovered_entity)
-                    {
-                        openSprite(state, hovered_entity);
+    if (state.debug_state.hovered_entity) |hovered_entity| {
+        if (input.left_mouse_pressed) {
+            if (state.debug_state.mode == .Edit) {
+                if (state.debug_state.current_wall_color) |editor_wall_color| {
+                    if (editor_wall_color == hovered_entity.color.?.color) {
+                        game.removeEntity(state, hovered_entity);
                     } else {
-                        state.debug_state.selected_entity = hovered_entity;
-                    }
-                }
-
-                state.debug_state.last_left_click_time = state.time;
-                state.debug_state.last_left_click_entity = hovered_entity;
-            }
-        } else {
-            if (input.left_mouse_pressed) {
-                if (state.debug_state.mode == .Edit) {
-                    if (state.debug_state.current_wall_color) |editor_wall_color| {
+                        game.removeEntity(state, hovered_entity);
                         const tiled_position = getTiledPosition(
                             input.mouse_position / @as(Vector2, @splat(state.world_scale)),
                             state.assets.getWall(editor_wall_color),
                         );
                         _ = game.addWall(state, editor_wall_color, tiled_position) catch undefined;
                     }
-                } else {
-                    state.debug_state.selected_entity = null;
                 }
+            } else {
+                if (state.time - state.debug_state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
+                    state.debug_state.last_left_click_entity.? == hovered_entity)
+                {
+                    openSprite(state, hovered_entity);
+                } else {
+                    state.debug_state.selected_entity = hovered_entity;
+                }
+            }
+
+            state.debug_state.last_left_click_time = state.time;
+            state.debug_state.last_left_click_entity = hovered_entity;
+        }
+    } else {
+        if (input.left_mouse_pressed) {
+            if (state.debug_state.mode == .Edit) {
+                if (state.debug_state.current_wall_color) |editor_wall_color| {
+                    const tiled_position = getTiledPosition(
+                        input.mouse_position / @as(Vector2, @splat(state.world_scale)),
+                        state.assets.getWall(editor_wall_color),
+                    );
+                    _ = game.addWall(state, editor_wall_color, tiled_position) catch undefined;
+                }
+            } else {
+                state.debug_state.selected_entity = null;
             }
         }
     }
@@ -232,10 +229,12 @@ pub fn drawDebugUI(state: *State) void {
     );
     c.igEnd();
 
-    if (state.debug_state.show_level_editor) {
-        _ = c.igBegin("Level editor", null, c.ImGuiViewportFlags_NoFocusOnAppearing |
-            c.ImGuiWindowFlags_NoNavFocus |
-            c.ImGuiWindowFlags_NoNavInputs);
+    if (state.debug_state.show_editor) {
+        _ = c.igBegin(
+            "Editor",
+            null,
+            c.ImGuiViewportFlags_NoFocusOnAppearing | c.ImGuiWindowFlags_NoNavFocus | c.ImGuiWindowFlags_NoNavInputs,
+        );
         defer c.igEnd();
 
         c.igText("Mode:");
@@ -394,21 +393,19 @@ pub fn drawDebugOverlay(state: *State) void {
     }
 
     // Highlight the currently hovered entity.
-    if (!state.debug_state.show_level_editor) {
-        drawEntityHighlight(state.renderer, state.debug_state.selected_entity, Color{ 255, 0, 0, 255 });
-        drawEntityHighlight(state.renderer, state.debug_state.hovered_entity, Color{ 255, 150, 0, 255 });
+    drawEntityHighlight(state.renderer, state.debug_state.selected_entity, Color{ 255, 0, 0, 255 });
+    drawEntityHighlight(state.renderer, state.debug_state.hovered_entity, Color{ 255, 150, 0, 255 });
 
-        // Draw the current mouse position.
-        const mouse_size: f32 = 8;
-        const mouse_rect: c.SDL_FRect = .{
-            .x = (state.debug_state.input.mouse_position[X] - (mouse_size / 2)) / state.world_scale,
-            .y = (state.debug_state.input.mouse_position[Y] - (mouse_size / 2)) / state.world_scale,
-            .w = mouse_size / state.world_scale,
-            .h = mouse_size / state.world_scale,
-        };
-        _ = c.SDL_SetRenderDrawColor(state.renderer, 255, 255, 0, 255);
-        _ = c.SDL_RenderFillRect(state.renderer, &mouse_rect);
-    }
+    // Draw the current mouse position.
+    const mouse_size: f32 = 8;
+    const mouse_rect: c.SDL_FRect = .{
+        .x = (state.debug_state.input.mouse_position[X] - (mouse_size / 2)) / state.world_scale,
+        .y = (state.debug_state.input.mouse_position[Y] - (mouse_size / 2)) / state.world_scale,
+        .w = mouse_size / state.world_scale,
+        .h = mouse_size / state.world_scale,
+    };
+    _ = c.SDL_SetRenderDrawColor(state.renderer, 255, 255, 0, 255);
+    _ = c.SDL_RenderFillRect(state.renderer, &mouse_rect);
 }
 
 fn drawDebugCollider(
