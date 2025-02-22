@@ -412,10 +412,6 @@ export fn draw(state_ptr: *anyopaque) void {
         _ = c.SDL_SetRenderDrawColor(state.renderer, 0, 0, 0, 255);
         _ = c.SDL_RenderClear(state.renderer);
         drawWorld(state);
-
-        if (INTERNAL) {
-            debug.drawDebugOverlay(state);
-        }
     }
 
     _ = c.SDL_SetRenderTarget(state.renderer, null);
@@ -425,6 +421,7 @@ export fn draw(state_ptr: *anyopaque) void {
         _ = c.SDL_RenderTexture(state.renderer, state.render_texture, null, &state.dest_rect);
 
         if (INTERNAL) {
+            debug.drawDebugOverlay(state);
             debug.drawDebugUI(state);
         }
     }

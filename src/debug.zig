@@ -376,9 +376,15 @@ fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
 
 pub fn drawDebugOverlay(state: *State) void {
     // Highlight colliders.
+    const scale = state.world_scale;
+    const offset = Vector2{
+        state.dest_rect.x / state.world_scale,
+        state.dest_rect.y / state.world_scale,
+    };
+
     if (state.debug_state.show_colliders) {
         for (state.colliders.items) |collider| {
-            drawDebugCollider(state.renderer, collider, Color{ 0, 255, 0, 255 });
+            drawDebugCollider(state.renderer, collider, Color{ 0, 255, 0, 255 }, scale, offset);
         }
 
         // Highlight collisions.
@@ -395,60 +401,69 @@ pub fn drawDebugOverlay(state: *State) void {
                     @as(f32, @floatFromInt(((collision.time_added + show_time) - state.time))) /
                     @as(f32, @floatFromInt(show_time));
                 const color: Color = .{ 255, 128, 0, @intFromFloat(255 * time_remaining) };
-                drawDebugCollider(state.renderer, collision.collision.other, color);
+                drawDebugCollider(state.renderer, collision.collision.other, color, scale, offset);
             }
         }
     }
 
     // Highlight the currently hovered entity.
-    drawEntityHighlight(state.renderer, state.debug_state.selected_entity, Color{ 255, 0, 0, 255 });
-    drawEntityHighlight(state.renderer, state.debug_state.hovered_entity, Color{ 255, 150, 0, 255 });
+    drawEntityHighlight(state.renderer, state.debug_state.selected_entity, Color{ 255, 0, 0, 255 }, scale, offset);
+    drawEntityHighlight(state.renderer, state.debug_state.hovered_entity, Color{ 255, 150, 0, 255 }, scale, offset);
 
     // Draw the current mouse position.
     const mouse_size: f32 = 8;
-    const mouse_rect: c.SDL_FRect = .{
-        .x = (state.debug_state.input.mouse_position[X] - (mouse_size / 2)) / state.world_scale,
-        .y = (state.debug_state.input.mouse_position[Y] - (mouse_size / 2)) / state.world_scale,
-        .w = mouse_size / state.world_scale,
-        .h = mouse_size / state.world_scale,
+    const mouse_rect: math.Rect = .{
+        .position = Vector2{
+            (state.debug_state.input.mouse_position[X] - (mouse_size / 2)) / scale,
+            (state.debug_state.input.mouse_position[Y] - (mouse_size / 2)) / scale,
+        } + offset,
+        .size = Vector2{
+            mouse_size / scale,
+            mouse_size / scale,
+        },
     };
     _ = c.SDL_SetRenderDrawColor(state.renderer, 255, 255, 0, 255);
-    _ = c.SDL_RenderFillRect(state.renderer, &mouse_rect);
+    _ = c.SDL_RenderFillRect(state.renderer, &mouse_rect.scaled(scale).toSDL());
 }
 
 fn drawDebugCollider(
     renderer: *c.SDL_Renderer,
     collider: *ecs.ColliderComponent,
     color: Color,
+    scale: f32,
+    offset: Vector2,
 ) void {
     if (collider.entity.transform) |transform| {
-        const center = collider.center(transform);
-        const center_rect = c.SDL_FRect{
-            .x = center[X] - 0.5,
-            .y = center[Y] - 0.5,
-            .w = 1,
-            .h = 1,
+        const center = collider.center(transform) + offset;
+        const center_rect: math.Rect = .{
+            .position = Vector2{ center[X] - 0.5, center[Y] - 0.5 },
+            .size = Vector2{ 1, 1 },
         };
-        const collider_rect = c.SDL_FRect{
-            .x = transform.position[X] + collider.left(),
-            .y = transform.position[Y] + collider.top(),
-            .w = collider.right() - collider.left(),
-            .h = collider.bottom() - collider.top(),
+        const collider_rect: math.Rect = .{
+            .position = Vector2{
+                (transform.position[X] + collider.left()),
+                (transform.position[Y] + collider.top()),
+            } + offset,
+            .size = Vector2{
+                (collider.right() - collider.left()),
+                (collider.bottom() - collider.top()),
+            },
         };
 
         switch (collider.shape) {
             .Square => {
                 _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-                _ = c.SDL_RenderRect(renderer, &collider_rect);
+                _ = c.SDL_RenderRect(renderer, &collider_rect.scaled(scale).toSDL());
             },
             .Circle => {
                 _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-                drawDebugCircle(renderer, center, collider.radius);
+                const scale2: Vector2 = @splat(scale);
+                drawDebugCircle(renderer, center * scale2, collider.radius * scale);
             },
         }
 
         _ = c.SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
-        _ = c.SDL_RenderRect(renderer, &center_rect);
+        _ = c.SDL_RenderFillRect(renderer, &center_rect.scaled(scale).toSDL());
     }
 }
 
@@ -488,18 +503,24 @@ fn drawEntityHighlight(
     renderer: *c.SDL_Renderer,
     opt_entity: ?*ecs.Entity,
     color: Color,
+    scale: f32,
+    offset: Vector2,
 ) void {
     if (opt_entity) |entity| {
         if (entity.transform) |transform| {
             if (entity.collider) |collider| {
-                const entity_rect = c.SDL_FRect{
-                    .x = transform.position[X] + collider.left(),
-                    .y = transform.position[Y] + collider.top(),
-                    .w = collider.right() - collider.left(),
-                    .h = collider.bottom() - collider.top(),
+                const entity_rect: math.Rect = .{
+                    .position = Vector2{
+                        transform.position[X] + collider.left(),
+                        transform.position[Y] + collider.top(),
+                    } + offset,
+                    .size = Vector2{
+                        collider.right() - collider.left(),
+                        collider.bottom() - collider.top(),
+                    },
                 };
                 _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-                _ = c.SDL_RenderRect(renderer, &entity_rect);
+                _ = c.SDL_RenderRect(renderer, &entity_rect.scaled(scale).toSDL());
             }
         }
     }
