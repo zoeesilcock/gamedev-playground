@@ -21,6 +21,7 @@ const A = math.A;
 
 const PLATFORM = @import("builtin").os.tag;
 const DOUBLE_CLICK_THRESHOLD: u64 = 300;
+const MAX_FRAME_TIME_COUNT: u32 = 300;
 
 pub const DebugState = struct {
     input: DebugInput,
@@ -39,9 +40,10 @@ pub const DebugState = struct {
     hovered_entity: ?*ecs.Entity,
     selected_entity: ?*ecs.Entity,
 
-    fps_counted_frames: u64,
-    fps_since: u64,
+    current_frame_index: u32,
+    frame_times: [MAX_FRAME_TIME_COUNT]u64 = [1]u64{0} ** MAX_FRAME_TIME_COUNT,
     fps_average: f32,
+    show_fps_graph: bool,
 
     pub fn init(self: *DebugState, allocator: std.mem.Allocator) void {
         self.input = DebugInput{};
@@ -57,9 +59,8 @@ pub const DebugState = struct {
         self.last_left_click_time = 0;
         self.last_left_click_entity = null;
 
-        self.fps_counted_frames = 0;
-        self.fps_since = 0;
         self.fps_average = 0;
+        self.show_fps_graph = false;
     }
 
     pub fn addCollision(self: *DebugState, collision: *const ecs.Collision, time: u64) void {
@@ -67,6 +68,27 @@ pub const DebugState = struct {
             .collision = collision.*,
             .time_added = time,
         }) catch unreachable;
+    }
+
+    pub fn getPreviousFrameIndex(frame_index: u32) u32 {
+        var previous_frame_index: u32 = frame_index -% 1;
+        if (previous_frame_index > MAX_FRAME_TIME_COUNT) {
+            previous_frame_index = MAX_FRAME_TIME_COUNT - 1;
+        }
+        return previous_frame_index;
+    }
+
+    pub fn getFrameTime(self: *DebugState, frame_index: u32) f32 {
+        var elapsed: u64 = 0;
+        const previous_frame_index = getPreviousFrameIndex(frame_index);
+
+        const current_frame = self.frame_times[frame_index];
+        const previous_frame = self.frame_times[previous_frame_index];
+        if (current_frame > 0 and previous_frame > 0 and current_frame > previous_frame) {
+            elapsed = current_frame - previous_frame;
+        }
+
+        return @as(f32, @floatFromInt(elapsed)) / @as(f32, @floatFromInt(c.SDL_GetPerformanceFrequency()));
     }
 };
 
@@ -190,21 +212,17 @@ fn getHoveredEntity(state: *State) ?*ecs.Entity {
 }
 
 pub fn calculateFPS(state: *State) void {
-    if (state.debug_state.fps_counted_frames == 0) {
-        state.debug_state.fps_since = state.time;
+    state.debug_state.current_frame_index += 1;
+    if (state.debug_state.current_frame_index >= MAX_FRAME_TIME_COUNT) {
+        state.debug_state.current_frame_index = 0;
     }
-    state.debug_state.fps_counted_frames += 1;
-    const fps_time_passed = state.time - state.debug_state.fps_since;
-    if (fps_time_passed > 1000) {
-        state.debug_state.fps_average =
-            @as(f32, @floatFromInt(state.debug_state.fps_counted_frames)) /
-            (@as(f32, @floatFromInt(fps_time_passed)) / 1000);
-    } else {
-        state.debug_state.fps_average = 0;
+    state.debug_state.frame_times[state.debug_state.current_frame_index] = c.SDL_GetPerformanceCounter();
+
+    var average: f32 = 0;
+    for (0..MAX_FRAME_TIME_COUNT) |i| {
+        average += state.debug_state.getFrameTime(@intCast(i));
     }
-    if (state.debug_state.fps_counted_frames > 1000000) {
-        state.debug_state.fps_counted_frames = 0;
-    }
+    state.debug_state.fps_average = 1 / (average / @as(f32, @floatFromInt(MAX_FRAME_TIME_COUNT)));
 }
 
 pub fn drawDebugUI(state: *State) void {
@@ -213,7 +231,7 @@ pub fn drawDebugUI(state: *State) void {
     var show_fps = true;
 
     c.igSetNextWindowPos(c.ImVec2{ .x = 5, .y = 5 }, 0, c.ImVec2{ .x = 0, .y = 0 });
-    c.igSetNextWindowSize(c.ImVec2{ .x = 100, .y = 10 }, 0);
+    c.igSetNextWindowSize(c.ImVec2{ .x = 300, .y = 160 }, 0);
     _ = c.igBegin(
         "FPS",
         &show_fps,
@@ -222,11 +240,34 @@ pub fn drawDebugUI(state: *State) void {
             c.ImGuiWindowFlags_NoBackground |
             c.ImGuiWindowFlags_NoTitleBar,
     );
-    c.igTextColored(
-        c.ImVec4{ .x = 0, .y = 1, .z = 0, .w = 1 },
-        "FPS: %d",
-        @as(u32, @intFromFloat(state.debug_state.fps_average)),
-    );
+
+    c.igTextColored(c.ImVec4{ .x = 0, .y = 1, .z = 0, .w = 1}, "FPS: %.0f", state.debug_state.fps_average);
+    c.igSameLine(0, 10);
+    if (c.igButton("##1", c.ImVec2{ .x = 16, .y = 16 })) {
+        state.debug_state.show_fps_graph = !state.debug_state.show_fps_graph;
+    }
+
+    if (state.debug_state.show_fps_graph) {
+        var timings: [MAX_FRAME_TIME_COUNT]f32 = [1]f32{0} ** MAX_FRAME_TIME_COUNT;
+        var max_value: f32 = 0;
+        for (0..MAX_FRAME_TIME_COUNT) |i| {
+            timings[i] = state.debug_state.getFrameTime(@intCast(i));
+            if (timings[i] > max_value) {
+                max_value = timings[i];
+            }
+        }
+        c.igPlotHistogram_FloatPtr(
+            "",
+            &timings,
+            timings.len,
+            0,
+            "",
+            0,
+            max_value,
+            c.ImVec2{ .x = 300, .y = 100 },
+            @sizeOf(f32),
+        );
+    }
     c.igEnd();
 
     if (state.debug_state.show_editor) {
