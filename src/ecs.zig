@@ -38,7 +38,6 @@ pub const TransformComponent = struct {
     entity: *Entity,
 
     position: Vector2,
-    // size: Vector2,
     velocity: Vector2,
     next_velocity: Vector2,
 
@@ -47,26 +46,6 @@ pub const TransformComponent = struct {
             transform.position += transform.velocity * @as(Vector2, @splat(delta_time));
         }
     }
-
-    // pub fn top(self: *const TransformComponent) f32 {
-    //     return self.position[Y];
-    // }
-    //
-    // pub fn bottom(self: *const TransformComponent) f32 {
-    //     return self.position[Y] + self.size[Y];
-    // }
-    //
-    // pub fn left(self: *const TransformComponent) f32 {
-    //     return self.position[X];
-    // }
-    //
-    // pub fn right(self: *const TransformComponent) f32 {
-    //     return self.position[X] + self.size[X];
-    // }
-    //
-    // pub fn center(self: *const TransformComponent) Vector2 {
-    //     return Vector2{ self.position[X] + self.size[X] * 0.5, self.position[Y] + self.size[Y] * 0.5 };
-    // }
 };
 
 const ColliderShape = enum {

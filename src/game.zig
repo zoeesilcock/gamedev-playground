@@ -625,10 +625,6 @@ fn addSprite(state: *State, position: Vector2) !*ecs.Entity {
     sprite.current_animation = null;
 
     transform.entity = entity;
-    // transform.size = Vector2{
-    //     @floatFromInt(sprite_asset.document.header.width),
-    //     @floatFromInt(sprite_asset.document.header.height),
-    // };
     transform.position = position;
     transform.velocity = @splat(0);
 
