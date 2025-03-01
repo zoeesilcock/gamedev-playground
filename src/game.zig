@@ -374,18 +374,7 @@ export fn tick(state_ptr: *anyopaque) void {
                     state.debug_state.addCollision(&collision, state.time);
                 }
 
-                // Check if the other sprite is a wall of the same color as the ball.
-                const self_color = collision.self.entity.color.?;
-                if (collision.other.entity.color) |other_color| {
-                    if (collision.other.entity.block) |other_block| {
-                        if (other_block.type == .Wall and other_color.color == self_color.color) {
-                            removeEntity(state, collision.other.entity);
-                        }
-                        if (other_block.type == .ColorChange and other_color.color != self_color.color) {
-                            self_color.color = other_color.color;
-                        }
-                    }
-                }
+                handleBallCollision(state, collision.self.entity, collision.other.entity);
             }
         } else {
             if (collision.self.entity.transform) |transform| {
@@ -405,12 +394,7 @@ export fn tick(state_ptr: *anyopaque) void {
                     state.debug_state.addCollision(&collision, state.time);
                 }
 
-                // Check if the other sprite is a wall of the same color as the ball.
-                if (collision.other.entity.color) |other_color| {
-                    if (collision.self.entity.color.?.color == other_color.color) {
-                        removeEntity(state, collision.other.entity);
-                    }
-                }
+                handleBallCollision(state, collision.self.entity, collision.other.entity);
             }
         }
     }
@@ -430,6 +414,21 @@ export fn tick(state_ptr: *anyopaque) void {
 
     if (isLevelCompleted(state)) {
         nextLevel(state);
+    }
+}
+
+fn handleBallCollision(state: *State, ball: *ecs.Entity, block: *ecs.Entity) void {
+    if (ball.color) |ball_color| {
+        if (block.color) |other_color| {
+            if (block.block) |other_block| {
+                if (other_block.type == .Wall and other_color.color == ball_color.color) {
+                    removeEntity(state, block);
+                }
+                if (other_block.type == .ColorChange and other_color.color != ball_color.color) {
+                    ball_color.color = other_color.color;
+                }
+            }
+        }
     }
 }
 
