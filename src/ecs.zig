@@ -21,6 +21,7 @@ pub const Entity = struct {
     collider: ?*ColliderComponent,
     sprite: ?*SpriteComponent,
     color: ?*ColorComponent,
+    block: ?*BlockComponent,
 };
 
 pub const TransformComponent = struct {
@@ -378,4 +379,16 @@ pub const ColorComponent = struct {
     entity: *Entity,
 
     color: ColorComponentValue,
+};
+
+pub const BlockType = enum {
+    Wall,
+    Deadly,
+    ColorChange,
+};
+
+pub const BlockComponent = struct {
+    entity: *Entity,
+
+    type: BlockType,
 };

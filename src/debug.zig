@@ -30,7 +30,8 @@ pub const DebugState = struct {
         Select,
         Edit,
     },
-    current_wall_color: ?ecs.ColorComponentValue,
+    current_block_color: ecs.ColorComponentValue,
+    current_block_type: ecs.BlockType,
     show_editor: bool,
     current_level_name: [:0]u8,
 
@@ -51,7 +52,8 @@ pub const DebugState = struct {
         self.input = DebugInput{};
 
         self.mode = .Select;
-        self.current_wall_color = .Red;
+        self.current_block_color = .Red;
+        self.current_block_type = .Wall;
         self.show_editor = false;
         self.current_level_name = @ptrCast(try allocator.alloc(u8, LEVEL_NAME_BUFFER_SIZE));
         _ = try std.fmt.bufPrintZ(self.current_level_name, "level1", .{});
@@ -161,21 +163,21 @@ pub fn handleInput(state: *State) void {
     state.debug_state.hovered_entity = getHoveredEntity(state);
 
     const input: *DebugInput = &state.debug_state.input;
+    const block_color = state.debug_state.current_block_color;
+    const block_type = state.debug_state.current_block_type;
 
     if (state.debug_state.hovered_entity) |hovered_entity| {
         if (input.left_mouse_pressed) {
             if (state.debug_state.mode == .Edit) {
-                if (state.debug_state.current_wall_color) |editor_wall_color| {
-                    if (editor_wall_color == hovered_entity.color.?.color) {
-                        game.removeEntity(state, hovered_entity);
-                    } else {
-                        game.removeEntity(state, hovered_entity);
-                        const tiled_position = getTiledPosition(
-                            input.mouse_position / @as(Vector2, @splat(state.world_scale)),
-                            state.assets.getWall(editor_wall_color),
-                        );
-                        _ = game.addWall(state, editor_wall_color, tiled_position) catch undefined;
-                    }
+                if (block_color == hovered_entity.color.?.color) {
+                    game.removeEntity(state, hovered_entity);
+                } else {
+                    game.removeEntity(state, hovered_entity);
+                    const tiled_position = getTiledPosition(
+                        input.mouse_position / @as(Vector2, @splat(state.world_scale)),
+                        state.assets.getWall(block_color, block_type),
+                    );
+                    _ = game.addWall(state, block_color, block_type, tiled_position) catch undefined;
                 }
             } else {
                 if (state.time - state.debug_state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
@@ -193,13 +195,11 @@ pub fn handleInput(state: *State) void {
     } else {
         if (input.left_mouse_pressed) {
             if (state.debug_state.mode == .Edit) {
-                if (state.debug_state.current_wall_color) |editor_wall_color| {
-                    const tiled_position = getTiledPosition(
-                        input.mouse_position / @as(Vector2, @splat(state.world_scale)),
-                        state.assets.getWall(editor_wall_color),
-                    );
-                    _ = game.addWall(state, editor_wall_color, tiled_position) catch undefined;
-                }
+                const tiled_position = getTiledPosition(
+                    input.mouse_position / @as(Vector2, @splat(state.world_scale)),
+                    state.assets.getWall(block_color, block_type),
+                );
+                _ = game.addWall(state, block_color, block_type, tiled_position) catch undefined;
             } else {
                 state.debug_state.selected_entity = null;
             }
@@ -319,22 +319,22 @@ pub fn drawDebugUI(state: *State) void {
         }
         c.igSpacing();
         if (c.igRadioButton_Bool("Gray", state.debug_state.mode == .Edit and
-            state.debug_state.current_wall_color == .Gray))
+            state.debug_state.current_block_color == .Gray))
         {
             state.debug_state.mode = .Edit;
-            state.debug_state.current_wall_color = .Gray;
+            state.debug_state.current_block_color = .Gray;
         }
         if (c.igRadioButton_Bool("Red", state.debug_state.mode == .Edit and
-            state.debug_state.current_wall_color == .Red))
+            state.debug_state.current_block_color == .Red))
         {
             state.debug_state.mode = .Edit;
-            state.debug_state.current_wall_color = .Red;
+            state.debug_state.current_block_color = .Red;
         }
         if (c.igRadioButton_Bool("Blue", state.debug_state.mode == .Edit and
-            state.debug_state.current_wall_color == .Blue))
+            state.debug_state.current_block_color == .Blue))
         {
             state.debug_state.mode = .Edit;
-            state.debug_state.current_wall_color = .Blue;
+            state.debug_state.current_block_color = .Blue;
         }
 
         c.igEnd();
@@ -634,10 +634,13 @@ fn saveLevel(state: *State, name: []const u8) !void {
 
     for (state.walls.items) |wall| {
         if (wall.color) |color| {
-            if (wall.transform) |transform| {
-                try file.writer().writeInt(u32, @intFromEnum(color.color), .little);
-                try file.writer().writeInt(i32, @intFromFloat(@round(transform.position[X])), .little);
-                try file.writer().writeInt(i32, @intFromFloat(@round(transform.position[Y])), .little);
+            if (wall.block) |block| {
+                if (wall.transform) |transform| {
+                    try file.writer().writeInt(u32, @intFromEnum(color.color), .little);
+                    try file.writer().writeInt(u32, @intFromEnum(block.type), .little);
+                    try file.writer().writeInt(i32, @intFromFloat(@round(transform.position[X])), .little);
+                    try file.writer().writeInt(i32, @intFromFloat(@round(transform.position[Y])), .little);
+                }
             }
         }
     }

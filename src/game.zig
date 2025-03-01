@@ -91,9 +91,15 @@ const Input = struct {
 
 pub const Assets = struct {
     test_sprite: ?SpriteAsset,
-    wall_gray: ?SpriteAsset,
-    wall_red: ?SpriteAsset,
-    wall_blue: ?SpriteAsset,
+
+    block_gray: ?SpriteAsset,
+    block_red: ?SpriteAsset,
+    block_blue: ?SpriteAsset,
+
+    block_change_red: ?SpriteAsset,
+    block_change_blue: ?SpriteAsset,
+    block_deadly: ?SpriteAsset,
+
     ball_red: ?SpriteAsset,
     ball_blue: ?SpriteAsset,
 
@@ -101,21 +107,37 @@ pub const Assets = struct {
         var result: ?*SpriteAsset = null;
 
         if (sprite.entity.color) |color| {
-            result = switch (sprite.entity.entity_type) {
-                .Ball => self.getBall(color.color),
-                .Wall => self.getWall(color.color),
-            };
+            switch (sprite.entity.entity_type) {
+                .Ball => result = self.getBall(color.color),
+                .Wall => {
+                    if (sprite.entity.block) |block| {
+                        result = self.getWall(color.color, block.type);
+                    }
+                },
+            }
         }
 
         return result;
     }
 
-    pub fn getWall(self: *Assets, color: ecs.ColorComponentValue) *SpriteAsset {
-        return switch (color) {
-            .Red => &self.wall_red.?,
-            .Blue => &self.wall_blue.?,
-            .Gray => &self.wall_gray.?,
-        };
+    pub fn getWall(self: *Assets, color: ecs.ColorComponentValue, block_type: ecs.BlockType) *SpriteAsset {
+        if (block_type == .Wall) {
+            return switch (color) {
+                .Red => &self.block_red.?,
+                .Blue => &self.block_blue.?,
+                .Gray => &self.block_gray.?,
+            };
+        } else if (block_type == .ColorChange) {
+            return switch (color) {
+                .Red => &self.block_change_red.?,
+                .Blue => &self.block_change_blue.?,
+                .Gray => unreachable,
+            };
+        } else if (block_type == .Deadly) {
+            return &self.block_deadly.?;
+        }
+
+        unreachable;
     }
 
     pub fn getBall(self: *Assets, color: ecs.ColorComponentValue) *SpriteAsset {
@@ -452,11 +474,16 @@ fn drawWorld(state: *State) void {
 
 fn loadAssets(state: *State) void {
     state.assets.test_sprite = loadSprite("assets/test_animation.aseprite", state.renderer, state.allocator);
+
     state.assets.ball_red = loadSprite("assets/ball_red.aseprite", state.renderer, state.allocator);
     state.assets.ball_blue = loadSprite("assets/ball_blue.aseprite", state.renderer, state.allocator);
-    state.assets.wall_gray = loadSprite("assets/wall_gray.aseprite", state.renderer, state.allocator);
-    state.assets.wall_red = loadSprite("assets/wall_red.aseprite", state.renderer, state.allocator);
-    state.assets.wall_blue = loadSprite("assets/wall_blue.aseprite", state.renderer, state.allocator);
+
+    state.assets.block_gray = loadSprite("assets/block_gray.aseprite", state.renderer, state.allocator);
+    state.assets.block_red = loadSprite("assets/block_red.aseprite", state.renderer, state.allocator);
+    state.assets.block_blue = loadSprite("assets/block_blue.aseprite", state.renderer, state.allocator);
+    state.assets.block_change_red = loadSprite("assets/block_change_red.aseprite", state.renderer, state.allocator);
+    state.assets.block_change_blue = loadSprite("assets/block_change_blue.aseprite", state.renderer, state.allocator);
+    state.assets.block_deadly = loadSprite("assets/block_deadly.aseprite", state.renderer, state.allocator);
 }
 
 fn loadSprite(path: []const u8, renderer: *c.SDL_Renderer, allocator: std.mem.Allocator) ?SpriteAsset {
@@ -544,10 +571,16 @@ pub fn loadLevel(state: *State, name: []const u8) !void {
 
     for (0..wall_count) |_| {
         const color = try file.reader().readInt(u32, .little);
+        const block_type = try file.reader().readInt(u32, .little);
         const x = try file.reader().readInt(i32, .little);
         const y = try file.reader().readInt(i32, .little);
 
-        _ = try addWall(state, @enumFromInt(color), Vector2{ @floatFromInt(x), @floatFromInt(y) });
+        _ = try addWall(
+            state,
+            @enumFromInt(color),
+            @enumFromInt(block_type),
+            Vector2{ @floatFromInt(x), @floatFromInt(y) },
+        );
     }
 }
 
@@ -603,10 +636,10 @@ fn addSprite(state: *State, position: Vector2) !*ecs.Entity {
     return entity;
 }
 
-pub fn addWall(state: *State, color: ecs.ColorComponentValue, position: Vector2) !*ecs.Entity {
+pub fn addWall(state: *State, color: ecs.ColorComponentValue, block_type: ecs.BlockType, position: Vector2) !*ecs.Entity {
     const new_entity = try addSprite(state, position);
 
-    const sprite_asset = state.assets.getWall(color);
+    const sprite_asset = state.assets.getWall(color, block_type);
     var collider_component: *ecs.ColliderComponent = state.allocator.create(ecs.ColliderComponent) catch undefined;
     new_entity.entity_type = .Wall;
     collider_component.entity = new_entity;
@@ -621,7 +654,12 @@ pub fn addWall(state: *State, color: ecs.ColorComponentValue, position: Vector2)
     color_component.entity = new_entity;
     color_component.color = color;
 
+    var block_component: *ecs.BlockComponent = try state.allocator.create(ecs.BlockComponent);
+    block_component.entity = new_entity;
+    block_component.type = .Wall;
+
     new_entity.color = color_component;
+    new_entity.block = block_component;
     new_entity.collider = collider_component;
 
     try state.walls.append(new_entity);
