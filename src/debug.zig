@@ -106,6 +106,7 @@ pub const DebugState = struct {
 const DebugInput = struct {
     left_mouse_down: bool = false,
     left_mouse_pressed: bool = false,
+    alt_key_down: bool = false,
     mouse_position: Vector2 = @splat(0),
 
     pub fn reset(self: *DebugInput) void {
@@ -122,6 +123,9 @@ pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
     var input = &state.debug_state.input;
 
     // Keyboard.
+    if (event.key.key == c.SDLK_LALT) {
+        input.alt_key_down = event.type == c.SDL_EVENT_KEY_DOWN;
+    }
     if (event.type == c.SDL_EVENT_KEY_DOWN) {
         switch (event.key.key) {
             c.SDLK_P => {
@@ -173,24 +177,34 @@ pub fn handleInput(state: *State) void {
 
     if (state.debug_state.hovered_entity) |hovered_entity| {
         if (input.left_mouse_pressed) {
-            if (state.debug_state.mode == .Edit) {
-                if (block_color == hovered_entity.color.?.color) {
-                    game.removeEntity(state, hovered_entity);
-                } else {
-                    game.removeEntity(state, hovered_entity);
-                    const tiled_position = getTiledPosition(
-                        input.mouse_position / @as(Vector2, @splat(state.world_scale)),
-                        state.assets.getWall(block_color, block_type),
-                    );
-                    _ = game.addWall(state, block_color, block_type, tiled_position) catch undefined;
+            // Grab the color and type of the hovered entity when alt is held down.
+            if (state.debug_state.input.alt_key_down)  {
+                if (hovered_entity.block) |block| {
+                    state.debug_state.current_block_type = block.type;
+                }
+                if (hovered_entity.color) |color| {
+                    state.debug_state.current_block_color = color.color;
                 }
             } else {
-                if (state.time - state.debug_state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
-                    state.debug_state.last_left_click_entity.? == hovered_entity)
-                {
-                    openSprite(state, hovered_entity);
+                if (state.debug_state.mode == .Edit) {
+                    if (block_color == hovered_entity.color.?.color) {
+                        game.removeEntity(state, hovered_entity);
+                    } else {
+                        game.removeEntity(state, hovered_entity);
+                        const tiled_position = getTiledPosition(
+                            input.mouse_position / @as(Vector2, @splat(state.world_scale)),
+                            state.assets.getWall(block_color, block_type),
+                        );
+                        _ = game.addWall(state, block_color, block_type, tiled_position) catch undefined;
+                    }
                 } else {
-                    state.debug_state.selected_entity = hovered_entity;
+                    if (state.time - state.debug_state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
+                        state.debug_state.last_left_click_entity.? == hovered_entity)
+                    {
+                        openSprite(state, hovered_entity);
+                    } else {
+                        state.debug_state.selected_entity = hovered_entity;
+                    }
                 }
             }
 
