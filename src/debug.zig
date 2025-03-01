@@ -480,19 +480,21 @@ pub fn drawDebugOverlay(state: *State) void {
     drawEntityHighlight(state.renderer, state.debug_state.hovered_entity, Color{ 255, 150, 0, 255 }, scale, offset);
 
     // Draw the current mouse position.
-    const mouse_size: f32 = 8;
-    const mouse_rect: math.Rect = .{
-        .position = Vector2{
-            (state.debug_state.input.mouse_position[X] - (mouse_size / 2)) / scale,
-            (state.debug_state.input.mouse_position[Y] - (mouse_size / 2)) / scale,
-        } + offset,
-        .size = Vector2{
-            mouse_size / scale,
-            mouse_size / scale,
-        },
-    };
-    _ = c.SDL_SetRenderDrawColor(state.renderer, 255, 255, 0, 255);
-    _ = c.SDL_RenderFillRect(state.renderer, &mouse_rect.scaled(scale).toSDL());
+    if (false) {
+        const mouse_size: f32 = 8;
+        const mouse_rect: math.Rect = .{
+            .position = Vector2{
+                (state.debug_state.input.mouse_position[X] - (mouse_size / 2)) / scale,
+                (state.debug_state.input.mouse_position[Y] - (mouse_size / 2)) / scale,
+            } + offset,
+            .size = Vector2{
+                mouse_size / scale,
+                mouse_size / scale,
+            },
+        };
+        _ = c.SDL_SetRenderDrawColor(state.renderer, 255, 255, 0, 255);
+        _ = c.SDL_RenderFillRect(state.renderer, &mouse_rect.scaled(scale).toSDL());
+    }
 }
 
 fn drawDebugCollider(
