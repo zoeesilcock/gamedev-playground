@@ -556,6 +556,7 @@ fn spawnBall(state: *State) !void {
 fn resetBall(state: *State) void {
     state.ball.transform.?.position = BALL_SPAWN;
     state.ball.transform.?.velocity[Y] = BALL_VELOCITY;
+    state.ball.color.?.color = .Red;
 }
 
 fn unloadLevel(state: *State) void {
@@ -603,7 +604,7 @@ fn isLevelCompleted(state: *State) bool {
     var result = true;
 
     for (state.walls.items) |wall| {
-        if (wall.color.?.color != .Gray) {
+        if (wall.block.?.type == .Wall and wall.color.?.color != .Gray) {
             result = false;
         }
     }
