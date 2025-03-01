@@ -46,7 +46,7 @@ pub const DebugState = struct {
     current_frame_index: u32,
     frame_times: [MAX_FRAME_TIME_COUNT]u64 = [1]u64{0} ** MAX_FRAME_TIME_COUNT,
     fps_average: f32,
-    show_fps_graph: bool,
+    fps_display_mode: FPSDisplayMode,
 
     pub fn init(self: *DebugState, allocator: std.mem.Allocator) !void {
         self.input = DebugInput{};
@@ -67,7 +67,7 @@ pub const DebugState = struct {
         self.last_left_click_entity = null;
 
         self.fps_average = 0;
-        self.show_fps_graph = false;
+        self.fps_display_mode = .Number;
     }
 
     pub fn addCollision(self: *DebugState, collision: *const ecs.Collision, time: u64) void {
@@ -119,6 +119,12 @@ const DebugCollision = struct {
     time_added: u64,
 };
 
+const FPSDisplayMode = enum {
+    None,
+    Number,
+    NumberAndGraph
+};
+
 pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
     var input = &state.debug_state.input;
 
@@ -131,12 +137,19 @@ pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
             c.SDLK_P => {
                 state.is_paused = !state.is_paused;
             },
-            c.SDLK_E => {
-                state.debug_state.show_editor = !state.debug_state.show_editor;
-                state.debug_state.mode = if (state.debug_state.show_editor) .Edit else .Select;
+            c.SDLK_F1 => {
+                var mode: u32 = @intFromEnum(state.debug_state.fps_display_mode) + 1;
+                if (mode >= @typeInfo(FPSDisplayMode).Enum.fields.len) {
+                    mode = 0;
+                }
+                state.debug_state.fps_display_mode = @enumFromInt(mode);
             },
             c.SDLK_C => {
                 state.debug_state.show_colliders = !state.debug_state.show_colliders;
+            },
+            c.SDLK_E => {
+                state.debug_state.show_editor = !state.debug_state.show_editor;
+                state.debug_state.mode = if (state.debug_state.show_editor) .Edit else .Select;
             },
             c.SDLK_S => {
                 saveLevel(state, state.debug_state.currentLevelName()) catch unreachable;
@@ -256,47 +269,45 @@ pub fn calculateFPS(state: *State) void {
 pub fn drawDebugUI(state: *State) void {
     imgui.newFrame();
 
-    var show_fps = true;
-
     c.igSetNextWindowPos(c.ImVec2{ .x = 5, .y = 5 }, 0, c.ImVec2{ .x = 0, .y = 0 });
     c.igSetNextWindowSize(c.ImVec2{ .x = 300, .y = 160 }, 0);
-    _ = c.igBegin(
-        "FPS",
-        &show_fps,
-        c.ImGuiWindowFlags_NoMove |
+
+    if (state.debug_state.fps_display_mode != .None) {
+        _ = c.igBegin(
+            "FPS",
+            null,
+            c.ImGuiWindowFlags_NoMove |
             c.ImGuiWindowFlags_NoResize |
             c.ImGuiWindowFlags_NoBackground |
-            c.ImGuiWindowFlags_NoTitleBar,
-    );
-
-    c.igTextColored(c.ImVec4{ .x = 0, .y = 1, .z = 0, .w = 1 }, "FPS: %.0f", state.debug_state.fps_average);
-    c.igSameLine(0, 10);
-    if (c.igButton("##1", c.ImVec2{ .x = 16, .y = 16 })) {
-        state.debug_state.show_fps_graph = !state.debug_state.show_fps_graph;
-    }
-
-    if (state.debug_state.show_fps_graph) {
-        var timings: [MAX_FRAME_TIME_COUNT]f32 = [1]f32{0} ** MAX_FRAME_TIME_COUNT;
-        var max_value: f32 = 0;
-        for (0..MAX_FRAME_TIME_COUNT) |i| {
-            timings[i] = state.debug_state.getFrameTime(@intCast(i));
-            if (timings[i] > max_value) {
-                max_value = timings[i];
-            }
-        }
-        c.igPlotHistogram_FloatPtr(
-            "",
-            &timings,
-            timings.len,
-            0,
-            "",
-            0,
-            max_value,
-            c.ImVec2{ .x = 300, .y = 100 },
-            @sizeOf(f32),
+            c.ImGuiWindowFlags_NoTitleBar |
+            c.ImGuiWindowFlags_NoMouseInputs,
         );
+
+        c.igTextColored(c.ImVec4{ .x = 0, .y = 1, .z = 0, .w = 1 }, "FPS: %.0f", state.debug_state.fps_average);
+
+        if (state.debug_state.fps_display_mode == .NumberAndGraph) {
+            var timings: [MAX_FRAME_TIME_COUNT]f32 = [1]f32{0} ** MAX_FRAME_TIME_COUNT;
+            var max_value: f32 = 0;
+            for (0..MAX_FRAME_TIME_COUNT) |i| {
+                timings[i] = state.debug_state.getFrameTime(@intCast(i));
+                if (timings[i] > max_value) {
+                    max_value = timings[i];
+                }
+            }
+            c.igPlotHistogram_FloatPtr(
+                "",
+                &timings,
+                timings.len,
+                0,
+                "",
+                0,
+                max_value,
+                c.ImVec2{ .x = 300, .y = 100 },
+                @sizeOf(f32),
+            );
+        }
+        c.igEnd();
     }
-    c.igEnd();
 
     if (state.debug_state.show_editor) {
         const button_size: c.ImVec2 = c.ImVec2{ .x = 140, .y = 20 };
