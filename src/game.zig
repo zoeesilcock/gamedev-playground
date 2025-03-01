@@ -375,9 +375,15 @@ export fn tick(state_ptr: *anyopaque) void {
                 }
 
                 // Check if the other sprite is a wall of the same color as the ball.
+                const self_color = collision.self.entity.color.?;
                 if (collision.other.entity.color) |other_color| {
-                    if (collision.self.entity.color.?.color == other_color.color) {
-                        removeEntity(state, collision.other.entity);
+                    if (collision.other.entity.block) |other_block| {
+                        if (other_block.type == .Wall and other_color.color == self_color.color) {
+                            removeEntity(state, collision.other.entity);
+                        }
+                        if (other_block.type == .ColorChange and other_color.color != self_color.color) {
+                            self_color.color = other_color.color;
+                        }
                     }
                 }
             }
@@ -639,6 +645,10 @@ fn addSprite(state: *State, position: Vector2) !*ecs.Entity {
 pub fn addWall(state: *State, color: ecs.ColorComponentValue, block_type: ecs.BlockType, position: Vector2) !*ecs.Entity {
     const new_entity = try addSprite(state, position);
 
+    if (block_type == .ColorChange and color == .Gray) {
+        return error.InvalidColor;
+    }
+
     const sprite_asset = state.assets.getWall(color, block_type);
     var collider_component: *ecs.ColliderComponent = state.allocator.create(ecs.ColliderComponent) catch undefined;
     new_entity.entity_type = .Wall;
@@ -649,18 +659,19 @@ pub fn addWall(state: *State, color: ecs.ColorComponentValue, block_type: ecs.Bl
         @floatFromInt(sprite_asset.document.header.height),
     };
     collider_component.offset = @splat(0);
+    new_entity.collider = collider_component;
 
-    var color_component: *ecs.ColorComponent = try state.allocator.create(ecs.ColorComponent);
-    color_component.entity = new_entity;
-    color_component.color = color;
+    if (block_type != .Deadly) {
+        var color_component: *ecs.ColorComponent = try state.allocator.create(ecs.ColorComponent);
+        color_component.entity = new_entity;
+        color_component.color = color;
+        new_entity.color = color_component;
+    }
 
     var block_component: *ecs.BlockComponent = try state.allocator.create(ecs.BlockComponent);
     block_component.entity = new_entity;
-    block_component.type = .Wall;
-
-    new_entity.color = color_component;
+    block_component.type = block_type;
     new_entity.block = block_component;
-    new_entity.collider = collider_component;
 
     try state.walls.append(new_entity);
     try state.colliders.append(collider_component);
