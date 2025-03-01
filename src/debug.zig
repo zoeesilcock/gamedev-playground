@@ -22,6 +22,7 @@ const A = math.A;
 const PLATFORM = @import("builtin").os.tag;
 const DOUBLE_CLICK_THRESHOLD: u64 = 300;
 const MAX_FRAME_TIME_COUNT: u32 = 300;
+const LEVEL_NAME_BUFFER_SIZE = game.LEVEL_NAME_BUFFER_SIZE;
 
 pub const DebugState = struct {
     input: DebugInput,
@@ -31,6 +32,7 @@ pub const DebugState = struct {
     },
     current_wall_color: ?ecs.ColorComponentValue,
     show_editor: bool,
+    current_level_name: [:0]u8,
 
     show_colliders: bool,
     collisions: std.ArrayList(DebugCollision),
@@ -45,11 +47,14 @@ pub const DebugState = struct {
     fps_average: f32,
     show_fps_graph: bool,
 
-    pub fn init(self: *DebugState, allocator: std.mem.Allocator) void {
+    pub fn init(self: *DebugState, allocator: std.mem.Allocator) !void {
         self.input = DebugInput{};
+
         self.mode = .Select;
         self.current_wall_color = .Red;
         self.show_editor = false;
+        self.current_level_name = @ptrCast(try allocator.alloc(u8, LEVEL_NAME_BUFFER_SIZE));
+        _ = try std.fmt.bufPrintZ(self.current_level_name, "level1", .{});
 
         self.show_colliders = false;
         self.collisions = std.ArrayList(DebugCollision).init(allocator);
@@ -90,6 +95,10 @@ pub const DebugState = struct {
 
         return @as(f32, @floatFromInt(elapsed)) / @as(f32, @floatFromInt(c.SDL_GetPerformanceFrequency()));
     }
+
+    pub fn currentLevelName(self: *DebugState) []const u8 {
+        return std.mem.span(self.current_level_name.ptr);
+    }
 };
 
 const DebugInput = struct {
@@ -123,10 +132,10 @@ pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
                 state.debug_state.show_colliders = !state.debug_state.show_colliders;
             },
             c.SDLK_S => {
-                saveLevel(state, "assets/level1.lvl") catch unreachable;
+                saveLevel(state, state.debug_state.currentLevelName()) catch unreachable;
             },
             c.SDLK_L => {
-                game.loadLevel(state, "assets/level1.lvl") catch unreachable;
+                game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
             },
             else => {},
         }
@@ -241,7 +250,7 @@ pub fn drawDebugUI(state: *State) void {
             c.ImGuiWindowFlags_NoTitleBar,
     );
 
-    c.igTextColored(c.ImVec4{ .x = 0, .y = 1, .z = 0, .w = 1}, "FPS: %.0f", state.debug_state.fps_average);
+    c.igTextColored(c.ImVec4{ .x = 0, .y = 1, .z = 0, .w = 1 }, "FPS: %.0f", state.debug_state.fps_average);
     c.igSameLine(0, 10);
     if (c.igButton("##1", c.ImVec2{ .x = 16, .y = 16 })) {
         state.debug_state.show_fps_graph = !state.debug_state.show_fps_graph;
@@ -271,13 +280,33 @@ pub fn drawDebugUI(state: *State) void {
     c.igEnd();
 
     if (state.debug_state.show_editor) {
+        const button_size: c.ImVec2 = c.ImVec2{ .x = 140, .y = 20 };
+        const half_button_size: c.ImVec2 = c.ImVec2{ .x = 65, .y = 20 };
+
         _ = c.igBegin(
             "Editor",
             null,
             c.ImGuiViewportFlags_NoFocusOnAppearing | c.ImGuiWindowFlags_NoNavFocus | c.ImGuiWindowFlags_NoNavInputs,
         );
 
-        if (c.igButton("Restart", c.ImVec2{ .x = 100, .y = 20 })) {
+        _ = c.igInputText(
+            "Name",
+            @ptrCast(state.debug_state.current_level_name),
+            state.debug_state.current_level_name.len,
+            0,
+            null,
+            null,
+        );
+
+        if (c.igButton("Load", half_button_size)) {
+            game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
+        }
+        c.igSameLine(0, 10);
+        if (c.igButton("Save", half_button_size)) {
+            saveLevel(state, state.debug_state.currentLevelName()) catch unreachable;
+        }
+
+        if (c.igButton("Restart", button_size)) {
             c.igEnd();
 
             game.restart(state);
@@ -595,19 +624,20 @@ fn openSprite(state: *State, entity: *ecs.Entity) void {
     }
 }
 
-fn saveLevel(state: *State, path: []const u8) !void {
-    if (std.fs.cwd().createFile(path, .{ .truncate = true }) catch null) |file| {
-        defer file.close();
+fn saveLevel(state: *State, name: []const u8) !void {
+    var buf: [LEVEL_NAME_BUFFER_SIZE * 2]u8 = undefined;
+    const path = try std.fmt.bufPrint(&buf, "assets/{s}.lvl", .{name});
+    const file = try std.fs.cwd().createFile(path, .{ .truncate = true });
+    defer file.close();
 
-        try file.writer().writeInt(u32, @intCast(state.walls.items.len), .little);
+    try file.writer().writeInt(u32, @intCast(state.walls.items.len), .little);
 
-        for (state.walls.items) |wall| {
-            if (wall.color) |color| {
-                if (wall.transform) |transform| {
-                    try file.writer().writeInt(u32, @intFromEnum(color.color), .little);
-                    try file.writer().writeInt(i32, @intFromFloat(@round(transform.position[X])), .little);
-                    try file.writer().writeInt(i32, @intFromFloat(@round(transform.position[Y])), .little);
-                }
+    for (state.walls.items) |wall| {
+        if (wall.color) |color| {
+            if (wall.transform) |transform| {
+                try file.writer().writeInt(u32, @intFromEnum(color.color), .little);
+                try file.writer().writeInt(i32, @intFromFloat(@round(transform.position[X])), .little);
+                try file.writer().writeInt(i32, @intFromFloat(@round(transform.position[Y])), .little);
             }
         }
     }

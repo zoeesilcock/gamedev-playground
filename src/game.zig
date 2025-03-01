@@ -36,11 +36,12 @@ const WORLD_HEIGHT: u32 = 150;
 const BALL_VELOCITY: f32 = 64;
 const BALL_HORIZONTAL_BOUNCE_TIME: u64 = 75;
 const BALL_SPAWN = Vector2{ 24, 20 };
+pub const LEVEL_NAME_BUFFER_SIZE: u32 = 128;
 
 const LEVELS: []const []const u8 = &.{
-    "assets/level1.lvl",
-    "assets/level2.lvl",
-    "assets/level3.lvl",
+    "level1",
+    "level2",
+    "level3",
 };
 
 pub const State = struct {
@@ -155,7 +156,7 @@ export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, ren
     state.allocator = allocator;
 
     if (INTERNAL) {
-        state.debug_state.init(state.allocator);
+        state.debug_state.init(state.allocator) catch unreachable;
     }
 
     state.window = window;
@@ -533,19 +534,20 @@ fn unloadLevel(state: *State) void {
     state.walls.clearRetainingCapacity();
 }
 
-pub fn loadLevel(state: *State, path: []const u8) !void {
-    if (std.fs.cwd().openFile(path, .{ .mode = .read_only }) catch null) |file| {
-        const wall_count = try file.reader().readInt(u32, .little);
+pub fn loadLevel(state: *State, name: []const u8) !void {
+    var buf: [LEVEL_NAME_BUFFER_SIZE * 2]u8 = undefined;
+    const path = try std.fmt.bufPrint(&buf, "assets/{s}.lvl", .{name});
+    const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
+    const wall_count = try file.reader().readInt(u32, .little);
 
-        unloadLevel(state);
+    unloadLevel(state);
 
-        for (0..wall_count) |_| {
-            const color = try file.reader().readInt(u32, .little);
-            const x = try file.reader().readInt(i32, .little);
-            const y = try file.reader().readInt(i32, .little);
+    for (0..wall_count) |_| {
+        const color = try file.reader().readInt(u32, .little);
+        const x = try file.reader().readInt(i32, .little);
+        const y = try file.reader().readInt(i32, .little);
 
-            _ = try addWall(state, @enumFromInt(color), Vector2{ @floatFromInt(x), @floatFromInt(y) });
-        }
+        _ = try addWall(state, @enumFromInt(color), Vector2{ @floatFromInt(x), @floatFromInt(y) });
     }
 }
 
