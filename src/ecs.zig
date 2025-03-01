@@ -22,6 +22,16 @@ pub const Entity = struct {
     sprite: ?*SpriteComponent,
     color: ?*ColorComponent,
     block: ?*BlockComponent,
+
+    pub fn init(allocator: std.mem.Allocator) !*Entity {
+        var entity: *Entity = try allocator.create(Entity);
+        entity.transform = null;
+        entity.collider = null;
+        entity.sprite = null;
+        entity.collider = null;
+        entity.block = null;
+        return entity;
+    }
 };
 
 pub const TransformComponent = struct {

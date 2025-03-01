@@ -613,7 +613,7 @@ fn isLevelCompleted(state: *State) bool {
 }
 
 fn addSprite(state: *State, position: Vector2) !*ecs.Entity {
-    var entity: *ecs.Entity = try state.allocator.create(ecs.Entity);
+    var entity: *ecs.Entity = try ecs.Entity.init(state.allocator);
     var sprite: *ecs.SpriteComponent = try state.allocator.create(ecs.SpriteComponent);
     var transform: *ecs.TransformComponent = try state.allocator.create(ecs.TransformComponent);
 
@@ -634,7 +634,6 @@ fn addSprite(state: *State, position: Vector2) !*ecs.Entity {
 
     entity.transform = transform;
     entity.sprite = sprite;
-    entity.color = null;
 
     try state.transforms.append(transform);
     try state.sprites.append(sprite);
