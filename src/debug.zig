@@ -166,6 +166,10 @@ pub fn handleInput(state: *State) void {
     const block_color = state.debug_state.current_block_color;
     const block_type = state.debug_state.current_block_type;
 
+    if (state.debug_state.mode == .Edit and block_type == .ColorChange and block_color == .Gray) {
+        return;
+    }
+
     if (state.debug_state.hovered_entity) |hovered_entity| {
         if (input.left_mouse_pressed) {
             if (state.debug_state.mode == .Edit) {
@@ -313,29 +317,9 @@ pub fn drawDebugUI(state: *State) void {
             return;
         }
 
-        c.igText("Mode:");
-        if (c.igRadioButton_Bool("Select", state.debug_state.mode == .Select)) {
-            state.debug_state.mode = .Select;
-        }
-        c.igSpacing();
-        if (c.igRadioButton_Bool("Gray", state.debug_state.mode == .Edit and
-            state.debug_state.current_block_color == .Gray))
-        {
-            state.debug_state.mode = .Edit;
-            state.debug_state.current_block_color = .Gray;
-        }
-        if (c.igRadioButton_Bool("Red", state.debug_state.mode == .Edit and
-            state.debug_state.current_block_color == .Red))
-        {
-            state.debug_state.mode = .Edit;
-            state.debug_state.current_block_color = .Red;
-        }
-        if (c.igRadioButton_Bool("Blue", state.debug_state.mode == .Edit and
-            state.debug_state.current_block_color == .Blue))
-        {
-            state.debug_state.mode = .Edit;
-            state.debug_state.current_block_color = .Blue;
-        }
+        inputEnum("Mode", &state.debug_state.mode);
+        inputEnum("Type", &state.debug_state.current_block_type);
+        inputEnum("Color", &state.debug_state.current_block_color);
 
         c.igEnd();
     }
