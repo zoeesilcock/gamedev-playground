@@ -129,6 +129,7 @@ pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
             },
             c.SDLK_E => {
                 state.debug_state.show_editor = !state.debug_state.show_editor;
+                state.debug_state.mode = if (state.debug_state.show_editor) .Edit else .Select;
             },
             c.SDLK_C => {
                 state.debug_state.show_colliders = !state.debug_state.show_colliders;
