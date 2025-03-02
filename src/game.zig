@@ -36,6 +36,7 @@ const WORLD_HEIGHT: u32 = 150;
 const BALL_VELOCITY: f32 = 64;
 const BALL_HORIZONTAL_BOUNCE_TIME: u64 = 75;
 const BALL_SPAWN = Vector2{ 24, 20 };
+const MAX_LIVES = 3;
 pub const LEVEL_NAME_BUFFER_SIZE: u32 = 128;
 
 const LEVELS: []const []const u8 = &.{
@@ -94,16 +95,19 @@ const Input = struct {
 pub const Assets = struct {
     test_sprite: ?SpriteAsset,
 
-    block_gray: ?SpriteAsset,
-    block_red: ?SpriteAsset,
-    block_blue: ?SpriteAsset,
-
-    block_change_red: ?SpriteAsset,
-    block_change_blue: ?SpriteAsset,
-    block_deadly: ?SpriteAsset,
+    life_filled: ?SpriteAsset,
+    life_outlined: ?SpriteAsset,
+    life_backdrop: ?SpriteAsset,
 
     ball_red: ?SpriteAsset,
     ball_blue: ?SpriteAsset,
+
+    block_gray: ?SpriteAsset,
+    block_red: ?SpriteAsset,
+    block_blue: ?SpriteAsset,
+    block_change_red: ?SpriteAsset,
+    block_change_blue: ?SpriteAsset,
+    block_deadly: ?SpriteAsset,
 
     pub fn getSpriteAsset(self: *Assets, sprite: *ecs.SpriteComponent) ?*SpriteAsset {
         var result: ?*SpriteAsset = null;
@@ -143,7 +147,7 @@ pub const Assets = struct {
                     .Gray => &self.block_deadly.?,
                     else => unreachable,
                 };
-            }
+            },
         }
 
         unreachable;
@@ -204,7 +208,7 @@ export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, ren
     state.ball_horizontal_bounce_start_time = 0;
 
     state.level_index = 0;
-    state.lives_remaining = 3;
+    state.lives_remaining = MAX_LIVES;
     state.walls = std.ArrayList(*ecs.Entity).init(allocator);
     state.transforms = std.ArrayList(*ecs.TransformComponent).init(allocator);
     state.colliders = std.ArrayList(*ecs.ColliderComponent).init(allocator);
@@ -460,6 +464,7 @@ export fn draw(state_ptr: *anyopaque) void {
         _ = c.SDL_SetRenderDrawColor(state.renderer, 0, 0, 0, 255);
         _ = c.SDL_RenderClear(state.renderer);
         drawWorld(state);
+        drawGameUI(state);
     }
 
     _ = c.SDL_SetRenderTarget(state.renderer, null);
@@ -484,21 +489,55 @@ fn drawWorld(state: *State) void {
                 var position = transform.position;
                 position += offset;
 
-                const texture_rect = c.SDL_FRect{
-                    .x = @round(position[X]),
-                    .y = @round(position[Y]),
-                    .w = @floatFromInt(texture.w),
-                    .h = @floatFromInt(texture.h),
-                };
-
-                _ = c.SDL_RenderTexture(state.renderer, texture, null, &texture_rect);
+                drawTextureAt(state, texture, position);
             }
         }
     }
 }
 
+fn drawGameUI(state: *State) void {
+    const inner_offset: Vector2 = .{ 3, 2 };
+    const horizontal_space: u32 = 2;
+
+    var position = Vector2{ 0, 0 };
+    if (state.assets.life_backdrop) |backdrop| {
+        const texture = backdrop.frames[0];
+        position[X] =
+            (@as(f32, @floatFromInt(state.window_width)) / state.world_scale / 2) -
+            (@as(f32, @floatFromInt(texture.w)) / 2);
+        drawTextureAt(state, texture, position);
+    }
+
+    position += inner_offset;
+
+    if (state.assets.life_filled) |filled| {
+        if (state.assets.life_outlined) |outlined| {
+            for (0..MAX_LIVES) |i| {
+                const texture = (if (state.lives_remaining > i) filled else outlined).frames[0];
+                drawTextureAt(state, texture, position);
+                position[X] += @floatFromInt(texture.w + horizontal_space);
+            }
+        }
+    }
+}
+
+fn drawTextureAt(state: *State, texture: *c.SDL_Texture, position: Vector2) void {
+    const texture_rect = c.SDL_FRect{
+        .x = @round(position[X]),
+        .y = @round(position[Y]),
+        .w = @floatFromInt(texture.w),
+        .h = @floatFromInt(texture.h),
+    };
+
+    _ = c.SDL_RenderTexture(state.renderer, texture, null, &texture_rect);
+}
+
 fn loadAssets(state: *State) void {
     state.assets.test_sprite = loadSprite("assets/test_animation.aseprite", state.renderer, state.allocator);
+
+    state.assets.life_filled = loadSprite("assets/life_filled.aseprite", state.renderer, state.allocator);
+    state.assets.life_outlined = loadSprite("assets/life_outlined.aseprite", state.renderer, state.allocator);
+    state.assets.life_backdrop = loadSprite("assets/life_backdrop.aseprite", state.renderer, state.allocator);
 
     state.assets.ball_red = loadSprite("assets/ball_red.aseprite", state.renderer, state.allocator);
     state.assets.ball_blue = loadSprite("assets/ball_blue.aseprite", state.renderer, state.allocator);
