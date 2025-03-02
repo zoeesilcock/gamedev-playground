@@ -72,6 +72,8 @@ pub const State = struct {
     is_paused: bool,
     fullscreen: bool,
 
+    lives_remaining: u32,
+
     // Components.
     transforms: std.ArrayList(*ecs.TransformComponent),
     colliders: std.ArrayList(*ecs.ColliderComponent),
@@ -202,6 +204,7 @@ export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, ren
     state.ball_horizontal_bounce_start_time = 0;
 
     state.level_index = 0;
+    state.lives_remaining = 3;
     state.walls = std.ArrayList(*ecs.Entity).init(allocator);
     state.transforms = std.ArrayList(*ecs.TransformComponent).init(allocator);
     state.colliders = std.ArrayList(*ecs.ColliderComponent).init(allocator);
@@ -409,7 +412,7 @@ export fn tick(state_ptr: *anyopaque) void {
     // Handle ball specific animations.
     if (state.ball.sprite) |sprite| {
         if (state.ball.transform) |transform| {
-            if ((sprite.isAnimating("bounce_up") or sprite.isAnimating("bounce_down")) and sprite.animation_completed) {
+            if (sprite.animation_completed and (sprite.isAnimating("bounce_up") or sprite.isAnimating("bounce_down"))) {
                 transform.velocity = transform.next_velocity;
                 sprite.startAnimation("idle", &state.assets);
             }
@@ -426,12 +429,22 @@ export fn tick(state_ptr: *anyopaque) void {
 
 fn handleBallCollision(state: *State, ball: *ecs.Entity, block: *ecs.Entity) void {
     if (ball.color) |ball_color| {
-        if (block.color) |other_color| {
-            if (block.block) |other_block| {
+        if (block.block) |other_block| {
+            if (other_block.type == .Deadly) {
+                if (state.lives_remaining > 0) {
+                    state.lives_remaining -= 1;
+                    resetBall(state);
+                } else {
+                    // Game over!
+                    restart(state);
+                    return;
+                }
+            }
+
+            if (block.color) |other_color| {
                 if (other_block.type == .Wall and other_color.color == ball_color.color) {
                     removeEntity(state, block);
-                }
-                if (other_block.type == .ColorChange and other_color.color != ball_color.color) {
+                } else if (other_block.type == .ColorChange and other_color.color != ball_color.color) {
                     ball_color.color = other_color.color;
                 }
             }
@@ -564,6 +577,7 @@ fn resetBall(state: *State) void {
     state.ball.transform.?.position = BALL_SPAWN;
     state.ball.transform.?.velocity[Y] = BALL_VELOCITY;
     state.ball.color.?.color = .Red;
+    state.ball.sprite.?.startAnimation("idle", &state.assets);
 }
 
 fn unloadLevel(state: *State) void {
