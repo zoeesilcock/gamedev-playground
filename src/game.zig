@@ -121,20 +121,27 @@ pub const Assets = struct {
     }
 
     pub fn getWall(self: *Assets, color: ecs.ColorComponentValue, block_type: ecs.BlockType) *SpriteAsset {
-        if (block_type == .Wall) {
-            return switch (color) {
-                .Red => &self.block_red.?,
-                .Blue => &self.block_blue.?,
-                .Gray => &self.block_gray.?,
-            };
-        } else if (block_type == .ColorChange) {
-            return switch (color) {
-                .Red => &self.block_change_red.?,
-                .Blue => &self.block_change_blue.?,
-                .Gray => unreachable,
-            };
-        } else if (block_type == .Deadly) {
-            return &self.block_deadly.?;
+        switch (block_type) {
+            .Wall => {
+                return switch (color) {
+                    .Red => &self.block_red.?,
+                    .Blue => &self.block_blue.?,
+                    .Gray => &self.block_gray.?,
+                };
+            },
+            .ColorChange => {
+                return switch (color) {
+                    .Red => &self.block_change_red.?,
+                    .Blue => &self.block_change_blue.?,
+                    .Gray => unreachable,
+                };
+            },
+            .Deadly => {
+                return switch (color) {
+                    .Gray => &self.block_deadly.?,
+                    else => unreachable,
+                };
+            }
         }
 
         unreachable;
@@ -644,6 +651,10 @@ pub fn addWall(state: *State, color: ecs.ColorComponentValue, block_type: ecs.Bl
         return error.InvalidColor;
     }
 
+    if (block_type == .Deadly and color != .Gray) {
+        return error.InvalidColor;
+    }
+
     const sprite_asset = state.assets.getWall(color, block_type);
     var collider_component: *ecs.ColliderComponent = state.allocator.create(ecs.ColliderComponent) catch undefined;
     new_entity.entity_type = .Wall;
@@ -656,12 +667,10 @@ pub fn addWall(state: *State, color: ecs.ColorComponentValue, block_type: ecs.Bl
     collider_component.offset = @splat(0);
     new_entity.collider = collider_component;
 
-    if (block_type != .Deadly) {
-        var color_component: *ecs.ColorComponent = try state.allocator.create(ecs.ColorComponent);
-        color_component.entity = new_entity;
-        color_component.color = color;
-        new_entity.color = color_component;
-    }
+    var color_component: *ecs.ColorComponent = try state.allocator.create(ecs.ColorComponent);
+    color_component.entity = new_entity;
+    color_component.color = color;
+    new_entity.color = color_component;
 
     var block_component: *ecs.BlockComponent = try state.allocator.create(ecs.BlockComponent);
     block_component.entity = new_entity;

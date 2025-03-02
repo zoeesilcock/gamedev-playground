@@ -29,6 +29,7 @@ pub const Entity = struct {
         entity.collider = null;
         entity.sprite = null;
         entity.collider = null;
+        entity.color = null;
         entity.block = null;
         return entity;
     }

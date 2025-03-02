@@ -181,8 +181,12 @@ pub fn handleInput(state: *State) void {
     state.debug_state.hovered_entity = getHoveredEntity(state);
 
     const input: *DebugInput = &state.debug_state.input;
-    const block_color = state.debug_state.current_block_color;
+    var block_color = state.debug_state.current_block_color;
     const block_type = state.debug_state.current_block_type;
+
+    if (block_type == .Deadly) {
+        block_color = .Gray;
+    }
 
     if (state.debug_state.mode == .Edit and block_type == .ColorChange and block_color == .Gray) {
         return;
