@@ -1,6 +1,8 @@
 .{
-    .name = "gamedev-playground",
-    .version = "0.1.0",
+    .name = .gamedev_playground,
+    .version = "0.2.0",
+    .minimum_zig_version = "0.14.0",
+    .fingerprint = 0x4d0121353119f6fd,
     .dependencies = .{
         .sdl = .{
             .url = "git+https://github.com/castholm/SDL.git#2bb5f57ea8b8c43eabe514f7bbd3361365ba2ff3",
