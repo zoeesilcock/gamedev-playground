@@ -70,6 +70,25 @@ pub fn build(b: *std.Build) void {
         test_step.dependOn(&run_lib_unit_tests.step);
         test_step.dependOn(&run_exe_unit_tests.step);
     }
+
+    const imgui_dep = b.dependency("imgui", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const dear_bindings_dep = b.dependency("dear_bindings", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const generate_bindings_step = b.step("generate_imgui_bindings", "Generate C-bindings for imgui");
+    const dear_bindings = b.addSystemCommand(&.{
+        "python",
+        "dear_bindings.py",
+    });
+    dear_bindings.setCwd(dear_bindings_dep.path("."));
+    dear_bindings.addArg("-o");
+    dear_bindings.addFileArg(b.path("src/dcimgui/dcimgui"));
+    dear_bindings.addFileArg(imgui_dep.path("imgui.h"));
+    generate_bindings_step.dependOn(&dear_bindings.step);
 }
 fn linkExecutableLibraries(
     b: *std.Build,
@@ -100,40 +119,88 @@ fn linkGameLibraries(
     obj.root_module.linkLibrary(sdl_dep.artifact("SDL3"));
 
     if (internal) {
-        const zig_imgui_dep = b.dependency("zig_imgui", .{
+        const imgui_dep = b.dependency("imgui", .{
             .target = target,
             .optimize = optimize,
         });
-        obj.addIncludePath(zig_imgui_dep.path("src/generated"));
-        obj.linkLibrary(createImGuiSDLLib(b, target, optimize, zig_imgui_dep));
+
+        obj.addIncludePath(b.path("src/dcimgui"));
+        obj.addIncludePath(imgui_dep.path("."));
+
+        const imgui = createImGuiLib(b, target, optimize, imgui_dep);
+        const imgui_sdl = createImGuiSDLLib(b, target, optimize, sdl_dep, imgui_dep, imgui);
+        obj.linkLibrary(imgui_sdl);
     }
+}
+
+pub const IMGUI_C_DEFINES: []const [2][]const u8 = &.{
+    .{ "IMGUI_DISABLE_OBSOLETE_FUNCTIONS", "1" },
+    .{ "IMGUI_DISABLE_OBSOLETE_KEYIO", "1" },
+    .{ "IMGUI_IMPL_API", "extern \"C\"" },
+    .{ "IMGUI_USE_WCHAR32", "1" },
+    .{ "ImTextureID", "ImU64" },
+};
+
+pub const IMGUI_C_FLAGS: []const []const u8 = &.{
+    "-std=c++11",
+    "-fvisibility=hidden",
+};
+
+fn createImGuiLib(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    imgui_dep: *std.Build.Dependency,
+) *std.Build.Step.Compile {
+    const dcimgui = b.addStaticLibrary(.{
+        .name = "dcimgui",
+        .target = target,
+        .optimize = optimize,
+    });
+    dcimgui.root_module.link_libcpp = true;
+
+    const imgui_sources: []const std.Build.LazyPath = &.{
+        b.path("src/dcimgui/dcimgui.cpp"),
+        imgui_dep.path("imgui.cpp"),
+        imgui_dep.path("imgui_demo.cpp"),
+        imgui_dep.path("imgui_draw.cpp"),
+        imgui_dep.path("imgui_tables.cpp"),
+        imgui_dep.path("imgui_widgets.cpp"),
+    };
+
+    for (IMGUI_C_DEFINES) |c_define| {
+        dcimgui.root_module.addCMacro(c_define[0], c_define[1]);
+    }
+    dcimgui.addIncludePath(b.path("src/dcimgui/"));
+    dcimgui.addIncludePath(imgui_dep.path("."));
+
+    for (imgui_sources) |file| {
+        dcimgui.addCSourceFile(.{
+            .file = file,
+            .flags = IMGUI_C_FLAGS,
+        });
+    }
+
+    return dcimgui;
 }
 
 fn createImGuiSDLLib(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    zig_imgui_dep: *std.Build.Dependency,
+    sdl_dep: *std.Build.Dependency,
+    imgui_dep: *std.Build.Dependency,
+    dcimgui: *std.Build.Step.Compile,
 ) *std.Build.Step.Compile {
-    const sdl_dep = b.dependency("sdl", .{
-        .target = target,
-        .optimize = optimize,
-        .preferred_link_mode = .static,
-    });
-    const imgui_dep = zig_imgui_dep.builder.dependency("imgui", .{
-        .target = target,
-        .optimize = optimize,
-    });
     const imgui_sdl = b.addStaticLibrary(.{
         .name = "imgui_sdl",
         .target = target,
         .optimize = optimize,
     });
     imgui_sdl.root_module.link_libcpp = true;
-    imgui_sdl.linkLibrary(zig_imgui_dep.artifact("cimgui"));
+    imgui_sdl.linkLibrary(dcimgui);
 
-    const ZigImGui_build_script = @import("zig_imgui");
-    for (ZigImGui_build_script.IMGUI_C_DEFINES) |c_define| {
+    for (IMGUI_C_DEFINES) |c_define| {
         imgui_sdl.root_module.addCMacro(c_define[0], c_define[1]);
     }
 
@@ -147,11 +214,11 @@ fn createImGuiSDLLib(
     imgui_sdl.addIncludePath(imgui_dep.path("backends/"));
     imgui_sdl.addCSourceFile(.{
         .file = imgui_dep.path("backends/imgui_impl_sdlrenderer3.cpp"),
-        .flags = ZigImGui_build_script.IMGUI_C_FLAGS,
+        .flags = IMGUI_C_FLAGS,
     });
     imgui_sdl.addCSourceFile(.{
         .file = imgui_dep.path("backends/imgui_impl_sdl3.cpp"),
-        .flags = ZigImGui_build_script.IMGUI_C_FLAGS,
+        .flags = IMGUI_C_FLAGS,
     });
 
     return imgui_sdl;

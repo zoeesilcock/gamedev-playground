@@ -273,11 +273,11 @@ pub fn calculateFPS(state: *State) void {
 pub fn drawDebugUI(state: *State) void {
     imgui.newFrame();
 
-    c.igSetNextWindowPos(c.ImVec2{ .x = 5, .y = 5 }, 0, c.ImVec2{ .x = 0, .y = 0 });
-    c.igSetNextWindowSize(c.ImVec2{ .x = 300, .y = 160 }, 0);
+    c.ImGui_SetNextWindowPosEx(c.ImVec2{ .x = 5, .y = 5 }, 0, c.ImVec2{ .x = 0, .y = 0 });
+    c.ImGui_SetNextWindowSize(c.ImVec2{ .x = 300, .y = 160 }, 0);
 
     if (state.debug_state.fps_display_mode != .None) {
-        _ = c.igBegin(
+        _ = c.ImGui_Begin(
             "FPS",
             null,
             c.ImGuiWindowFlags_NoMove |
@@ -287,7 +287,7 @@ pub fn drawDebugUI(state: *State) void {
             c.ImGuiWindowFlags_NoMouseInputs,
         );
 
-        c.igTextColored(c.ImVec4{ .x = 0, .y = 1, .z = 0, .w = 1 }, "FPS: %.0f", state.debug_state.fps_average);
+        c.ImGui_TextColored(c.ImVec4{ .x = 0, .y = 1, .z = 0, .w = 1 }, "FPS: %.0f", state.debug_state.fps_average);
 
         if (state.debug_state.fps_display_mode == .NumberAndGraph) {
             var timings: [MAX_FRAME_TIME_COUNT]f32 = [1]f32{0} ** MAX_FRAME_TIME_COUNT;
@@ -298,7 +298,7 @@ pub fn drawDebugUI(state: *State) void {
                     max_value = timings[i];
                 }
             }
-            c.igPlotHistogram_FloatPtr(
+            c.ImGui_PlotHistogramEx(
                 "",
                 &timings,
                 timings.len,
@@ -310,20 +310,20 @@ pub fn drawDebugUI(state: *State) void {
                 @sizeOf(f32),
             );
         }
-        c.igEnd();
+        c.ImGui_End();
     }
 
     if (state.debug_state.show_editor) {
         const button_size: c.ImVec2 = c.ImVec2{ .x = 140, .y = 20 };
         const half_button_size: c.ImVec2 = c.ImVec2{ .x = 65, .y = 20 };
 
-        _ = c.igBegin(
+        _ = c.ImGui_Begin(
             "Editor",
             null,
             c.ImGuiViewportFlags_NoFocusOnAppearing | c.ImGuiWindowFlags_NoNavFocus | c.ImGuiWindowFlags_NoNavInputs,
         );
 
-        _ = c.igInputText(
+        _ = c.ImGui_InputTextEx(
             "Name",
             @ptrCast(state.debug_state.current_level_name),
             state.debug_state.current_level_name.len,
@@ -332,16 +332,16 @@ pub fn drawDebugUI(state: *State) void {
             null,
         );
 
-        if (c.igButton("Load", half_button_size)) {
+        if (c.ImGui_ButtonEx("Load", half_button_size)) {
             game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
         }
-        c.igSameLine(0, 10);
-        if (c.igButton("Save", half_button_size)) {
+        c.ImGui_SameLineEx(0, 10);
+        if (c.ImGui_ButtonEx("Save", half_button_size)) {
             saveLevel(state, state.debug_state.currentLevelName()) catch unreachable;
         }
 
-        if (c.igButton("Restart", button_size)) {
-            c.igEnd();
+        if (c.ImGui_ButtonEx("Restart", button_size)) {
+            c.ImGui_End();
 
             game.restart(state);
             return;
@@ -351,15 +351,15 @@ pub fn drawDebugUI(state: *State) void {
         inputEnum("Type", &state.debug_state.current_block_type);
         inputEnum("Color", &state.debug_state.current_block_color);
 
-        c.igEnd();
+        c.ImGui_End();
     }
 
     if (state.debug_state.selected_entity) |selected_entity| {
-        c.igSetNextWindowPos(c.ImVec2{ .x = 30, .y = 30 }, c.ImGuiCond_FirstUseEver, c.ImVec2{ .x = 0, .y = 0 });
-        c.igSetNextWindowSize(c.ImVec2{ .x = 300, .y = 460 }, c.ImGuiCond_FirstUseEver);
+        c.ImGui_SetNextWindowPosEx(c.ImVec2{ .x = 30, .y = 30 }, c.ImGuiCond_FirstUseEver, c.ImVec2{ .x = 0, .y = 0 });
+        c.ImGui_SetNextWindowSize(c.ImVec2{ .x = 300, .y = 460 }, c.ImGuiCond_FirstUseEver);
 
-        _ = c.igBegin("Inspector", null, c.ImGuiWindowFlags_NoFocusOnAppearing);
-        defer c.igEnd();
+        _ = c.ImGui_Begin("Inspector", null, c.ImGuiWindowFlags_NoFocusOnAppearing);
+        defer c.ImGui_End();
 
         inspectEntity(selected_entity);
     }
@@ -380,11 +380,11 @@ fn inspectEntity(entity: *ecs.Entity) void {
             const entity_type = runtimeFieldPointer(entity, entity_field.name);
             inline for (@typeInfo(ecs.EntityType).Enum.fields, 0..) |field, i| {
                 if (@intFromEnum(entity_type.*) == i) {
-                    c.igText("Type: " ++ field.name);
+                    c.ImGui_Text("Type: " ++ field.name);
                 }
             }
         } else if (runtimeFieldPointer(entity, entity_field.name).*) |component| {
-            if (c.igCollapsingHeader_BoolPtr(entity_field.name, null, c.ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (c.ImGui_CollapsingHeaderBoolPtr(entity_field.name, null, c.ImGuiTreeNodeFlags_DefaultOpen)) {
                 const component_info = @typeInfo(@TypeOf(component.*));
                 inline for (component_info.Struct.fields) |component_field| {
                     const field_ptr = runtimeFieldPointer(component, component_field.name);
@@ -414,31 +414,31 @@ fn inspectEntity(entity: *ecs.Entity) void {
 }
 
 fn inputBool(heading: ?[*:0]const u8, value: *bool) void {
-    c.igPushID_Ptr(value);
-    defer c.igPopID();
+    c.ImGui_PushIDPtr(value);
+    defer c.ImGui_PopID();
 
-    _ = c.igCheckbox(heading, value);
+    _ = c.ImGui_Checkbox(heading, value);
 }
 
 fn inputF32(heading: ?[*:0]const u8, value: *f32) void {
-    c.igPushID_Ptr(value);
-    defer c.igPopID();
+    c.ImGui_PushIDPtr(value);
+    defer c.ImGui_PopID();
 
-    _ = c.igInputFloat(heading, value, 0.1, 1, "%.2f", 0);
+    _ = c.ImGui_InputFloatEx(heading, value, 0.1, 1, "%.2f", 0);
 }
 
 fn inputU32(heading: ?[*:0]const u8, value: *u32) void {
-    c.igPushID_Ptr(value);
-    defer c.igPopID();
+    c.ImGui_PushIDPtr(value);
+    defer c.ImGui_PopID();
 
-    _ = c.igInputScalar(heading, c.ImGuiDataType_U32, @ptrCast(value), null, null, null, 0);
+    _ = c.ImGui_InputScalarEx(heading, c.ImGuiDataType_U32, @ptrCast(value), null, null, null, 0);
 }
 
 fn inputVector2(heading: ?[*:0]const u8, value: *Vector2) void {
-    c.igPushID_Ptr(value);
-    defer c.igPopID();
+    c.ImGui_PushIDPtr(value);
+    defer c.ImGui_PopID();
 
-    _ = c.igInputFloat2(heading, @ptrCast(value), "%.2f", 0);
+    _ = c.ImGui_InputFloat2Ex(heading, @ptrCast(value), "%.2f", 0);
 }
 
 fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
@@ -449,11 +449,11 @@ fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
         items[i] = enum_field.name;
     }
 
-    c.igPushID_Ptr(value);
-    defer c.igPopID();
+    c.ImGui_PushIDPtr(value);
+    defer c.ImGui_PopID();
 
     var current_item: i32 = @intFromEnum(value.*);
-    if (c.igCombo_Str_arr(heading, &current_item, &items, count, 0)) {
+    if (c.ImGui_ComboCharEx(heading, &current_item, &items, count, 0)) {
         value.* = @enumFromInt(current_item);
     }
 }

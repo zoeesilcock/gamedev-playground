@@ -15,8 +15,7 @@ pub const c = @cImport({
     @cInclude("SDL3/SDL_main.h");
 
     if (INTERNAL) {
-        @cDefine("CIMGUI_DEFINE_ENUMS_AND_STRUCTS", {});
-        @cInclude("cimgui.h");
+        @cInclude("dcimgui.h");
     }
 });
 

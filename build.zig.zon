@@ -6,10 +6,14 @@
             .url = "git+https://github.com/castholm/SDL.git#2bb5f57ea8b8c43eabe514f7bbd3361365ba2ff3",
             .hash = "1220f653f5b656888b522bf5be06fc3062278767cfa7764e5d00eb559056d65b616f",
         },
-        .zig_imgui = .{
-            .url = "git+https://gitlab.com/joshua.software.dev/Zig-ImGui.git#808e1f141d8d85d826cf2796781ad74ffc65b08d",
-            .hash = "122023abc2b6cd8d9967ab3489750227e520d555e1844312e5638df577435310198e",
-        }
+        .imgui = .{
+            .url = "git+https://github.com/ocornut/imgui.git?ref=v1.91.8-docking#11b3a7c8ca23201294464c7f368614a9106af2a1",
+            .hash = "1220a84cf7f09d77936b8b4471bffa3695474ce70c56598e3fdabaf9c5dddea3b927",
+        },
+        .dear_bindings = .{
+            .url = "git+https://github.com/dearimgui/dear_bindings.git#f6e8ea713405914b16f8bf018ee7abaccdbae283",
+            .hash = "122036b555e00c1dbb1addc3eb8e1bf80baf1c72266577f245340bac9648523bfaab",
+        },
     },
     .paths = .{
         "build.zig",
