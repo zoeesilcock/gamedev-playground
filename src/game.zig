@@ -2,7 +2,7 @@ const std = @import("std");
 const aseprite = @import("aseprite.zig");
 const ecs = @import("ecs.zig");
 const math = @import("math.zig");
-const imgui = @import("imgui.zig");
+const imgui = if (INTERNAL) @import("imgui.zig") else struct {};
 const debug = if (INTERNAL) @import("debug.zig") else struct {
     pub const DebugState = void;
 };
@@ -14,8 +14,10 @@ pub const c = @cImport({
     @cDefine("SDL_MAIN_HANDLED", {});
     @cInclude("SDL3/SDL_main.h");
 
-    @cDefine("CIMGUI_DEFINE_ENUMS_AND_STRUCTS", {});
-    @cInclude("cimgui.h");
+    if (INTERNAL) {
+        @cDefine("CIMGUI_DEFINE_ENUMS_AND_STRUCTS", {});
+        @cInclude("cimgui.h");
+    }
 });
 
 const Vector2 = math.Vector2;
@@ -219,7 +221,10 @@ export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, ren
     loadLevel(state, LEVELS[state.level_index]) catch unreachable;
 
     setupRenderTexture(state);
-    imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
+
+    if (INTERNAL) {
+        imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
+    }
 
     return state;
 }
@@ -242,7 +247,9 @@ pub fn restart(state: *State) void {
 }
 
 export fn deinit() void {
-    imgui.deinit();
+    if (INTERNAL) {
+        imgui.deinit();
+    }
 }
 
 pub fn setupRenderTexture(state: *State) void {
@@ -274,13 +281,19 @@ pub fn setupRenderTexture(state: *State) void {
 
 export fn willReload(state_ptr: *anyopaque) void {
     _ = state_ptr;
-    imgui.deinit();
+
+    if (INTERNAL) {
+        imgui.deinit();
+    }
 }
 
 export fn reloaded(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
     loadAssets(state);
-    imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
+
+    if (INTERNAL) {
+        imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
+    }
 
     if (state.ball.transform) |transform| {
         transform.velocity[Y] = if (transform.velocity[Y] > 0) BALL_VELOCITY else -BALL_VELOCITY;
@@ -297,7 +310,7 @@ export fn processInput(state_ptr: *anyopaque) bool {
     var continue_running: bool = true;
     var event: c.SDL_Event = undefined;
     while (c.SDL_PollEvent(&event)) {
-        const event_used = imgui.processEvent(event);
+        const event_used = if (INTERNAL) imgui.processEvent(event) else false;
         if (event_used) {
             continue;
         }

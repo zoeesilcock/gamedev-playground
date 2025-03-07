@@ -1,5 +1,4 @@
 const std = @import("std");
-const ZigImGui_build_script = @import("zig_imgui");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -25,8 +24,8 @@ pub fn build(b: *std.Build) void {
     });
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
-    linkGameLibraries(b, lib, target, optimize);
-    linkGameLibraries(b, lib_unit_tests, target, optimize);
+    linkGameLibraries(b, lib, target, optimize, internal);
+    linkGameLibraries(b, lib_unit_tests, target, optimize, internal);
 
     b.installArtifact(lib);
 
@@ -36,7 +35,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    linkGameLibraries(b, lib_check, target, optimize);
+    linkGameLibraries(b, lib_check, target, optimize, internal);
     const check = b.step("check", "Check if lib compiles");
     check.dependOn(&lib_check.step);
 
@@ -91,6 +90,7 @@ fn linkGameLibraries(
     obj: *std.Build.Step.Compile,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
+    internal: bool,
 ) void {
     const sdl_dep = b.dependency("sdl", .{
         .target = target,
@@ -99,12 +99,14 @@ fn linkGameLibraries(
     });
     obj.root_module.linkLibrary(sdl_dep.artifact("SDL3"));
 
-    const zig_imgui_dep = b.dependency("zig_imgui", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    obj.addIncludePath(zig_imgui_dep.path("src/generated"));
-    obj.linkLibrary(createImGuiSDLLib(b, target, optimize, zig_imgui_dep));
+    if (internal) {
+        const zig_imgui_dep = b.dependency("zig_imgui", .{
+            .target = target,
+            .optimize = optimize,
+        });
+        obj.addIncludePath(zig_imgui_dep.path("src/generated"));
+        obj.linkLibrary(createImGuiSDLLib(b, target, optimize, zig_imgui_dep));
+    }
 }
 
 fn createImGuiSDLLib(
@@ -130,6 +132,7 @@ fn createImGuiSDLLib(
     imgui_sdl.root_module.link_libcpp = true;
     imgui_sdl.linkLibrary(zig_imgui_dep.artifact("cimgui"));
 
+    const ZigImGui_build_script = @import("zig_imgui");
     for (ZigImGui_build_script.IMGUI_C_DEFINES) |c_define| {
         imgui_sdl.root_module.addCMacro(c_define[0], c_define[1]);
     }
