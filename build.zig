@@ -128,7 +128,7 @@ fn linkGameLibraries(
         obj.addIncludePath(imgui_dep.path("."));
 
         const imgui = createImGuiLib(b, target, optimize, imgui_dep);
-        const imgui_sdl = createImGuiSDLLib(b, target, optimize, sdl_dep, imgui_dep, imgui);
+        const imgui_sdl = createImGuiSDLLib(b, target, optimize, imgui_dep, imgui);
         obj.linkLibrary(imgui_sdl);
     }
 }
@@ -188,10 +188,14 @@ fn createImGuiSDLLib(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    sdl_dep: *std.Build.Dependency,
     imgui_dep: *std.Build.Dependency,
     dcimgui: *std.Build.Step.Compile,
 ) *std.Build.Step.Compile {
+    const sdl_dep = b.dependency("sdl", .{
+        .target = target,
+        .optimize = optimize,
+        .preferred_link_mode = .static,
+    });
     const imgui_sdl = b.addStaticLibrary(.{
         .name = "imgui_sdl",
         .target = target,
