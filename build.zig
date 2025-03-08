@@ -9,6 +9,97 @@ pub fn build(b: *std.Build) void {
     const build_options = b.addOptions();
     build_options.addOption(bool, "internal", internal);
 
+    const test_step = b.step("test", "Run unit tests");
+
+    if (!lib_only) {
+        buildExecutable(b, build_options, target, optimize, test_step);
+    }
+
+    buildGameLib(b, build_options, target, optimize, test_step, internal);
+    checkGameLibStep(b, build_options, target, optimize, internal);
+
+    generateImGuiBindingsStep(b, target, optimize);
+}
+
+fn buildExecutable(
+    b: *std.Build,
+    build_options: *std.Build.Step.Options,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    test_step: *std.Build.Step,
+) void {
+    const exe = b.addExecutable(.{
+        .name = "gamedev-playground",
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addOptions("build_options", build_options);
+
+    linkExecutableLibraries(b, exe, target, optimize);
+    b.installArtifact(exe);
+
+    const run_step = b.step("run", "Run the app");
+    const run_cmd = b.addRunArtifact(exe);
+    run_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
+    run_step.dependOn(&run_cmd.step);
+
+    const exe_tests = b.addTest(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    exe_tests.root_module.addOptions("build_options", build_options);
+    linkExecutableLibraries(b, exe_tests, target, optimize);
+    const run_exe_tests = b.addRunArtifact(exe_tests);
+    test_step.dependOn(&run_exe_tests.step);
+}
+
+fn buildGameLib(
+    b: *std.Build,
+    build_options: *std.Build.Step.Options,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    test_step: *std.Build.Step,
+    internal: bool,
+) void {
+    const lib = createGameLib(b, build_options, target, optimize, internal);
+    b.installArtifact(lib);
+
+    const lib_tests = b.addTest(.{
+        .root_source_file = b.path("src/game.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    lib_tests.root_module.addOptions("build_options", build_options);
+    linkGameLibraries(b, lib_tests, target, optimize, internal);
+    const run_lib_tests = b.addRunArtifact(lib_tests);
+    test_step.dependOn(&run_lib_tests.step);
+}
+
+fn checkGameLibStep(
+    b: *std.Build,
+    build_options: *std.Build.Step.Options,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    internal: bool,
+) void {
+    const lib = createGameLib(b, build_options, target, optimize, internal);
+
+    const check = b.step("check", "Check if lib compiles");
+    check.dependOn(&lib.step);
+}
+
+fn createGameLib(
+    b: *std.Build,
+    build_options: *std.Build.Step.Options,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    internal: bool,
+) *std.Build.Step.Compile {
     const lib = b.addSharedLibrary(.{
         .name = "playground",
         .root_source_file = b.path("src/game.zig"),
@@ -17,92 +108,18 @@ pub fn build(b: *std.Build) void {
     });
     lib.root_module.addOptions("build_options", build_options);
 
-    const lib_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/game.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
-
     linkGameLibraries(b, lib, target, optimize, internal);
-    linkGameLibraries(b, lib_unit_tests, target, optimize, internal);
 
-    b.installArtifact(lib);
-
-    const lib_check = b.addSharedLibrary(.{
-        .name = "playground",
-        .root_source_file = b.path("src/game.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    linkGameLibraries(b, lib_check, target, optimize, internal);
-    const check = b.step("check", "Check if lib compiles");
-    check.dependOn(&lib_check.step);
-
-    if (!lib_only) {
-        const exe = b.addExecutable(.{
-            .name = "gamedev-playground",
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-        });
-        b.installArtifact(exe);
-
-        linkExecutableLibraries(b, exe, target, optimize);
-
-        const run_cmd = b.addRunArtifact(exe);
-        run_cmd.step.dependOn(b.getInstallStep());
-        if (b.args) |args| {
-            run_cmd.addArgs(args);
-        }
-
-        const run_step = b.step("run", "Run the app");
-        run_step.dependOn(&run_cmd.step);
-
-        const exe_unit_tests = b.addTest(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-        });
-        const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
-
-        const test_step = b.step("test", "Run unit tests");
-        test_step.dependOn(&run_lib_unit_tests.step);
-        test_step.dependOn(&run_exe_unit_tests.step);
-    }
-
-    const imgui_dep = b.dependency("imgui", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    const dear_bindings_dep = b.dependency("dear_bindings", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    const generate_bindings_step = b.step("generate_imgui_bindings", "Generate C-bindings for imgui");
-    const dear_bindings = b.addSystemCommand(&.{
-        "python",
-        "dear_bindings.py",
-    });
-    dear_bindings.setCwd(dear_bindings_dep.path("."));
-    dear_bindings.addArg("-o");
-    dear_bindings.addFileArg(b.path("src/dcimgui/dcimgui"));
-    dear_bindings.addFileArg(imgui_dep.path("imgui.h"));
-    generate_bindings_step.dependOn(&dear_bindings.step);
+    return lib;
 }
+
 fn linkExecutableLibraries(
     b: *std.Build,
     obj: *std.Build.Step.Compile,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) void {
-    const sdl_dep = b.dependency("sdl", .{
-        .target = target,
-        .optimize = optimize,
-        .preferred_link_mode = .dynamic,
-    });
-    obj.root_module.linkLibrary(sdl_dep.artifact("SDL3"));
-    b.installArtifact(sdl_dep.artifact("SDL3"));
+    obj.root_module.linkLibrary(createSDLLib(b, target, optimize));
 }
 
 fn linkGameLibraries(
@@ -112,24 +129,33 @@ fn linkGameLibraries(
     optimize: std.builtin.OptimizeMode,
     internal: bool,
 ) void {
-    const sdl_dep = b.dependency("sdl", .{
-        .target = target,
-        .optimize = optimize,
-        .preferred_link_mode = .dynamic,
-    });
-    obj.root_module.linkLibrary(sdl_dep.artifact("SDL3"));
-    b.installArtifact(sdl_dep.artifact("SDL3"));
+    obj.root_module.linkLibrary(createSDLLib(b, target, optimize));
 
     if (internal) {
         const imgui_dep = b.dependency("imgui", .{
             .target = target,
             .optimize = optimize,
         });
-
         obj.addIncludePath(b.path("src/dcimgui"));
         obj.addIncludePath(imgui_dep.path("."));
         obj.linkLibrary(createImGuiLib(b, target, optimize, imgui_dep));
     }
+}
+
+fn createSDLLib(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) *std.Build.Step.Compile {
+    const sdl_dep = b.dependency("sdl", .{
+        .target = target,
+        .optimize = optimize,
+        .preferred_link_mode = .dynamic,
+    });
+
+    b.installArtifact(sdl_dep.artifact("SDL3"));
+
+    return sdl_dep.artifact("SDL3");
 }
 
 fn createImGuiLib(
@@ -192,4 +218,29 @@ fn createImGuiLib(
     b.installArtifact(dcimgui_sdl);
 
     return dcimgui_sdl;
+}
+
+fn generateImGuiBindingsStep(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) void {
+    const imgui_dep = b.dependency("imgui", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const dear_bindings_dep = b.dependency("dear_bindings", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const generate_bindings_step = b.step("generate_imgui_bindings", "Generate C-bindings for imgui");
+    const dear_bindings = b.addSystemCommand(&.{
+        "python",
+        "dear_bindings.py",
+    });
+    dear_bindings.setCwd(dear_bindings_dep.path("."));
+    dear_bindings.addArg("-o");
+    dear_bindings.addFileArg(b.path("src/dcimgui/dcimgui"));
+    dear_bindings.addFileArg(imgui_dep.path("imgui.h"));
+    generate_bindings_step.dependOn(&dear_bindings.step);
 }
