@@ -178,7 +178,7 @@ fn createImGuiLib(
     const sdl_dep = b.dependency("sdl", .{
         .target = target,
         .optimize = optimize,
-        .preferred_link_mode = .static,
+        .preferred_link_mode = .dynamic,
     });
     const dcimgui_sdl = b.addStaticLibrary(.{
         .name = "dcimgui_sdl",
@@ -187,8 +187,7 @@ fn createImGuiLib(
     });
 
     dcimgui_sdl.root_module.link_libcpp = true;
-    dcimgui_sdl.linkLibrary(sdl_dep.artifact("SDL3"));
-
+    dcimgui_sdl.addIncludePath(sdl_dep.path("include"));
     dcimgui_sdl.addIncludePath(imgui_dep.path("."));
     dcimgui_sdl.addIncludePath(imgui_dep.path("backends/"));
     dcimgui_sdl.addIncludePath(b.path("src/dcimgui/"));
