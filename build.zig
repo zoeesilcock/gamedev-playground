@@ -102,6 +102,7 @@ fn linkExecutableLibraries(
         .preferred_link_mode = .dynamic,
     });
     obj.root_module.linkLibrary(sdl_dep.artifact("SDL3"));
+    b.installArtifact(sdl_dep.artifact("SDL3"));
 }
 
 fn linkGameLibraries(
@@ -117,6 +118,7 @@ fn linkGameLibraries(
         .preferred_link_mode = .dynamic,
     });
     obj.root_module.linkLibrary(sdl_dep.artifact("SDL3"));
+    b.installArtifact(sdl_dep.artifact("SDL3"));
 
     if (internal) {
         const imgui_dep = b.dependency("imgui", .{
