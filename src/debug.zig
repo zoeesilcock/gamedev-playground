@@ -139,7 +139,7 @@ pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
             },
             c.SDLK_F1 => {
                 var mode: u32 = @intFromEnum(state.debug_state.fps_display_mode) + 1;
-                if (mode >= @typeInfo(FPSDisplayMode).Enum.fields.len) {
+                if (mode >= @typeInfo(FPSDisplayMode).@"enum".fields.len) {
                     mode = 0;
                 }
                 state.debug_state.fps_display_mode = @enumFromInt(mode);
@@ -375,10 +375,10 @@ fn runtimeFieldPointer(ptr: anytype, comptime field_name: []const u8) *@TypeOf(@
 
 fn inspectEntity(entity: *ecs.Entity) void {
     const entity_info = @typeInfo(@TypeOf(entity.*));
-    inline for (entity_info.Struct.fields) |entity_field| {
+    inline for (entity_info.@"struct".fields) |entity_field| {
         if (entity_field.type == ecs.EntityType) {
             const entity_type = runtimeFieldPointer(entity, entity_field.name);
-            inline for (@typeInfo(ecs.EntityType).Enum.fields, 0..) |field, i| {
+            inline for (@typeInfo(ecs.EntityType).@"enum".fields, 0..) |field, i| {
                 if (@intFromEnum(entity_type.*) == i) {
                     c.ImGui_Text("Type: " ++ field.name);
                 }
@@ -386,7 +386,7 @@ fn inspectEntity(entity: *ecs.Entity) void {
         } else if (runtimeFieldPointer(entity, entity_field.name).*) |component| {
             if (c.ImGui_CollapsingHeaderBoolPtr(entity_field.name, null, c.ImGuiTreeNodeFlags_DefaultOpen)) {
                 const component_info = @typeInfo(@TypeOf(component.*));
-                inline for (component_info.Struct.fields) |component_field| {
+                inline for (component_info.@"struct".fields) |component_field| {
                     const field_ptr = runtimeFieldPointer(component, component_field.name);
                     switch (@TypeOf(field_ptr.*)) {
                         bool => {
@@ -402,7 +402,7 @@ fn inspectEntity(entity: *ecs.Entity) void {
                             inputVector2(component_field.name, field_ptr);
                         },
                         else => |field_type| {
-                            if (@typeInfo(field_type) == .Enum) {
+                            if (@typeInfo(field_type) == .@"enum") {
                                 inputEnum(component_field.name, field_ptr);
                             }
                         },
@@ -443,9 +443,9 @@ fn inputVector2(heading: ?[*:0]const u8, value: *Vector2) void {
 
 fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
     const field_info = @typeInfo(@TypeOf(value.*));
-    const count: u32 = field_info.Enum.fields.len;
+    const count: u32 = field_info.@"enum".fields.len;
     var items: [count][*:0]const u8 = [1][*:0]const u8{undefined} ** count;
-    inline for (field_info.Enum.fields, 0..) |enum_field, i| {
+    inline for (field_info.@"enum".fields, 0..) |enum_field, i| {
         items[i] = enum_field.name;
     }
 
