@@ -30,13 +30,13 @@ var dyn_lib_last_modified: i128 = 0;
 var src_last_modified: i128 = 0;
 var assets_last_modified: i128 = 0;
 
-var gameInit: *const fn (u32, u32, *c.SDL_Window, *c.SDL_Renderer) GameStatePtr = undefined;
-var gameDeinit: *const fn () void = undefined;
-var gameWillReload: *const fn (GameStatePtr) void = undefined;
-var gameReloaded: *const fn (GameStatePtr) void = undefined;
-var gameProcessInput: *const fn (GameStatePtr) bool = undefined;
-var gameTick: *const fn (GameStatePtr) void = undefined;
-var gameDraw: *const fn (GameStatePtr) void = undefined;
+var gameInit: *const fn (u32, u32, *c.SDL_Window, *c.SDL_Renderer) callconv(.c) GameStatePtr = undefined;
+var gameDeinit: *const fn () callconv(.c) void = undefined;
+var gameWillReload: *const fn (GameStatePtr) callconv(.c) void = undefined;
+var gameReloaded: *const fn (GameStatePtr) callconv(.c) void = undefined;
+var gameProcessInput: *const fn (GameStatePtr) callconv(.c) bool = undefined;
+var gameTick: *const fn (GameStatePtr) callconv(.c) void = undefined;
+var gameDraw: *const fn (GameStatePtr) callconv(.c) void = undefined;
 
 pub fn main() !void {
     const allocator = std.heap.c_allocator;
