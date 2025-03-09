@@ -28,13 +28,16 @@ fn buildExecutable(
     optimize: std.builtin.OptimizeMode,
     test_step: *std.Build.Step,
 ) void {
-    const exe = b.addExecutable(.{
-        .name = "gamedev-playground",
+    const module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
-    exe.root_module.addOptions("build_options", build_options);
+    module.addOptions("build_options", build_options);
+    const exe = b.addExecutable(.{
+        .name = "gamedev-playground",
+        .root_module = module,
+    });
 
     linkExecutableLibraries(b, exe, target, optimize);
     b.installArtifact(exe);
@@ -47,12 +50,7 @@ fn buildExecutable(
     }
     run_step.dependOn(&run_cmd.step);
 
-    const exe_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    exe_tests.root_module.addOptions("build_options", build_options);
+    const exe_tests = b.addTest(.{ .root_module = module });
     linkExecutableLibraries(b, exe_tests, target, optimize);
     const run_exe_tests = b.addRunArtifact(exe_tests);
     test_step.dependOn(&run_exe_tests.step);
@@ -69,12 +67,7 @@ fn buildGameLib(
     const lib = createGameLib(b, build_options, target, optimize, internal);
     b.installArtifact(lib);
 
-    const lib_tests = b.addTest(.{
-        .root_source_file = b.path("src/game.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    lib_tests.root_module.addOptions("build_options", build_options);
+    const lib_tests = b.addTest(.{ .root_module = lib.root_module });
     linkGameLibraries(b, lib_tests, target, optimize, internal);
     const run_lib_tests = b.addRunArtifact(lib_tests);
     test_step.dependOn(&run_lib_tests.step);
@@ -100,13 +93,16 @@ fn createGameLib(
     optimize: std.builtin.OptimizeMode,
     internal: bool,
 ) *std.Build.Step.Compile {
-    const lib = b.addSharedLibrary(.{
-        .name = "playground",
+    const module = b.createModule(.{
         .root_source_file = b.path("src/game.zig"),
         .target = target,
         .optimize = optimize,
     });
-    lib.root_module.addOptions("build_options", build_options);
+    module.addOptions("build_options", build_options);
+    const lib = b.addSharedLibrary(.{
+        .name = "playground",
+        .root_module = module,
+    });
 
     linkGameLibraries(b, lib, target, optimize, internal);
 
