@@ -11,6 +11,7 @@ const Y = math.Y;
 const Z = math.Z;
 
 pub const EntityType = enum(u8) {
+    Background,
     Ball,
     Wall,
 };

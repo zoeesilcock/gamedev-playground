@@ -31,7 +31,6 @@ const B = math.B;
 const A = math.A;
 
 const INTERNAL: bool = @import("build_options").internal;
-const DEFAULT_WORLD_SCALE: u32 = 4;
 const WORLD_WIDTH: u32 = 200;
 const WORLD_HEIGHT: u32 = 150;
 const BALL_VELOCITY: f32 = 64;
@@ -94,8 +93,6 @@ const Input = struct {
 };
 
 pub const Assets = struct {
-    test_sprite: ?SpriteAsset,
-
     life_filled: ?SpriteAsset,
     life_outlined: ?SpriteAsset,
     life_backdrop: ?SpriteAsset,
@@ -110,6 +107,8 @@ pub const Assets = struct {
     block_change_blue: ?SpriteAsset,
     block_deadly: ?SpriteAsset,
 
+    background: ?SpriteAsset,
+
     pub fn getSpriteAsset(self: *Assets, sprite: *ecs.SpriteComponent) ?*SpriteAsset {
         var result: ?*SpriteAsset = null;
 
@@ -121,7 +120,13 @@ pub const Assets = struct {
                         result = self.getWall(color.color, block.type);
                     }
                 },
+                else => unreachable,
             }
+        } else {
+            result = switch (sprite.entity.entity_type) {
+                .Background => &self.background.?,
+                else => unreachable,
+            };
         }
 
         return result;
@@ -216,6 +221,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window,
     state.sprites = std.ArrayList(*ecs.SpriteComponent).init(allocator);
 
     loadAssets(state);
+    spawnBackground(state) catch unreachable;
     spawnBall(state) catch unreachable;
     loadLevel(state, LEVELS[state.level_index]) catch unreachable;
 
@@ -545,8 +551,6 @@ fn drawTextureAt(state: *State, texture: *c.SDL_Texture, position: Vector2) void
 }
 
 fn loadAssets(state: *State) void {
-    state.assets.test_sprite = loadSprite("assets/test_animation.aseprite", state.renderer, state.allocator);
-
     state.assets.life_filled = loadSprite("assets/life_filled.aseprite", state.renderer, state.allocator);
     state.assets.life_outlined = loadSprite("assets/life_outlined.aseprite", state.renderer, state.allocator);
     state.assets.life_backdrop = loadSprite("assets/life_backdrop.aseprite", state.renderer, state.allocator);
@@ -560,6 +564,8 @@ fn loadAssets(state: *State) void {
     state.assets.block_change_red = loadSprite("assets/block_change_red.aseprite", state.renderer, state.allocator);
     state.assets.block_change_blue = loadSprite("assets/block_change_blue.aseprite", state.renderer, state.allocator);
     state.assets.block_deadly = loadSprite("assets/block_deadly.aseprite", state.renderer, state.allocator);
+
+    state.assets.background = loadSprite("assets/background.aseprite", state.renderer, state.allocator);
 }
 
 fn loadSprite(path: []const u8, renderer: *c.SDL_Renderer, allocator: std.mem.Allocator) ?SpriteAsset {
@@ -595,6 +601,12 @@ fn loadSprite(path: []const u8, renderer: *c.SDL_Renderer, allocator: std.mem.Al
     }
 
     return result;
+}
+
+fn spawnBackground(state: *State) !void {
+    if (addSprite(state, @splat(0)) catch null) |entity| {
+        entity.entity_type = .Background;
+    }
 }
 
 fn spawnBall(state: *State) !void {
