@@ -185,7 +185,7 @@ fn sdlPanic(result: bool, message: []const u8) void {
     }
 }
 
-export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, renderer: *c.SDL_Renderer) *anyopaque {
+pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, renderer: *c.SDL_Renderer) *anyopaque {
     var allocator = std.heap.c_allocator;
     var state: *State = allocator.create(State) catch @panic("Out of memory");
 
@@ -245,7 +245,7 @@ pub fn restart(state: *State) void {
     ).*;
 }
 
-export fn deinit() void {
+pub export fn deinit() void {
     if (INTERNAL) {
         imgui.deinit();
     }
@@ -278,7 +278,7 @@ pub fn setupRenderTexture(state: *State) void {
     );
 }
 
-export fn willReload(state_ptr: *anyopaque) void {
+pub export fn willReload(state_ptr: *anyopaque) void {
     _ = state_ptr;
 
     if (INTERNAL) {
@@ -286,7 +286,7 @@ export fn willReload(state_ptr: *anyopaque) void {
     }
 }
 
-export fn reloaded(state_ptr: *anyopaque) void {
+pub export fn reloaded(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
     loadAssets(state);
 
@@ -299,7 +299,7 @@ export fn reloaded(state_ptr: *anyopaque) void {
     }
 }
 
-export fn processInput(state_ptr: *anyopaque) bool {
+pub export fn processInput(state_ptr: *anyopaque) bool {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     if (INTERNAL) {
@@ -355,7 +355,7 @@ export fn processInput(state_ptr: *anyopaque) bool {
     return continue_running;
 }
 
-export fn tick(state_ptr: *anyopaque) void {
+pub export fn tick(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     if (!state.is_paused) {
@@ -468,7 +468,7 @@ fn handleBallCollision(state: *State, ball: *ecs.Entity, block: *ecs.Entity) voi
     }
 }
 
-export fn draw(state_ptr: *anyopaque) void {
+pub export fn draw(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     sdlPanic(c.SDL_SetRenderTarget(state.renderer, state.render_texture), "Failed to set render target.");

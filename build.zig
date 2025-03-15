@@ -12,7 +12,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
 
     if (!lib_only) {
-        buildExecutable(b, build_options, target, optimize, test_step);
+        buildExecutable(b, build_options, target, optimize, test_step, internal);
     }
 
     buildGameLib(b, build_options, target, optimize, test_step, internal);
@@ -27,6 +27,7 @@ fn buildExecutable(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     test_step: *std.Build.Step,
+    internal: bool,
 ) void {
     const module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -39,7 +40,11 @@ fn buildExecutable(
         .root_module = module,
     });
 
-    linkExecutableLibraries(b, exe, target, optimize);
+    if (optimize == .Debug) {
+        linkExeOnlyLibraries(b, exe, target, optimize);
+    } else {
+        linkGameLibraries(b, exe, target, optimize, internal);
+    }
     b.installArtifact(exe);
 
     const run_step = b.step("run", "Run the app");
@@ -51,7 +56,7 @@ fn buildExecutable(
     run_step.dependOn(&run_cmd.step);
 
     const exe_tests = b.addTest(.{ .root_module = module });
-    linkExecutableLibraries(b, exe_tests, target, optimize);
+    linkExeOnlyLibraries(b, exe_tests, target, optimize);
     const run_exe_tests = b.addRunArtifact(exe_tests);
     test_step.dependOn(&run_exe_tests.step);
 }
@@ -65,7 +70,10 @@ fn buildGameLib(
     internal: bool,
 ) void {
     const lib = createGameLib(b, build_options, target, optimize, internal);
-    b.installArtifact(lib);
+
+    if (optimize == .Debug) {
+        b.installArtifact(lib);
+    }
 
     const lib_tests = b.addTest(.{ .root_module = lib.root_module });
     linkGameLibraries(b, lib_tests, target, optimize, internal);
@@ -109,7 +117,7 @@ fn createGameLib(
     return lib;
 }
 
-fn linkExecutableLibraries(
+fn linkExeOnlyLibraries(
     b: *std.Build,
     obj: *std.Build.Step.Compile,
     target: std.Build.ResolvedTarget,

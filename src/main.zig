@@ -1,12 +1,12 @@
 const std = @import("std");
 
-const c = @cImport({
+const c = if (DEBUG) @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
     @cInclude("SDL3/SDL.h");
     @cInclude("SDL3/SDL_revision.h");
     @cDefine("SDL_MAIN_HANDLED", {});
     @cInclude("SDL3/SDL_main.h");
-});
+}) else @import("game.zig").c;
 
 const DEBUG = @import("builtin").mode == std.builtin.OptimizeMode.Debug;
 const PLATFORM = @import("builtin").os.tag;
@@ -67,15 +67,21 @@ pub fn main() !void {
     }
 
     loadDll() catch @panic("Failed to load the game lib.");
+
     const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT, window.?, renderer.?);
-    initChangeTimes(allocator);
+
+    if (DEBUG) {
+        initChangeTimes(allocator);
+    }
 
     var frame_start_time: u64 = 0;
     var frame_elapsed_time: u64 = 0;
     while (true) {
         frame_start_time = c.SDL_GetTicks();
 
-        checkForChanges(state, allocator);
+        if (DEBUG) {
+            checkForChanges(state, allocator);
+        }
 
         if (!gameProcessInput(state)) {
             break;
@@ -174,25 +180,36 @@ fn unloadDll() !void {
 }
 
 fn loadDll() !void {
-    if (opt_dyn_lib != null) return error.AlreadyLoaded;
+    if (DEBUG) {
+        if (opt_dyn_lib != null) return error.AlreadyLoaded;
 
-    if (PLATFORM == .windows) {
-        var output = try std.fs.cwd().openDir(LIB_OUTPUT_DIR, .{});
-        try output.copyFile("playground.dll", output, "playground_temp.dll", .{});
+        if (PLATFORM == .windows) {
+            var output = try std.fs.cwd().openDir(LIB_OUTPUT_DIR, .{});
+            try output.copyFile("playground.dll", output, "playground_temp.dll", .{});
+        }
+
+        var dyn_lib = std.DynLib.open(LIB_PATH_RUNTIME) catch {
+            return error.OpenFail;
+        };
+
+        opt_dyn_lib = dyn_lib;
+        gameInit = dyn_lib.lookup(@TypeOf(gameInit), "init") orelse return error.LookupFail;
+        gameDeinit = dyn_lib.lookup(@TypeOf(gameDeinit), "deinit") orelse return error.LookupFail;
+        gameWillReload = dyn_lib.lookup(@TypeOf(gameWillReload), "willReload") orelse return error.LookupFail;
+        gameReloaded = dyn_lib.lookup(@TypeOf(gameReloaded), "reloaded") orelse return error.LookupFail;
+        gameProcessInput = dyn_lib.lookup(@TypeOf(gameProcessInput), "processInput") orelse return error.LookupFail;
+        gameTick = dyn_lib.lookup(@TypeOf(gameTick), "tick") orelse return error.LookupFail;
+        gameDraw = dyn_lib.lookup(@TypeOf(gameDraw), "draw") orelse return error.LookupFail;
+    } else {
+        const game = @import("game.zig");
+        gameInit = game.init;
+        gameDeinit = game.deinit;
+        gameWillReload = game.willReload;
+        gameReloaded = game.reloaded;
+        gameProcessInput = game.processInput;
+        gameTick = game.tick;
+        gameDraw = game.draw;
     }
-
-    var dyn_lib = std.DynLib.open(LIB_PATH_RUNTIME) catch {
-        return error.OpenFail;
-    };
-
-    opt_dyn_lib = dyn_lib;
-    gameInit = dyn_lib.lookup(@TypeOf(gameInit), "init") orelse return error.LookupFail;
-    gameDeinit = dyn_lib.lookup(@TypeOf(gameDeinit), "deinit") orelse return error.LookupFail;
-    gameWillReload = dyn_lib.lookup(@TypeOf(gameWillReload), "willReload") orelse return error.LookupFail;
-    gameReloaded = dyn_lib.lookup(@TypeOf(gameReloaded), "reloaded") orelse return error.LookupFail;
-    gameProcessInput = dyn_lib.lookup(@TypeOf(gameProcessInput), "processInput") orelse return error.LookupFail;
-    gameTick = dyn_lib.lookup(@TypeOf(gameTick), "tick") orelse return error.LookupFail;
-    gameDraw = dyn_lib.lookup(@TypeOf(gameDraw), "draw") orelse return error.LookupFail;
 
     std.log.info("Game lib loaded.", .{});
 }
