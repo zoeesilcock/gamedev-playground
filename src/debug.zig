@@ -299,7 +299,7 @@ pub fn drawDebugUI(state: *State) void {
                 }
             }
             c.ImGui_PlotHistogramEx(
-                "",
+                "##FPS_Graph",
                 &timings,
                 timings.len,
                 0,
@@ -317,10 +317,12 @@ pub fn drawDebugUI(state: *State) void {
         const button_size: c.ImVec2 = c.ImVec2{ .x = 140, .y = 20 };
         const half_button_size: c.ImVec2 = c.ImVec2{ .x = 65, .y = 20 };
 
+        c.ImGui_SetNextWindowSize(c.ImVec2{ .x = 160, .y = 175 }, 0);
+
         _ = c.ImGui_Begin(
             "Editor",
             null,
-            c.ImGuiViewportFlags_NoFocusOnAppearing | c.ImGuiWindowFlags_NoNavFocus | c.ImGuiWindowFlags_NoNavInputs,
+            c.ImGuiWindowFlags_NoFocusOnAppearing | c.ImGuiWindowFlags_NoNavFocus | c.ImGuiWindowFlags_NoNavInputs,
         );
 
         _ = c.ImGui_InputTextEx(
