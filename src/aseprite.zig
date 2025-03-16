@@ -1,5 +1,8 @@
 const std = @import("std");
 
+// TODO: Remove once Zig has finished migrating to unmanaged-style containers.
+const ArrayList = std.ArrayListUnmanaged;
+
 // Public API.
 pub const AseDocument = struct {
     allocator: std.mem.Allocator,
@@ -40,8 +43,8 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
         defer file.close();
 
         const opt_header: ?*AseHeader = try parseHeader(&file, allocator);
-        var frames: std.ArrayList(AseFrame) = std.ArrayList(AseFrame).init(allocator);
-        defer frames.deinit();
+        var frames: ArrayList(AseFrame) = .empty;
+        defer frames.deinit(allocator);
 
         if (opt_header) |header| {
             std.debug.assert(header.magic_number == 0xA5E0);
@@ -81,7 +84,7 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
                     }
 
                     if (opt_cel_chunk) |cel_chunk| {
-                        try frames.append(AseFrame{
+                        try frames.append(allocator, AseFrame{
                             .header = frame_header,
                             .cel_chunk = cel_chunk,
                             .tags = opt_tags orelse &.{},
@@ -94,7 +97,7 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
                 result = .{
                     .allocator = allocator,
                     .header = header,
-                    .frames = try frames.toOwnedSlice(),
+                    .frames = try frames.toOwnedSlice(allocator),
                 };
             }
         }
@@ -397,7 +400,7 @@ fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: s
 }
 
 fn parseTagsChunks(file: *const std.fs.File, allocator: std.mem.Allocator) !?[]*AseTagsChunk {
-    var tag_chunks = std.ArrayList(*AseTagsChunk).init(allocator);
+    var tag_chunks: ArrayList(*AseTagsChunk) = .empty;
 
     const header: AseTagsChunkHeader = .{
         .count = try file.reader().readInt(u16, .little),
@@ -416,16 +419,16 @@ fn parseTagsChunks(file: *const std.fs.File, allocator: std.mem.Allocator) !?[]*
         _ = try file.reader().skipBytes(6 + 3 + 1, .{});
 
         const tag_name_length = try file.reader().readInt(u16, .little);
-        var buffer = std.ArrayList(u8).init(allocator);
+        var buffer: ArrayList(u8) = .empty;
         for (0..tag_name_length) |_| {
-            try buffer.append(try file.reader().readByte());
+            try buffer.append(allocator, try file.reader().readByte());
         }
-        chunk.tag_name = try buffer.toOwnedSlice();
+        chunk.tag_name = try buffer.toOwnedSlice(allocator);
 
-        try tag_chunks.append(chunk);
+        try tag_chunks.append(allocator, chunk);
     }
 
-    return try tag_chunks.toOwnedSlice();
+    return try tag_chunks.toOwnedSlice(allocator);
 }
 
 test "single frame" {

@@ -19,12 +19,16 @@ const G = math.G;
 const B = math.B;
 const A = math.A;
 
+// TODO: Remove once Zig has finished migrating to unmanaged-style containers.
+const ArrayList = std.ArrayListUnmanaged;
+
 const PLATFORM = @import("builtin").os.tag;
 const DOUBLE_CLICK_THRESHOLD: u64 = 300;
 const MAX_FRAME_TIME_COUNT: u32 = 300;
 const LEVEL_NAME_BUFFER_SIZE = game.LEVEL_NAME_BUFFER_SIZE;
 
 pub const DebugState = struct {
+    allocator: std.mem.Allocator,
     input: DebugInput,
     mode: enum {
         Select,
@@ -36,7 +40,7 @@ pub const DebugState = struct {
     current_level_name: [:0]u8,
 
     show_colliders: bool,
-    collisions: std.ArrayList(DebugCollision),
+    collisions: ArrayList(DebugCollision),
 
     last_left_click_time: u64,
     last_left_click_entity: ?*ecs.Entity,
@@ -49,17 +53,18 @@ pub const DebugState = struct {
     fps_display_mode: FPSDisplayMode,
 
     pub fn init(self: *DebugState, allocator: std.mem.Allocator) !void {
+        self.allocator = allocator;
         self.input = DebugInput{};
 
         self.mode = .Select;
         self.current_block_color = .Red;
         self.current_block_type = .Wall;
         self.show_editor = false;
-        self.current_level_name = @ptrCast(try allocator.alloc(u8, LEVEL_NAME_BUFFER_SIZE));
+        self.current_level_name = @ptrCast(try self.allocator.alloc(u8, LEVEL_NAME_BUFFER_SIZE));
         _ = try std.fmt.bufPrintZ(self.current_level_name, "level1", .{});
 
         self.show_colliders = false;
-        self.collisions = std.ArrayList(DebugCollision).init(allocator);
+        self.collisions = .empty;
 
         self.selected_entity = null;
         self.hovered_entity = null;
@@ -71,7 +76,7 @@ pub const DebugState = struct {
     }
 
     pub fn addCollision(self: *DebugState, collision: *const ecs.Collision, time: u64) void {
-        self.collisions.append(.{
+        self.collisions.append(self.allocator, .{
             .collision = collision.*,
             .time_added = time,
         }) catch unreachable;

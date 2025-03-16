@@ -30,6 +30,9 @@ const G = math.G;
 const B = math.B;
 const A = math.A;
 
+// TODO: Remove once Zig has finished migrating to unmanaged-style containers.
+const ArrayList = std.ArrayListUnmanaged;
+
 const INTERNAL: bool = @import("build_options").internal;
 const WORLD_WIDTH: u32 = 200;
 const WORLD_HEIGHT: u32 = 150;
@@ -76,11 +79,11 @@ pub const State = struct {
     lives_remaining: u32,
 
     // Components.
-    transforms: std.ArrayList(*ecs.TransformComponent),
-    colliders: std.ArrayList(*ecs.ColliderComponent),
-    sprites: std.ArrayList(*ecs.SpriteComponent),
+    transforms: ArrayList(*ecs.TransformComponent),
+    colliders: ArrayList(*ecs.ColliderComponent),
+    sprites: ArrayList(*ecs.SpriteComponent),
     ball: *ecs.Entity,
-    walls: std.ArrayList(*ecs.Entity),
+    walls: ArrayList(*ecs.Entity),
 
     pub fn deltaTime(self: *State) f32 {
         return @as(f32, @floatFromInt(self.delta_time)) / 1000;
@@ -215,10 +218,10 @@ pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window,
 
     state.level_index = 0;
     state.lives_remaining = MAX_LIVES;
-    state.walls = std.ArrayList(*ecs.Entity).init(allocator);
-    state.transforms = std.ArrayList(*ecs.TransformComponent).init(allocator);
-    state.colliders = std.ArrayList(*ecs.ColliderComponent).init(allocator);
-    state.sprites = std.ArrayList(*ecs.SpriteComponent).init(allocator);
+    state.walls = .empty;
+    state.transforms = .empty;
+    state.colliders = .empty;
+    state.sprites = .empty;
 
     loadAssets(state);
     spawnBackground(state) catch unreachable;
@@ -572,7 +575,7 @@ fn loadSprite(path: []const u8, renderer: *c.SDL_Renderer, allocator: std.mem.Al
     var result: ?SpriteAsset = null;
 
     if (aseprite.loadDocument(path, allocator) catch undefined) |doc| {
-        var textures = std.ArrayList(*c.SDL_Texture).init(allocator);
+        var textures: ArrayList(*c.SDL_Texture) = .empty;
 
         for (doc.frames) |frame| {
             const surface = sdlPanicIfNull(c.SDL_CreateSurfaceFrom(
@@ -588,7 +591,7 @@ fn loadSprite(path: []const u8, renderer: *c.SDL_Renderer, allocator: std.mem.Al
                 c.SDL_CreateTextureFromSurface(renderer, surface),
                 "Failed to create texture from surface",
             );
-            textures.append(texture.?) catch undefined;
+            textures.append(allocator, texture.?) catch undefined;
         }
 
         std.log.info("loadSprite: {s}: {d}", .{ path, doc.frames.len });
@@ -596,7 +599,7 @@ fn loadSprite(path: []const u8, renderer: *c.SDL_Renderer, allocator: std.mem.Al
         result = SpriteAsset{
             .path = path,
             .document = doc,
-            .frames = textures.toOwnedSlice() catch &.{},
+            .frames = textures.toOwnedSlice(allocator) catch &.{},
         };
     }
 
@@ -626,7 +629,7 @@ fn spawnBall(state: *State) !void {
         entity.collider = collider_component;
 
         state.ball = entity;
-        try state.colliders.append(collider_component);
+        try state.colliders.append(state.allocator, collider_component);
 
         if (entity.sprite) |ball_sprite| {
             ball_sprite.startAnimation("idle", &state.assets);
@@ -715,8 +718,8 @@ fn addSprite(state: *State, position: Vector2) !*ecs.Entity {
     entity.transform = transform;
     entity.sprite = sprite;
 
-    try state.transforms.append(transform);
-    try state.sprites.append(sprite);
+    try state.transforms.append(state.allocator, transform);
+    try state.sprites.append(state.allocator, sprite);
 
     return entity;
 }
@@ -754,8 +757,8 @@ pub fn addWall(state: *State, color: ecs.ColorComponentValue, block_type: ecs.Bl
     block_component.type = block_type;
     new_entity.block = block_component;
 
-    try state.walls.append(new_entity);
-    try state.colliders.append(collider_component);
+    try state.walls.append(state.allocator, new_entity);
+    try state.colliders.append(state.allocator, collider_component);
 
     return new_entity;
 }
