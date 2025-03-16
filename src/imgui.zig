@@ -8,7 +8,7 @@ pub extern fn ImGui_ImplSDL3_InitForSDLRenderer(window: ?*c.SDL_Window, renderer
 pub extern fn ImGui_ImplSDL3_InitForOther(window: ?*c.SDL_Window) bool;
 pub extern fn ImGui_ImplSDL3_Shutdown() void;
 pub extern fn ImGui_ImplSDL3_NewFrame() void;
-pub extern fn ImGui_ImplSDL3_ProcessEvent(event: c.SDL_Event) bool;
+pub extern fn ImGui_ImplSDL3_ProcessEvent(event: ?*c.SDL_Event) bool;
 
 pub extern fn ImGui_ImplSDLRenderer3_Init(renderer: ?*c.SDL_Renderer) bool;
 pub extern fn ImGui_ImplSDLRenderer3_Shutdown() void;
@@ -38,7 +38,7 @@ pub fn deinit() void {
     c.ImGui_DestroyContext(im_context);
 }
 
-pub fn processEvent(event: c.SDL_Event) bool {
+pub fn processEvent(event: *c.SDL_Event) bool {
     _ = ImGui_ImplSDL3_ProcessEvent(event);
     const im_io = c.ImGui_GetIO()[0];
     return im_io.WantCaptureMouse or im_io.WantCaptureKeyboard;

@@ -315,7 +315,7 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
     var continue_running: bool = true;
     var event: c.SDL_Event = undefined;
     while (c.SDL_PollEvent(&event)) {
-        const event_used = if (INTERNAL) imgui.processEvent(event) else false;
+        const event_used = if (INTERNAL) imgui.processEvent(&event) else false;
         if (event_used) {
             continue;
         }
