@@ -251,9 +251,9 @@ pub fn handleInput(state: *State) void {
 fn getHoveredEntity(state: *State) ?*ecs.Entity {
     var result: ?*ecs.Entity = null;
 
-    for (state.colliders.items) |colldier| {
-        if (colldier.containsPoint(state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)))) {
-            result = colldier.entity;
+    for (state.colliders.items) |collider| {
+        if (collider.containsPoint(state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)))) {
+            result = collider.entity;
             break;
         }
     }
