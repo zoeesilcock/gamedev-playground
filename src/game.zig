@@ -32,6 +32,11 @@ const A = math.A;
 
 // TODO: Remove once Zig has finished migrating to unmanaged-style containers.
 const ArrayList = std.ArrayListUnmanaged;
+const DebugAllocator = std.heap.DebugAllocator(.{
+    .enable_memory_limit = true,
+    .retain_metadata = INTERNAL,
+    .never_unmap = INTERNAL,
+});
 
 const INTERNAL: bool = @import("build_options").internal;
 const WORLD_WIDTH: u32 = 200;
@@ -49,6 +54,7 @@ const LEVELS: []const []const u8 = &.{
 };
 
 pub const State = struct {
+    debug_allocator: *DebugAllocator,
     allocator: std.mem.Allocator,
     debug_state: debug.DebugState,
 
@@ -194,10 +200,15 @@ fn sdlPanic(result: bool, message: []const u8) void {
 }
 
 pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, renderer: *c.SDL_Renderer) *anyopaque {
-    var allocator = std.heap.c_allocator;
+    var backing_allocator = std.heap.page_allocator;
+    var debug_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize allocator."));
+    debug_allocator.* = .init;
+    var allocator = debug_allocator.allocator();
+
     var state: *State = allocator.create(State) catch @panic("Out of memory");
 
     state.allocator = allocator;
+    state.debug_allocator = debug_allocator;
 
     if (INTERNAL) {
         state.debug_state.init(state.allocator) catch unreachable;

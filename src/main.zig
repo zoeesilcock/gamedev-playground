@@ -39,7 +39,8 @@ var gameTick: *const fn (GameStatePtr) callconv(.c) void = undefined;
 var gameDraw: *const fn (GameStatePtr) callconv(.c) void = undefined;
 
 pub fn main() !void {
-    const allocator = std.heap.c_allocator;
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    const allocator = debug_allocator.allocator();
 
     if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_EVENTS)) {
         std.log.debug("SDL_Init failed", .{});
@@ -105,6 +106,10 @@ pub fn main() !void {
     c.SDL_DestroyWindow(window);
 
     c.SDL_Quit();
+
+    if (DEBUG) {
+        _ = debug_allocator.detectLeaks();
+    }
 }
 
 fn initChangeTimes(allocator: std.mem.Allocator) void {
