@@ -18,6 +18,7 @@ Double clicking on an entity will open it's sprite in Aseprite. This works parti
 * F: Toggle fullscreen.
 * C: Toggle collider outlines.
 * F1: Switch between FPS display modes (none, number, or number and graph).
+* F2: Toggle the memory usage graph.
 * E: Toggle editor.
 * Alt/Option: Clicking on an entity grabs the color and/or type of the clicked element.
 * S: Save level.
