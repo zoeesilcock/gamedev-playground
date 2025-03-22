@@ -822,4 +822,6 @@ pub fn removeEntity(state: *State, entity: *ecs.Entity) void {
             _ = state.walls.swapRemove(remove_at);
         }
     }
+
+    entity.deinit(state.allocator);
 }

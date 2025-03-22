@@ -29,10 +29,28 @@ pub const Entity = struct {
         entity.transform = null;
         entity.collider = null;
         entity.sprite = null;
-        entity.collider = null;
         entity.color = null;
         entity.block = null;
         return entity;
+    }
+
+    pub fn deinit(self: *Entity, allocator: std.mem.Allocator) void {
+        if (self.transform) |transform| {
+            allocator.destroy(transform);
+        }
+        if (self.collider) |collider| {
+            allocator.destroy(collider);
+        }
+        if (self.sprite) |sprite| {
+            allocator.destroy(sprite);
+        }
+        if (self.color) |color| {
+            allocator.destroy(color);
+        }
+        if (self.block) |block| {
+            allocator.destroy(block);
+        }
+        allocator.destroy(self);
     }
 };
 
