@@ -242,7 +242,11 @@ pub fn handleInput(state: *State) void {
                     {
                         openSprite(state, hovered_entity);
                     } else {
-                        state.debug_state.selected_entity = hovered_entity;
+                        if (state.debug_state.selected_entity != hovered_entity) {
+                            state.debug_state.selected_entity = hovered_entity;
+                        } else {
+                            state.debug_state.selected_entity = null;
+                        }
                     }
                 }
             }
