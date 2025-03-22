@@ -6,6 +6,7 @@ const imgui = @import("imgui.zig");
 
 const c = game.c;
 const State = game.State;
+const Assets = game.Assets;
 const SpriteAsset = game.SpriteAsset;
 
 const Vector2 = math.Vector2;
@@ -140,7 +141,7 @@ const DebugCollision = struct {
 const FPSDisplayMode = enum {
     None,
     Number,
-    NumberAndGraph
+    NumberAndGraph,
 };
 
 pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
@@ -216,7 +217,7 @@ pub fn handleInput(state: *State) void {
     if (state.debug_state.hovered_entity) |hovered_entity| {
         if (input.left_mouse_pressed) {
             // Grab the color and type of the hovered entity when alt is held down.
-            if (state.debug_state.input.alt_key_down)  {
+            if (state.debug_state.input.alt_key_down) {
                 if (hovered_entity.block) |block| {
                     state.debug_state.current_block_type = block.type;
                 }
@@ -268,9 +269,23 @@ fn getHoveredEntity(state: *State) ?*ecs.Entity {
     var result: ?*ecs.Entity = null;
 
     for (state.colliders.items) |collider| {
-        if (collider.containsPoint(state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)))) {
+        if (collider.containsPoint(
+            state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)),
+        )) {
             result = collider.entity;
             break;
+        }
+    }
+
+    if (result == null) {
+        for (state.sprites.items) |sprite| {
+            if (sprite.containsPoint(
+                state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)),
+                &state.assets,
+            )) {
+                result = sprite.entity;
+                break;
+            }
         }
     }
 
@@ -565,8 +580,8 @@ pub fn drawDebugOverlay(state: *State) void {
     }
 
     // Highlight the currently hovered entity.
-    drawEntityHighlight(state.renderer, state.debug_state.selected_entity, Color{ 255, 0, 0, 255 }, scale, offset);
-    drawEntityHighlight(state.renderer, state.debug_state.hovered_entity, Color{ 255, 150, 0, 255 }, scale, offset);
+    drawEntityHighlight(state.renderer, &state.assets, state.debug_state.selected_entity, Color{ 255, 0, 0, 255 }, scale, offset);
+    drawEntityHighlight(state.renderer, &state.assets, state.debug_state.hovered_entity, Color{ 255, 150, 0, 255 }, scale, offset);
 
     // Draw the current mouse position.
     if (false) {
@@ -661,6 +676,7 @@ fn drawDebugCircle(renderer: *c.SDL_Renderer, center: Vector2, radius: f32) void
 
 fn drawEntityHighlight(
     renderer: *c.SDL_Renderer,
+    assets: *Assets,
     opt_entity: ?*ecs.Entity,
     color: Color,
     scale: f32,
@@ -681,6 +697,17 @@ fn drawEntityHighlight(
                 };
                 _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
                 _ = c.SDL_RenderRect(renderer, &entity_rect.scaled(scale).toSDL());
+            } else if (entity.sprite) |sprite| {
+                if (assets.getSpriteAsset(sprite)) |sprite_asset| {
+                    const width: f32 = @floatFromInt(sprite_asset.document.header.width);
+                    const height: f32 = @floatFromInt(sprite_asset.document.header.height);
+                    const entity_rect: math.Rect = .{
+                        .position = Vector2{ transform.position[X], transform.position[Y] } + offset,
+                        .size = Vector2{ width, height },
+                    };
+                    _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
+                    _ = c.SDL_RenderRect(renderer, &entity_rect.scaled(scale).toSDL());
+                }
             }
         }
     }

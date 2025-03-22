@@ -376,6 +376,28 @@ pub const SpriteComponent = struct {
 
         return result;
     }
+
+    pub fn containsPoint(self: *const SpriteComponent, point: Vector2, assets: *game.Assets) bool {
+        var contains_point = false;
+        var position: Vector2 = .{ 0, 0 };
+
+        if (assets.getSpriteAsset(self)) |sprite_asset| {
+            if (self.entity.transform) |transform| {
+                position = transform.position;
+            }
+
+            const width: f32 = @floatFromInt(sprite_asset.document.header.width);
+            const height: f32 = @floatFromInt(sprite_asset.document.header.height);
+
+            if ((point[X] <= position[X] + width and point[X] >= position[X]) and
+                (point[Y] <= position[Y] + height and point[Y] >= position[Y]))
+            {
+                contains_point = true;
+            }
+        }
+
+        return contains_point;
+    }
 };
 
 pub const ColorComponentValue = enum {

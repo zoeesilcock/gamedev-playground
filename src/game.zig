@@ -118,7 +118,7 @@ pub const Assets = struct {
 
     background: ?SpriteAsset,
 
-    pub fn getSpriteAsset(self: *Assets, sprite: *ecs.SpriteComponent) ?*SpriteAsset {
+    pub fn getSpriteAsset(self: *Assets, sprite: *const ecs.SpriteComponent) ?*SpriteAsset {
         var result: ?*SpriteAsset = null;
 
         if (sprite.entity.color) |color| {
