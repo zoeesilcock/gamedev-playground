@@ -25,6 +25,8 @@ const ArrayList = std.ArrayListUnmanaged;
 const PLATFORM = @import("builtin").os.tag;
 const DOUBLE_CLICK_THRESHOLD: u64 = 300;
 const MAX_FRAME_TIME_COUNT: u32 = 300;
+const MAX_MEMORY_USAGE_COUNT: u32 = 1000;
+const MEMORY_USAGE_RECORD_INTERVAL: u64 = 16;
 const LEVEL_NAME_BUFFER_SIZE = game.LEVEL_NAME_BUFFER_SIZE;
 
 pub const DebugState = struct {
@@ -48,9 +50,14 @@ pub const DebugState = struct {
     selected_entity: ?*ecs.Entity,
 
     current_frame_index: u32,
-    frame_times: [MAX_FRAME_TIME_COUNT]u64 = [1]u64{0} ** MAX_FRAME_TIME_COUNT,
+    frame_times: [MAX_FRAME_TIME_COUNT]u64,
     fps_average: f32,
     fps_display_mode: FPSDisplayMode,
+
+    memory_usage: [MAX_MEMORY_USAGE_COUNT]u64,
+    memory_usage_current_index: u32,
+    memory_usage_last_collected_at: u64,
+    memory_usage_display: bool,
 
     pub fn init(self: *DebugState, allocator: std.mem.Allocator) !void {
         self.allocator = allocator;
@@ -71,8 +78,14 @@ pub const DebugState = struct {
         self.last_left_click_time = 0;
         self.last_left_click_entity = null;
 
+        self.frame_times = [1]u64{0} ** MAX_FRAME_TIME_COUNT;
         self.fps_average = 0;
         self.fps_display_mode = .Number;
+
+        self.memory_usage = [1]u64{0} ** MAX_MEMORY_USAGE_COUNT;
+        self.memory_usage_current_index = 0;
+        self.memory_usage_last_collected_at = 0;
+        self.memory_usage_display = false;
     }
 
     pub fn addCollision(self: *DebugState, collision: *const ecs.Collision, time: u64) void {
@@ -148,6 +161,9 @@ pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
                     mode = 0;
                 }
                 state.debug_state.fps_display_mode = @enumFromInt(mode);
+            },
+            c.SDLK_F2 => {
+                state.debug_state.memory_usage_display = !state.debug_state.memory_usage_display;
             },
             c.SDLK_C => {
                 state.debug_state.show_colliders = !state.debug_state.show_colliders;
@@ -275,13 +291,25 @@ pub fn calculateFPS(state: *State) void {
     state.debug_state.fps_average = 1 / (average / @as(f32, @floatFromInt(MAX_FRAME_TIME_COUNT)));
 }
 
+pub fn recordMemoryUsage(state: *State) void {
+    if (state.debug_state.memory_usage_last_collected_at + MEMORY_USAGE_RECORD_INTERVAL < state.time) {
+        state.debug_state.memory_usage_last_collected_at = state.time;
+        state.debug_state.memory_usage_current_index += 1;
+        if (state.debug_state.memory_usage_current_index >= MAX_MEMORY_USAGE_COUNT) {
+            state.debug_state.memory_usage_current_index = 0;
+        }
+        state.debug_state.memory_usage[state.debug_state.memory_usage_current_index] =
+            state.debug_allocator.total_requested_bytes;
+    }
+}
+
 pub fn drawDebugUI(state: *State) void {
     imgui.newFrame();
 
-    c.ImGui_SetNextWindowPosEx(c.ImVec2{ .x = 5, .y = 5 }, 0, c.ImVec2{ .x = 0, .y = 0 });
-    c.ImGui_SetNextWindowSize(c.ImVec2{ .x = 300, .y = 160 }, 0);
-
     if (state.debug_state.fps_display_mode != .None) {
+        c.ImGui_SetNextWindowPosEx(c.ImVec2{ .x = 5, .y = 5 }, 0, c.ImVec2{ .x = 0, .y = 0 });
+        c.ImGui_SetNextWindowSize(c.ImVec2{ .x = 300, .y = 160 }, 0);
+
         _ = c.ImGui_Begin(
             "FPS",
             null,
@@ -315,6 +343,45 @@ pub fn drawDebugUI(state: *State) void {
                 @sizeOf(f32),
             );
         }
+
+        c.ImGui_End();
+    }
+
+    if (state.debug_state.memory_usage_display) {
+        _ = c.ImGui_Begin(
+            "MemoryUsage",
+            null,
+            c.ImGuiWindowFlags_NoFocusOnAppearing | c.ImGuiWindowFlags_NoNavFocus | c.ImGuiWindowFlags_NoNavInputs,
+        );
+
+        _ = c.ImGui_Text("Bytes: %d", state.debug_state.memory_usage[state.debug_state.memory_usage_current_index]);
+
+        var memory_usage: [MAX_MEMORY_USAGE_COUNT]f32 = [1]f32{0} ** MAX_MEMORY_USAGE_COUNT;
+        var max_value: f32 = 0;
+        var min_value: f32 = std.math.floatMax(f32);
+        for (0..MAX_MEMORY_USAGE_COUNT) |i| {
+            memory_usage[i] = @floatFromInt(state.debug_state.memory_usage[i]);
+            if (memory_usage[i] > max_value) {
+                max_value = memory_usage[i];
+            }
+            if (memory_usage[i] < min_value and memory_usage[i] > 0) {
+                min_value = memory_usage[i];
+            }
+        }
+        var buf: [100]u8 = undefined;
+        const min_text = std.fmt.bufPrintZ(&buf, "min: {d}", .{min_value}) catch "";
+        c.ImGui_PlotHistogramEx(
+            "##MemoryUsageGraph",
+            &memory_usage,
+            memory_usage.len,
+            @intCast(state.debug_state.memory_usage_current_index + 1),
+            min_text.ptr,
+            min_value,
+            max_value,
+            c.ImVec2{ .x = 300, .y = 100 },
+            @sizeOf(f32),
+        );
+
         c.ImGui_End();
     }
 

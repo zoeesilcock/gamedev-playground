@@ -387,6 +387,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
 
     if (INTERNAL) {
         debug.calculateFPS(state);
+        debug.recordMemoryUsage(state);
     }
 
     if (state.ball.transform) |transform| {
