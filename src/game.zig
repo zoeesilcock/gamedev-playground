@@ -308,7 +308,6 @@ pub export fn willReload(state_ptr: *anyopaque) void {
 
 pub export fn reloaded(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
-    loadAssets(state);
 
     if (INTERNAL) {
         imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
