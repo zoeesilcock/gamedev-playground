@@ -181,6 +181,11 @@ pub const SpriteAsset = struct {
     document: aseprite.AseDocument,
     frames: []*c.SDL_Texture,
     path: []const u8,
+
+    pub fn deinit(self: *SpriteAsset, allocator: std.mem.Allocator) void {
+        self.document.deinit();
+        allocator.free(self.frames);
+    }
 };
 
 fn sdlPanicIfNull(result: anytype, message: []const u8) @TypeOf(result) {
@@ -308,6 +313,9 @@ pub export fn willReload(state_ptr: *anyopaque) void {
 
 pub export fn reloaded(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
+
+    unloadAssets(state);
+    loadAssets(state);
 
     if (INTERNAL) {
         imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
@@ -580,6 +588,24 @@ fn loadAssets(state: *State) void {
     state.assets.block_deadly = loadSprite("assets/block_deadly.aseprite", state.renderer, state.allocator);
 
     state.assets.background = loadSprite("assets/background.aseprite", state.renderer, state.allocator);
+}
+
+fn unloadAssets(state: *State) void {
+    state.assets.life_filled.?.deinit(state.allocator);
+    state.assets.life_outlined.?.deinit(state.allocator);
+    state.assets.life_backdrop.?.deinit(state.allocator);
+
+    state.assets.ball_red.?.deinit(state.allocator);
+    state.assets.ball_blue.?.deinit(state.allocator);
+
+    state.assets.block_gray.?.deinit(state.allocator);
+    state.assets.block_red.?.deinit(state.allocator);
+    state.assets.block_blue.?.deinit(state.allocator);
+    state.assets.block_change_red.?.deinit(state.allocator);
+    state.assets.block_change_blue.?.deinit(state.allocator);
+    state.assets.block_deadly.?.deinit(state.allocator);
+
+    state.assets.background.?.deinit(state.allocator);
 }
 
 fn loadSprite(path: []const u8, renderer: *c.SDL_Renderer, allocator: std.mem.Allocator) ?SpriteAsset {
