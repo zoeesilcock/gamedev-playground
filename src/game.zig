@@ -216,7 +216,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window,
     state.debug_allocator = debug_allocator;
 
     if (INTERNAL) {
-        state.debug_state.init(state.allocator) catch unreachable;
+        state.debug_state.init() catch @panic("Failed to init DebugState");
     }
 
     state.window = window;
@@ -376,7 +376,7 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
     }
 
     if (INTERNAL) {
-        debug.handleInput(state);
+        debug.handleInput(state, state.allocator);
     }
 
     return continue_running;
@@ -425,7 +425,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
                 transform.velocity[Y] = 0;
 
                 if (INTERNAL) {
-                    state.debug_state.addCollision(&collision, state.time);
+                    state.debug_state.addCollision(state.allocator, &collision, state.time);
                 }
 
                 handleBallCollision(state, collision.self.entity, collision.other.entity);
@@ -445,7 +445,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
                 state.ball_horizontal_bounce_start_time = state.time;
 
                 if (INTERNAL) {
-                    state.debug_state.addCollision(&collision, state.time);
+                    state.debug_state.addCollision(state.allocator, &collision, state.time);
                 }
 
                 handleBallCollision(state, collision.self.entity, collision.other.entity);

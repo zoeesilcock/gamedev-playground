@@ -31,24 +31,23 @@ const MEMORY_USAGE_RECORD_INTERVAL: u64 = 16;
 const LEVEL_NAME_BUFFER_SIZE = game.LEVEL_NAME_BUFFER_SIZE;
 
 pub const DebugState = struct {
-    allocator: std.mem.Allocator,
     input: DebugInput,
     mode: enum {
         Select,
         Edit,
     },
+    show_editor: bool,
+    current_level_name: [LEVEL_NAME_BUFFER_SIZE:0]u8,
     current_block_color: ecs.ColorComponentValue,
     current_block_type: ecs.BlockType,
-    show_editor: bool,
-    current_level_name: [:0]u8,
+    hovered_entity: ?*ecs.Entity,
+    selected_entity: ?*ecs.Entity,
 
     show_colliders: bool,
     collisions: ArrayList(DebugCollision),
 
     last_left_click_time: u64,
     last_left_click_entity: ?*ecs.Entity,
-    hovered_entity: ?*ecs.Entity,
-    selected_entity: ?*ecs.Entity,
 
     current_frame_index: u32,
     frame_times: [MAX_FRAME_TIME_COUNT]u64,
@@ -60,16 +59,14 @@ pub const DebugState = struct {
     memory_usage_last_collected_at: u64,
     memory_usage_display: bool,
 
-    pub fn init(self: *DebugState, allocator: std.mem.Allocator) !void {
-        self.allocator = allocator;
+    pub fn init(self: *DebugState) !void {
         self.input = DebugInput{};
 
         self.mode = .Select;
         self.current_block_color = .Red;
         self.current_block_type = .Wall;
         self.show_editor = false;
-        self.current_level_name = @ptrCast(try self.allocator.alloc(u8, LEVEL_NAME_BUFFER_SIZE));
-        _ = try std.fmt.bufPrintZ(self.current_level_name, "level1", .{});
+        _ = try std.fmt.bufPrintZ(&self.current_level_name, "level1", .{});
 
         self.show_colliders = false;
         self.collisions = .empty;
@@ -89,8 +86,13 @@ pub const DebugState = struct {
         self.memory_usage_display = false;
     }
 
-    pub fn addCollision(self: *DebugState, collision: *const ecs.Collision, time: u64) void {
-        self.collisions.append(self.allocator, .{
+    pub fn addCollision(
+        self: *DebugState,
+        allocator: std.mem.Allocator,
+        collision: *const ecs.Collision,
+        time: u64,
+    ) void {
+        self.collisions.append(allocator, .{
             .collision = collision.*,
             .time_added = time,
         }) catch unreachable;
@@ -118,7 +120,7 @@ pub const DebugState = struct {
     }
 
     pub fn currentLevelName(self: *DebugState) []const u8 {
-        return std.mem.span(self.current_level_name.ptr);
+        return std.mem.span(self.current_level_name[0..].ptr);
     }
 };
 
@@ -199,7 +201,7 @@ pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
     }
 }
 
-pub fn handleInput(state: *State) void {
+pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
     state.debug_state.hovered_entity = getHoveredEntity(state);
 
     const input: *DebugInput = &state.debug_state.input;
@@ -240,7 +242,7 @@ pub fn handleInput(state: *State) void {
                     if (state.time - state.debug_state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
                         state.debug_state.last_left_click_entity.? == hovered_entity)
                     {
-                        openSprite(state, hovered_entity);
+                        openSprite(state, allocator, hovered_entity);
                     } else {
                         if (state.debug_state.selected_entity != hovered_entity) {
                             state.debug_state.selected_entity = hovered_entity;
@@ -333,10 +335,10 @@ pub fn drawDebugUI(state: *State) void {
             "FPS",
             null,
             c.ImGuiWindowFlags_NoMove |
-            c.ImGuiWindowFlags_NoResize |
-            c.ImGuiWindowFlags_NoBackground |
-            c.ImGuiWindowFlags_NoTitleBar |
-            c.ImGuiWindowFlags_NoMouseInputs,
+                c.ImGuiWindowFlags_NoResize |
+                c.ImGuiWindowFlags_NoBackground |
+                c.ImGuiWindowFlags_NoTitleBar |
+                c.ImGuiWindowFlags_NoMouseInputs,
         );
 
         c.ImGui_TextColored(c.ImVec4{ .x = 0, .y = 1, .z = 0, .w = 1 }, "FPS: %.0f", state.debug_state.fps_average);
@@ -418,7 +420,7 @@ pub fn drawDebugUI(state: *State) void {
 
         _ = c.ImGui_InputTextEx(
             "Name",
-            @ptrCast(state.debug_state.current_level_name),
+            @ptrCast(&state.debug_state.current_level_name),
             state.debug_state.current_level_name.len,
             0,
             null,
@@ -726,7 +728,7 @@ fn getTiledPosition(position: Vector2, asset: *const SpriteAsset) Vector2 {
     };
 }
 
-fn openSprite(state: *State, entity: *ecs.Entity) void {
+fn openSprite(state: *State, allocator: std.mem.Allocator, entity: *ecs.Entity) void {
     if (entity.sprite) |sprite| {
         if (state.assets.getSpriteAsset(sprite)) |sprite_asset| {
             const process_args = if (PLATFORM == .windows) [_][]const u8{
@@ -737,7 +739,7 @@ fn openSprite(state: *State, entity: *ecs.Entity) void {
                 sprite_asset.path,
             };
 
-            var aseprite_process = std.process.Child.init(&process_args, state.allocator);
+            var aseprite_process = std.process.Child.init(&process_args, allocator);
             aseprite_process.spawn() catch |err| {
                 std.debug.print("Error spawning process: {}\n", .{err});
             };
