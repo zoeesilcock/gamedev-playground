@@ -228,10 +228,21 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
                 }
             } else {
                 if (state.debug_state.mode == .Edit) {
-                    if (block_color == hovered_entity.color.?.color) {
+                    var should_add: bool = true;
+
+                    if (hovered_entity.entity_type == .Wall) {
                         game.removeEntity(state, hovered_entity);
-                    } else {
-                        game.removeEntity(state, hovered_entity);
+
+                        if (hovered_entity.color) |hovered_color| {
+                            if (hovered_entity.block) |hovered_block_type| {
+                                should_add =
+                                    block_color != hovered_color.color or
+                                    block_type != hovered_block_type.type;
+                            }
+                        }
+                    }
+
+                    if (should_add) {
                         const tiled_position = getTiledPosition(
                             input.mouse_position / @as(Vector2, @splat(state.world_scale)),
                             state.assets.getWall(block_color, block_type),
