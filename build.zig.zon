@@ -9,12 +9,12 @@
             .hash = "122037db94caedbd2aa60b75d06df1d7197edd930e7d3cf1520dc27d9e74116692b2",
         },
         .imgui = .{
-            .url = "git+https://github.com/ocornut/imgui.git?ref=v1.91.9-docking#97428e8ac99e339ce05eee531cf55b77b29ea709",
-            .hash = "1220a674d6e83f9c3d4c4d5f9e2937d6f95864dc18fb2293b10a4b126c8c3eb249f2",
+            .url = "git+https://github.com/ocornut/imgui.git?ref=v1.91.9b-docking#4806a1924ff6181180bf5e4b8b79ab4394118875",
+            .hash = "1220dd1cb333dc4912f220c78abb661de854fc5593b8a9e677d8a4b129522ec4be25",
         },
         .dear_bindings = .{
-            .url = "git+https://github.com/dearimgui/dear_bindings.git#f6e8ea713405914b16f8bf018ee7abaccdbae283",
-            .hash = "122036b555e00c1dbb1addc3eb8e1bf80baf1c72266577f245340bac9648523bfaab",
+            .url = "git+https://github.com/dearimgui/dear_bindings.git#b8e5511d80f084c3f71e132ae577ffcbd9a02b72",
+            .hash = "1220ddff183fed80f88003c913951cdb5eccc73ee8d41a963b4180518966b5537ce0",
         },
     },
     .paths = .{
