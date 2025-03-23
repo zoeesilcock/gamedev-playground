@@ -183,7 +183,7 @@ pub const SpriteAsset = struct {
     path: []const u8,
 
     pub fn deinit(self: *SpriteAsset, allocator: std.mem.Allocator) void {
-        self.document.deinit();
+        self.document.deinit(allocator);
         allocator.free(self.frames);
     }
 };

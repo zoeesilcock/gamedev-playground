@@ -5,17 +5,16 @@ const ArrayList = std.ArrayListUnmanaged;
 
 // Public API.
 pub const AseDocument = struct {
-    allocator: std.mem.Allocator,
     header: *const AseHeader,
     frames: []const AseFrame,
 
-    pub fn deinit(self: AseDocument) void {
+    pub fn deinit(self: *AseDocument, allocator: std.mem.Allocator) void {
         for (self.frames) |frame| {
-            frame.deinit(self.allocator);
+            frame.deinit(allocator);
         }
 
-        self.allocator.free(self.frames);
-        self.allocator.destroy(self.header);
+        allocator.free(self.frames);
+        allocator.destroy(self.header);
     }
 };
 
@@ -95,7 +94,6 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
 
             if (frames.items.len > 0) {
                 result = .{
-                    .allocator = allocator,
                     .header = header,
                     .frames = try frames.toOwnedSlice(allocator),
                 };
