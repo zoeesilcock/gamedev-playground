@@ -46,9 +46,6 @@ pub const DebugState = struct {
     show_colliders: bool,
     collisions: ArrayList(DebugCollision),
 
-    last_left_click_time: u64,
-    last_left_click_entity: ?*ecs.Entity,
-
     current_frame_index: u32,
     frame_times: [MAX_FRAME_TIME_COUNT]u64,
     fps_average: f32,
@@ -73,8 +70,6 @@ pub const DebugState = struct {
 
         self.selected_entity = null;
         self.hovered_entity = null;
-        self.last_left_click_time = 0;
-        self.last_left_click_entity = null;
 
         self.frame_times = [1]u64{0} ** MAX_FRAME_TIME_COUNT;
         self.fps_average = 0;
@@ -127,8 +122,11 @@ pub const DebugState = struct {
 const DebugInput = struct {
     left_mouse_down: bool = false,
     left_mouse_pressed: bool = false,
-    alt_key_down: bool = false,
+    left_mouse_last_time: u64 = 0,
+    left_mouse_last_entity: ?*ecs.Entity = null,
+
     mouse_position: Vector2 = @splat(0),
+    alt_key_down: bool = false,
 
     pub fn reset(self: *DebugInput) void {
         self.left_mouse_pressed = false;
@@ -250,8 +248,8 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
                         _ = game.addWall(state, block_color, block_type, tiled_position) catch undefined;
                     }
                 } else {
-                    if (state.time - state.debug_state.last_left_click_time < DOUBLE_CLICK_THRESHOLD and
-                        state.debug_state.last_left_click_entity.? == hovered_entity)
+                    if (state.time - state.debug_state.input.left_mouse_last_time < DOUBLE_CLICK_THRESHOLD and
+                        state.debug_state.input.left_mouse_last_entity.? == hovered_entity)
                     {
                         openSprite(state, allocator, hovered_entity);
                     } else {
@@ -264,8 +262,8 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
                 }
             }
 
-            state.debug_state.last_left_click_time = state.time;
-            state.debug_state.last_left_click_entity = hovered_entity;
+            state.debug_state.input.left_mouse_last_time = state.time;
+            state.debug_state.input.left_mouse_last_entity = hovered_entity;
         }
     } else {
         if (input.left_mouse_pressed) {
