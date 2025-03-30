@@ -40,8 +40,8 @@ pub const DebugState = struct {
     current_level_name: [LEVEL_NAME_BUFFER_SIZE:0]u8,
     current_block_color: ecs.ColorComponentValue,
     current_block_type: ecs.BlockType,
-    hovered_entity: ?*ecs.Entity,
-    selected_entity: ?*ecs.Entity,
+    hovered_entity_id: ?ecs.EntityId,
+    selected_entity_id: ?ecs.EntityId,
 
     show_colliders: bool,
     collisions: ArrayList(DebugCollision),
@@ -68,8 +68,8 @@ pub const DebugState = struct {
         self.show_colliders = false;
         self.collisions = .empty;
 
-        self.selected_entity = null;
-        self.hovered_entity = null;
+        self.selected_entity_id = null;
+        self.hovered_entity_id = null;
 
         self.frame_times = [1]u64{0} ** MAX_FRAME_TIME_COUNT;
         self.fps_average = 0;
@@ -123,7 +123,7 @@ const DebugInput = struct {
     left_mouse_down: bool = false,
     left_mouse_pressed: bool = false,
     left_mouse_last_time: u64 = 0,
-    left_mouse_last_entity: ?*ecs.Entity = null,
+    left_mouse_last_entity_id: ?ecs.EntityId = null,
 
     mouse_position: Vector2 = @splat(0),
     alt_key_down: bool = false,
@@ -200,7 +200,7 @@ pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
 }
 
 pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
-    state.debug_state.hovered_entity = getHoveredEntity(state);
+    state.debug_state.hovered_entity_id = getHoveredEntity(state);
 
     const input: *DebugInput = &state.debug_state.input;
     var block_color = state.debug_state.current_block_color;
@@ -214,7 +214,7 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
         return;
     }
 
-    if (state.debug_state.hovered_entity) |hovered_entity| {
+    if (state.getEntity(state.debug_state.hovered_entity_id)) |hovered_entity| {
         if (input.left_mouse_pressed) {
             // Grab the color and type of the hovered entity when alt is held down.
             if (state.debug_state.input.alt_key_down) {
@@ -229,7 +229,7 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
                     var should_add: bool = true;
 
                     if (hovered_entity.entity_type == .Wall) {
-                        game.removeEntity(state, hovered_entity);
+                        state.removeEntity(hovered_entity);
 
                         if (hovered_entity.color) |hovered_color| {
                             if (hovered_entity.block) |hovered_block_type| {
@@ -249,21 +249,25 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
                     }
                 } else {
                     if (state.time - state.debug_state.input.left_mouse_last_time < DOUBLE_CLICK_THRESHOLD and
-                        state.debug_state.input.left_mouse_last_entity.? == hovered_entity)
+                        (state.debug_state.input.left_mouse_last_entity_id != null and
+                            state.debug_state.input.left_mouse_last_entity_id.?.equals(state.debug_state.hovered_entity_id)))
                     {
                         openSprite(state, allocator, hovered_entity);
                     } else {
-                        if (state.debug_state.selected_entity != hovered_entity) {
-                            state.debug_state.selected_entity = hovered_entity;
+                        if (state.debug_state.selected_entity_id == null or
+                            (state.debug_state.selected_entity_id != null and
+                                !state.debug_state.selected_entity_id.?.equals(hovered_entity.id)))
+                        {
+                            state.debug_state.selected_entity_id = hovered_entity.id;
                         } else {
-                            state.debug_state.selected_entity = null;
+                            state.debug_state.selected_entity_id = null;
                         }
                     }
                 }
             }
 
             state.debug_state.input.left_mouse_last_time = state.time;
-            state.debug_state.input.left_mouse_last_entity = hovered_entity;
+            state.debug_state.input.left_mouse_last_entity_id = state.debug_state.hovered_entity_id;
         }
     } else {
         if (input.left_mouse_pressed) {
@@ -274,20 +278,20 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
                 );
                 _ = game.addWall(state, block_color, block_type, tiled_position) catch undefined;
             } else {
-                state.debug_state.selected_entity = null;
+                state.debug_state.selected_entity_id = null;
             }
         }
     }
 }
 
-fn getHoveredEntity(state: *State) ?*ecs.Entity {
-    var result: ?*ecs.Entity = null;
+fn getHoveredEntity(state: *State) ?ecs.EntityId {
+    var result: ?ecs.EntityId = null;
 
     for (state.colliders.items) |collider| {
         if (collider.containsPoint(
             state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)),
         )) {
-            result = collider.entity;
+            result = collider.entity.id;
             break;
         }
     }
@@ -298,7 +302,7 @@ fn getHoveredEntity(state: *State) ?*ecs.Entity {
                 state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)),
                 &state.assets,
             )) {
-                result = sprite.entity;
+                result = sprite.entity.id;
                 break;
             }
         }
@@ -458,7 +462,7 @@ pub fn drawDebugUI(state: *State) void {
         c.ImGui_End();
     }
 
-    if (state.debug_state.selected_entity) |selected_entity| {
+    if (state.getEntity(state.debug_state.selected_entity_id)) |selected_entity| {
         c.ImGui_SetNextWindowPosEx(c.ImVec2{ .x = 30, .y = 30 }, c.ImGuiCond_FirstUseEver, c.ImVec2{ .x = 0, .y = 0 });
         c.ImGui_SetNextWindowSize(c.ImVec2{ .x = 300, .y = 460 }, c.ImGuiCond_FirstUseEver);
 
@@ -480,7 +484,11 @@ fn runtimeFieldPointer(ptr: anytype, comptime field_name: []const u8) *@TypeOf(@
 fn inspectEntity(entity: *ecs.Entity) void {
     const entity_info = @typeInfo(@TypeOf(entity.*));
     inline for (entity_info.@"struct".fields) |entity_field| {
-        if (entity_field.type == ecs.EntityType) {
+        if (entity_field.type == ecs.EntityId) {
+            // TODO: Implement inspecting EntityId (readonly?).
+        } else if (entity_field.type == bool) {
+            // TODO: Implement inspecting bool (readonly?).
+        } else if (entity_field.type == ecs.EntityType) {
             const entity_type = runtimeFieldPointer(entity, entity_field.name);
             inline for (@typeInfo(ecs.EntityType).@"enum".fields, 0..) |field, i| {
                 if (@intFromEnum(entity_type.*) == i) {
@@ -595,8 +603,24 @@ pub fn drawDebugOverlay(state: *State) void {
     }
 
     // Highlight the currently hovered entity.
-    drawEntityHighlight(state.renderer, &state.assets, state.debug_state.selected_entity, Color{ 255, 0, 0, 255 }, scale, offset);
-    drawEntityHighlight(state.renderer, &state.assets, state.debug_state.hovered_entity, Color{ 255, 150, 0, 255 }, scale, offset);
+    drawEntityHighlight(
+        state,
+        state.renderer,
+        &state.assets,
+        state.debug_state.selected_entity_id,
+        Color{ 255, 0, 0, 255 },
+        scale,
+        offset,
+    );
+    drawEntityHighlight(
+        state,
+        state.renderer,
+        &state.assets,
+        state.debug_state.hovered_entity_id,
+        Color{ 255, 150, 0, 255 },
+        scale,
+        offset,
+    );
 
     // Draw the current mouse position.
     if (false) {
@@ -690,14 +714,15 @@ fn drawDebugCircle(renderer: *c.SDL_Renderer, center: Vector2, radius: f32) void
 }
 
 fn drawEntityHighlight(
+    state: *State,
     renderer: *c.SDL_Renderer,
     assets: *Assets,
-    opt_entity: ?*ecs.Entity,
+    entity_id: ?ecs.EntityId,
     color: Color,
     scale: f32,
     offset: Vector2,
 ) void {
-    if (opt_entity) |entity| {
+    if (state.getEntity(entity_id)) |entity| {
         if (entity.transform) |transform| {
             if (entity.collider) |collider| {
                 const entity_rect: math.Rect = .{

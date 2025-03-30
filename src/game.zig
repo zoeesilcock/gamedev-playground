@@ -84,6 +84,10 @@ pub const State = struct {
 
     lives_remaining: u32,
 
+    // Entities.
+    entities: ArrayList(*ecs.Entity),
+    entities_free: ArrayList(u32),
+
     // Components.
     transforms: ArrayList(*ecs.TransformComponent),
     colliders: ArrayList(*ecs.ColliderComponent),
@@ -93,6 +97,91 @@ pub const State = struct {
 
     pub fn deltaTime(self: *State) f32 {
         return @as(f32, @floatFromInt(self.delta_time)) / 1000;
+    }
+
+    pub fn getEntity(self: *State, opt_id: ?ecs.EntityId) ?*ecs.Entity {
+        var result: ?*ecs.Entity = null;
+
+        if (opt_id) |id| {
+            const potential = self.entities.items[id.index];
+            if (potential.id.equals(id) and potential.is_in_use) {
+                result = potential;
+            }
+        }
+
+        return result;
+    }
+
+    pub fn addEntity(self: *State) !*ecs.Entity {
+        var result: *ecs.Entity = undefined;
+
+        if (self.entities_free.pop()) |free_index| {
+            result = self.entities.items[free_index];
+            result.is_in_use = true;
+            result.id.generation += 1;
+        } else {
+            result = try ecs.Entity.init(self.allocator);
+            result.id.index = @intCast(self.entities.items.len);
+            result.id.generation = 0;
+            result.is_in_use = true;
+            self.entities.append(self.allocator, result) catch @panic("Failed to allocate entity");
+        }
+
+        return result;
+    }
+
+    pub fn removeEntity(self: *State, entity: *ecs.Entity) void {
+        if (entity.transform) |_| {
+            var opt_remove_at: ?usize = null;
+            for (self.transforms.items, 0..) |stored_transform, index| {
+                if (stored_transform.entity == entity) {
+                    opt_remove_at = index;
+                }
+            }
+            if (opt_remove_at) |remove_at| {
+                _ = self.transforms.swapRemove(remove_at);
+            }
+        }
+
+        if (entity.collider) |_| {
+            var opt_remove_at: ?usize = null;
+            for (self.colliders.items, 0..) |stored_collider, index| {
+                if (stored_collider.entity == entity) {
+                    opt_remove_at = index;
+                }
+            }
+            if (opt_remove_at) |remove_at| {
+                _ = self.colliders.swapRemove(remove_at);
+            }
+        }
+
+        if (entity.sprite) |_| {
+            var opt_remove_at: ?usize = null;
+            for (self.sprites.items, 0..) |stored_sprite, index| {
+                if (stored_sprite.entity == entity) {
+                    opt_remove_at = index;
+                }
+            }
+            if (opt_remove_at) |remove_at| {
+                _ = self.sprites.swapRemove(remove_at);
+            }
+        }
+
+        {
+            var opt_remove_at: ?usize = null;
+            for (self.walls.items, 0..) |stored_wall, index| {
+                if (stored_wall == entity) {
+                    opt_remove_at = index;
+                }
+            }
+            if (opt_remove_at) |remove_at| {
+                _ = self.walls.swapRemove(remove_at);
+            }
+        }
+
+        entity.is_in_use = false;
+        self.entities_free.append(self.allocator, entity.id.index) catch @panic("Failed to allocate free index");
+        entity.freeAllComponents(self.allocator);
     }
 };
 
@@ -231,6 +320,9 @@ pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window,
     state.delta_time = 0;
     state.input = Input{};
     state.ball_horizontal_bounce_start_time = 0;
+
+    state.entities = .empty;
+    state.entities_free = .empty;
 
     state.level_index = 0;
     state.lives_remaining = MAX_LIVES;
@@ -487,7 +579,7 @@ fn handleBallCollision(state: *State, ball: *ecs.Entity, block: *ecs.Entity) voi
 
             if (block.color) |other_color| {
                 if (other_block.type == .Wall and other_color.color == ball_color.color) {
-                    removeEntity(state, block);
+                    state.removeEntity(block);
                 } else if (other_block.type == .ColorChange and other_color.color != ball_color.color) {
                     ball_color.color = other_color.color;
                 }
@@ -685,7 +777,7 @@ fn resetBall(state: *State) void {
 
 fn unloadLevel(state: *State) void {
     for (state.walls.items) |wall| {
-        removeEntity(state, wall);
+        state.removeEntity(wall);
     }
 
     state.walls.clearRetainingCapacity();
@@ -737,7 +829,7 @@ fn isLevelCompleted(state: *State) bool {
 }
 
 fn addSprite(state: *State, position: Vector2) !*ecs.Entity {
-    var entity: *ecs.Entity = try ecs.Entity.init(state.allocator);
+    var entity: *ecs.Entity = try state.addEntity();
     var sprite: *ecs.SpriteComponent = try state.allocator.create(ecs.SpriteComponent);
     var transform: *ecs.TransformComponent = try state.allocator.create(ecs.TransformComponent);
 
@@ -798,56 +890,4 @@ pub fn addWall(state: *State, color: ecs.ColorComponentValue, block_type: ecs.Bl
     try state.colliders.append(state.allocator, collider_component);
 
     return new_entity;
-}
-
-pub fn removeEntity(state: *State, entity: *ecs.Entity) void {
-    if (entity.transform) |_| {
-        var opt_remove_at: ?usize = null;
-        for (state.transforms.items, 0..) |stored_transform, index| {
-            if (stored_transform.entity == entity) {
-                opt_remove_at = index;
-            }
-        }
-        if (opt_remove_at) |remove_at| {
-            _ = state.transforms.swapRemove(remove_at);
-        }
-    }
-
-    if (entity.collider) |_| {
-        var opt_remove_at: ?usize = null;
-        for (state.colliders.items, 0..) |stored_collider, index| {
-            if (stored_collider.entity == entity) {
-                opt_remove_at = index;
-            }
-        }
-        if (opt_remove_at) |remove_at| {
-            _ = state.colliders.swapRemove(remove_at);
-        }
-    }
-
-    if (entity.sprite) |_| {
-        var opt_remove_at: ?usize = null;
-        for (state.sprites.items, 0..) |stored_sprite, index| {
-            if (stored_sprite.entity == entity) {
-                opt_remove_at = index;
-            }
-        }
-        if (opt_remove_at) |remove_at| {
-            _ = state.sprites.swapRemove(remove_at);
-        }
-    }
-
-    {
-        var opt_remove_at: ?usize = null;
-        for (state.walls.items, 0..) |stored_wall, index| {
-            if (stored_wall == entity) {
-                opt_remove_at = index;
-            }
-        }
-        if (opt_remove_at) |remove_at| {
-            _ = state.walls.swapRemove(remove_at);
-        }
-    }
-
-    entity.deinit(state.allocator);
 }

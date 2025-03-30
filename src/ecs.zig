@@ -16,7 +16,20 @@ pub const EntityType = enum(u8) {
     Wall,
 };
 
+pub const EntityId = struct {
+    index: u32,
+    generation: u32,
+
+    pub fn equals(self: EntityId, other: ?EntityId) bool {
+        return other != null and
+            self.index == other.?.index and
+            self.generation == other.?.generation;
+    }
+};
+
 pub const Entity = struct {
+    id: EntityId,
+    is_in_use: bool,
     entity_type: EntityType,
     transform: ?*TransformComponent,
     collider: ?*ColliderComponent,
@@ -35,6 +48,11 @@ pub const Entity = struct {
     }
 
     pub fn deinit(self: *Entity, allocator: std.mem.Allocator) void {
+        self.freeAllComponents(allocator);
+        allocator.destroy(self);
+    }
+
+    pub fn freeAllComponents(self: *Entity, allocator: std.mem.Allocator) void {
         if (self.transform) |transform| {
             allocator.destroy(transform);
         }
@@ -50,7 +68,6 @@ pub const Entity = struct {
         if (self.block) |block| {
             allocator.destroy(block);
         }
-        allocator.destroy(self);
     }
 };
 
@@ -179,7 +196,7 @@ pub const ColliderComponent = struct {
                         if (((at.position[X] + self.left() >= other_at.position[X] + other.left() and at.position[X] + self.left() <= other_at.position[X] + other.right()) or
                             (at.position[X] + self.right() >= other_at.position[X] + other.left() and at.position[X] + self.right() <= other_at.position[X] + other.right())) and
                             ((at.position[Y] + self.bottom() >= other_at.position[Y] + other.top() and at.position[Y] + self.bottom() <= other_at.position[Y] + other.bottom()) or
-                            (at.position[Y] + self.top() <= other_at.position[Y] + other.bottom() and at.position[Y] + self.top() >= other_at.position[Y] + other.top())))
+                                (at.position[Y] + self.top() <= other_at.position[Y] + other.bottom() and at.position[Y] + self.top() >= other_at.position[Y] + other.top())))
                         {
                             collides = true;
                         }
