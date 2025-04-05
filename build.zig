@@ -123,7 +123,9 @@ fn linkExeOnlyLibraries(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) void {
-    obj.root_module.linkLibrary(createSDLLib(b, target, optimize));
+    if (createSDLLib(b, target, optimize)) |sdl_lib| {
+        obj.root_module.linkLibrary(sdl_lib);
+    }
 }
 
 fn linkGameLibraries(
@@ -133,16 +135,21 @@ fn linkGameLibraries(
     optimize: std.builtin.OptimizeMode,
     internal: bool,
 ) void {
-    obj.root_module.linkLibrary(createSDLLib(b, target, optimize));
+    if (createSDLLib(b, target, optimize)) |sdl_lib| {
+        obj.root_module.linkLibrary(sdl_lib);
+    }
 
     if (internal) {
-        const imgui_dep = b.dependency("imgui", .{
+        if (b.lazyDependency("imgui", .{
             .target = target,
             .optimize = optimize,
-        });
-        obj.addIncludePath(b.path("src/dcimgui"));
-        obj.addIncludePath(imgui_dep.path("."));
-        obj.linkLibrary(createImGuiLib(b, target, optimize, imgui_dep));
+        })) |imgui_dep| {
+            obj.addIncludePath(b.path("src/dcimgui"));
+            obj.addIncludePath(imgui_dep.path("."));
+            if (createImGuiLib(b, target, optimize, imgui_dep)) |imgui_lib| {
+                obj.linkLibrary(imgui_lib);
+            }
+        }
     }
 }
 
@@ -150,16 +157,19 @@ fn createSDLLib(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-) *std.Build.Step.Compile {
-    const sdl_dep = b.dependency("sdl", .{
+) ?*std.Build.Step.Compile {
+    var sdl_lib: ?*std.Build.Step.Compile = null;
+
+    if (b.lazyDependency("sdl", .{
         .target = target,
         .optimize = optimize,
         .preferred_link_mode = .dynamic,
-    });
+    })) |sdl_dep| {
+        b.installArtifact(sdl_dep.artifact("SDL3"));
+        sdl_lib = sdl_dep.artifact("SDL3");
+    }
 
-    b.installArtifact(sdl_dep.artifact("SDL3"));
-
-    return sdl_dep.artifact("SDL3");
+    return sdl_lib;
 }
 
 fn createImGuiLib(
@@ -167,7 +177,8 @@ fn createImGuiLib(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     imgui_dep: *std.Build.Dependency,
-) *std.Build.Step.Compile {
+) ?*std.Build.Step.Compile {
+    var imgui_lib: ?*std.Build.Step.Compile = null;
     const IMGUI_C_DEFINES: []const [2][]const u8 = &.{
         .{ "IMGUI_DISABLE_OBSOLETE_FUNCTIONS", "1" },
         .{ "IMGUI_DISABLE_OBSOLETE_KEYIO", "1" },
@@ -179,48 +190,51 @@ fn createImGuiLib(
         "-std=c++11",
         "-fvisibility=hidden",
     };
-    const sdl_dep = b.dependency("sdl", .{
+    if (b.lazyDependency("sdl", .{
         .target = target,
         .optimize = optimize,
         .preferred_link_mode = .dynamic,
-    });
-    const dcimgui_sdl = b.addStaticLibrary(.{
-        .name = "dcimgui_sdl",
-        .target = target,
-        .optimize = optimize,
-    });
-
-    dcimgui_sdl.root_module.link_libcpp = true;
-    dcimgui_sdl.addIncludePath(sdl_dep.path("include"));
-    dcimgui_sdl.addIncludePath(imgui_dep.path("."));
-    dcimgui_sdl.addIncludePath(imgui_dep.path("backends/"));
-    dcimgui_sdl.addIncludePath(b.path("src/dcimgui/"));
-
-    const imgui_sources: []const std.Build.LazyPath = &.{
-        b.path("src/dcimgui/dcimgui.cpp"),
-        imgui_dep.path("imgui.cpp"),
-        imgui_dep.path("imgui_demo.cpp"),
-        imgui_dep.path("imgui_draw.cpp"),
-        imgui_dep.path("imgui_tables.cpp"),
-        imgui_dep.path("imgui_widgets.cpp"),
-        imgui_dep.path("backends/imgui_impl_sdlrenderer3.cpp"),
-        imgui_dep.path("backends/imgui_impl_sdl3.cpp"),
-    };
-
-    for (IMGUI_C_DEFINES) |c_define| {
-        dcimgui_sdl.root_module.addCMacro(c_define[0], c_define[1]);
-    }
-
-    for (imgui_sources) |file| {
-        dcimgui_sdl.addCSourceFile(.{
-            .file = file,
-            .flags = IMGUI_C_FLAGS,
+    })) |sdl_dep| {
+        const dcimgui_sdl = b.addStaticLibrary(.{
+            .name = "dcimgui_sdl",
+            .target = target,
+            .optimize = optimize,
         });
+
+        dcimgui_sdl.root_module.link_libcpp = true;
+        dcimgui_sdl.addIncludePath(sdl_dep.path("include"));
+        dcimgui_sdl.addIncludePath(imgui_dep.path("."));
+        dcimgui_sdl.addIncludePath(imgui_dep.path("backends/"));
+        dcimgui_sdl.addIncludePath(b.path("src/dcimgui/"));
+
+        const imgui_sources: []const std.Build.LazyPath = &.{
+            b.path("src/dcimgui/dcimgui.cpp"),
+            imgui_dep.path("imgui.cpp"),
+            imgui_dep.path("imgui_demo.cpp"),
+            imgui_dep.path("imgui_draw.cpp"),
+            imgui_dep.path("imgui_tables.cpp"),
+            imgui_dep.path("imgui_widgets.cpp"),
+            imgui_dep.path("backends/imgui_impl_sdlrenderer3.cpp"),
+            imgui_dep.path("backends/imgui_impl_sdl3.cpp"),
+        };
+
+        for (IMGUI_C_DEFINES) |c_define| {
+            dcimgui_sdl.root_module.addCMacro(c_define[0], c_define[1]);
+        }
+
+        for (imgui_sources) |file| {
+            dcimgui_sdl.addCSourceFile(.{
+                .file = file,
+                .flags = IMGUI_C_FLAGS,
+            });
+        }
+
+        b.installArtifact(dcimgui_sdl);
+
+        imgui_lib = dcimgui_sdl;
     }
 
-    b.installArtifact(dcimgui_sdl);
-
-    return dcimgui_sdl;
+    return imgui_lib;
 }
 
 fn generateImGuiBindingsStep(
