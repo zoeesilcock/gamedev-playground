@@ -485,9 +485,12 @@ fn inspectEntity(entity: *ecs.Entity) void {
     const entity_info = @typeInfo(@TypeOf(entity.*));
     inline for (entity_info.@"struct".fields) |entity_field| {
         if (entity_field.type == ecs.EntityId) {
-            // TODO: Implement inspecting EntityId (readonly?).
+            const entity_id: *ecs.EntityId = runtimeFieldPointer(entity, entity_field.name);
+            var buf: [64]u8 = undefined;
+            const id = std.fmt.bufPrintZ(&buf, "ID: {d} ({d})", .{entity_id.index, entity_id.generation}) catch "";
+            c.ImGui_Text(id.ptr);
         } else if (entity_field.type == bool) {
-            // TODO: Implement inspecting bool (readonly?).
+            // Skip this, since it will always be true if the entity can be inspected.
         } else if (entity_field.type == ecs.EntityType) {
             const entity_type = runtimeFieldPointer(entity, entity_field.name);
             inline for (@typeInfo(ecs.EntityType).@"enum".fields, 0..) |field, i| {
