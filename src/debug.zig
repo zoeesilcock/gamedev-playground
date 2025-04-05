@@ -588,7 +588,7 @@ pub fn drawDebugOverlay(state: *State) void {
 
     if (state.debug_state.show_colliders) {
         for (state.colliders.items) |collider| {
-            drawDebugCollider(state.renderer, collider, Color{ 0, 255, 0, 255 }, scale, offset);
+            drawDebugCollider(state.renderer, collider.entity, Color{ 0, 255, 0, 255 }, scale, offset);
         }
 
         // Highlight collisions.
@@ -605,7 +605,9 @@ pub fn drawDebugOverlay(state: *State) void {
                     @as(f32, @floatFromInt(((collision.time_added + show_time) - state.time))) /
                     @as(f32, @floatFromInt(show_time));
                 const color: Color = .{ 255, 128, 0, @intFromFloat(255 * time_remaining) };
-                drawDebugCollider(state.renderer, collision.collision.other, color, scale, offset);
+                if (state.getEntity(collision.collision.other_id)) |other_entity| {
+                    drawDebugCollider(state.renderer, other_entity, color, scale, offset);
+                }
             }
         }
     }
@@ -650,42 +652,44 @@ pub fn drawDebugOverlay(state: *State) void {
 
 fn drawDebugCollider(
     renderer: *c.SDL_Renderer,
-    collider: *ColliderComponent,
+    entity: *Entity,
     color: Color,
     scale: f32,
     offset: Vector2,
 ) void {
-    if (collider.entity.transform) |transform| {
-        const center = collider.center(transform) + offset;
-        const center_rect: math.Rect = .{
-            .position = Vector2{ center[X] - 0.5, center[Y] - 0.5 },
-            .size = Vector2{ 1, 1 },
-        };
-        const collider_rect: math.Rect = .{
-            .position = Vector2{
-                (transform.position[X] + collider.left()),
-                (transform.position[Y] + collider.top()),
-            } + offset,
-            .size = Vector2{
-                (collider.right() - collider.left()),
-                (collider.bottom() - collider.top()),
-            },
-        };
+    if (entity.collider) |collider| {
+        if (entity.transform) |transform| {
+            const center = collider.center(transform) + offset;
+            const center_rect: math.Rect = .{
+                .position = Vector2{ center[X] - 0.5, center[Y] - 0.5 },
+                .size = Vector2{ 1, 1 },
+            };
+            const collider_rect: math.Rect = .{
+                .position = Vector2{
+                    (transform.position[X] + collider.left()),
+                    (transform.position[Y] + collider.top()),
+                } + offset,
+                .size = Vector2{
+                    (collider.right() - collider.left()),
+                    (collider.bottom() - collider.top()),
+                },
+            };
 
-        switch (collider.shape) {
-            .Square => {
-                _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-                _ = c.SDL_RenderRect(renderer, &collider_rect.scaled(scale).toSDL());
-            },
-            .Circle => {
-                _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-                const scale2: Vector2 = @splat(scale);
-                drawDebugCircle(renderer, center * scale2, collider.radius * scale);
-            },
+            switch (collider.shape) {
+                .Square => {
+                    _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
+                    _ = c.SDL_RenderRect(renderer, &collider_rect.scaled(scale).toSDL());
+                },
+                .Circle => {
+                    _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
+                    const scale2: Vector2 = @splat(scale);
+                    drawDebugCircle(renderer, center * scale2, collider.radius * scale);
+                },
+            }
+
+            _ = c.SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
+            _ = c.SDL_RenderFillRect(renderer, &center_rect.scaled(scale).toSDL());
         }
-
-        _ = c.SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
-        _ = c.SDL_RenderFillRect(renderer, &center_rect.scaled(scale).toSDL());
     }
 }
 

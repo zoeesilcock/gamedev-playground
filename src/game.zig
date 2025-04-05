@@ -141,6 +141,8 @@ pub const State = struct {
     }
 
     pub fn removeEntity(self: *State, entity: *Entity) void {
+        std.debug.assert(entity.is_in_use == true);
+
         if (entity.transform) |_| {
             var opt_remove_at: ?usize = null;
             for (self.transforms.items, 0..) |stored_transform, index| {
@@ -515,42 +517,46 @@ pub export fn tick(state_ptr: *anyopaque) void {
 
     // Handle vertical collisions.
     if (collisions.vertical) |collision| {
-        if (collision.self.entity == state.ball) {
-            if (collision.self.entity.transform) |transform| {
-                transform.next_velocity = transform.velocity;
-                transform.next_velocity[Y] = -transform.next_velocity[Y];
+        if (collision.id.equals(state.ball.id)) {
+            if (state.getEntity(collision.id)) |entity| {
+                if (state.getEntity(collision.other_id)) |other_entity| {
+                    if (entity.transform) |transform| {
+                        transform.next_velocity = transform.velocity;
+                        transform.next_velocity[Y] = -transform.next_velocity[Y];
 
-                collision.self.entity.sprite.?.startAnimation(
-                    if (transform.velocity[Y] < 0) "bounce_up" else "bounce_down",
-                    &state.assets,
-                );
-                transform.velocity[Y] = 0;
+                        entity.sprite.?.startAnimation(
+                            if (transform.velocity[Y] < 0) "bounce_up" else "bounce_down",
+                            &state.assets,
+                        );
+                        transform.velocity[Y] = 0;
 
-                if (INTERNAL) {
-                    state.debug_state.addCollision(state.allocator, &collision, state.time);
+                        if (INTERNAL) {
+                            state.debug_state.addCollision(state.allocator, &collision, state.time);
+                        }
+
+                        handleBallCollision(state, entity, other_entity);
+                    }
                 }
-
-                handleBallCollision(state, collision.self.entity, collision.other.entity);
-            }
-        } else {
-            if (collision.self.entity.transform) |transform| {
-                transform.velocity[Y] = -transform.velocity[Y];
             }
         }
     }
 
     // Handle horizontal collisions.
     if (collisions.horizontal) |collision| {
-        if (collision.self.entity == state.ball) {
-            if (collision.self.entity.transform) |transform| {
-                transform.velocity[X] = -transform.velocity[X];
-                state.ball_horizontal_bounce_start_time = state.time;
+        if (collision.id.equals(state.ball.id)) {
+            if (state.getEntity(collision.id)) |entity| {
+                if (state.getEntity(collision.other_id)) |other_entity| {
+                    if (entity.transform) |transform| {
+                        transform.velocity[X] = -transform.velocity[X];
+                        state.ball_horizontal_bounce_start_time = state.time;
 
-                if (INTERNAL) {
-                    state.debug_state.addCollision(state.allocator, &collision, state.time);
+                        if (INTERNAL) {
+                            state.debug_state.addCollision(state.allocator, &collision, state.time);
+                        }
+
+                        handleBallCollision(state, entity, other_entity);
+                    }
                 }
-
-                handleBallCollision(state, collision.self.entity, collision.other.entity);
             }
         }
     }

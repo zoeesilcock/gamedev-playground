@@ -96,8 +96,8 @@ pub const CollisionResult = struct {
 };
 
 pub const Collision = struct {
-    self: *ColliderComponent,
-    other: *ColliderComponent,
+    id: EntityId,
+    other_id: EntityId,
 };
 
 pub const ColliderComponent = struct {
@@ -265,7 +265,7 @@ pub const ColliderComponent = struct {
                     var next_transform = transform.*;
                     next_transform.position[Y] += next_transform.velocity[Y] * delta_time;
                     if (collider.collidesWithAnyAt(colliders, next_transform)) |other_entity| {
-                        result.vertical = .{ .self = collider, .other = other_entity.collider.? };
+                        result.vertical = .{ .id = collider.entity.id, .other_id = other_entity.id };
                     }
                 }
 
@@ -274,7 +274,7 @@ pub const ColliderComponent = struct {
                     var next_transform = transform.*;
                     next_transform.position[X] += next_transform.velocity[X] * delta_time;
                     if (collider.collidesWithAnyAt(colliders, next_transform)) |other_entity| {
-                        result.horizontal = .{ .self = collider, .other = other_entity.collider.? };
+                        result.horizontal = .{ .id = collider.entity.id, .other_id = other_entity.id };
                     }
                 }
             }
