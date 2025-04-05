@@ -248,15 +248,13 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
                         _ = game.addWall(state, block_color, block_type, tiled_position) catch undefined;
                     }
                 } else {
-                    if (state.time - state.debug_state.input.left_mouse_last_time < DOUBLE_CLICK_THRESHOLD and
-                        (state.debug_state.input.left_mouse_last_entity_id != null and
-                            state.debug_state.input.left_mouse_last_entity_id.?.equals(state.debug_state.hovered_entity_id)))
+                    if (hovered_entity.id.equals(state.debug_state.input.left_mouse_last_entity_id) and
+                        state.time - state.debug_state.input.left_mouse_last_time < DOUBLE_CLICK_THRESHOLD)
                     {
                         openSprite(state, allocator, hovered_entity);
                     } else {
-                        if (state.debug_state.selected_entity_id == null or
-                            (state.debug_state.selected_entity_id != null and
-                                !state.debug_state.selected_entity_id.?.equals(hovered_entity.id)))
+                        if (!hovered_entity.id.equals(state.debug_state.selected_entity_id) or
+                            state.debug_state.selected_entity_id == null)
                         {
                             state.debug_state.selected_entity_id = hovered_entity.id;
                         } else {
