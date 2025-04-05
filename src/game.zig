@@ -1,6 +1,6 @@
 const std = @import("std");
 const aseprite = @import("aseprite.zig");
-const ecs = @import("ecs.zig");
+const entities = @import("entities.zig");
 const math = @import("math.zig");
 const imgui = if (INTERNAL) @import("imgui.zig") else struct {};
 const debug = if (INTERNAL) @import("debug.zig") else struct {
@@ -18,6 +18,16 @@ pub const c = @cImport({
         @cInclude("dcimgui.h");
     }
 });
+
+const Entity = entities.Entity;
+const EntityId = entities.EntityId;
+const TransformComponent = entities.TransformComponent;
+const ColliderComponent = entities.ColliderComponent;
+const SpriteComponent = entities.SpriteComponent;
+const ColorComponent = entities.ColorComponent;
+const ColorComponentValue = entities.ColorComponentValue;
+const BlockComponent = entities.BlockComponent;
+const BlockType = entities.BlockType;
 
 const Vector2 = math.Vector2;
 const X = math.X;
@@ -85,22 +95,22 @@ pub const State = struct {
     lives_remaining: u32,
 
     // Entities.
-    entities: ArrayList(*ecs.Entity),
+    entities: ArrayList(*Entity),
     entities_free: ArrayList(u32),
 
     // Components.
-    transforms: ArrayList(*ecs.TransformComponent),
-    colliders: ArrayList(*ecs.ColliderComponent),
-    sprites: ArrayList(*ecs.SpriteComponent),
-    ball: *ecs.Entity,
-    walls: ArrayList(*ecs.Entity),
+    transforms: ArrayList(*TransformComponent),
+    colliders: ArrayList(*ColliderComponent),
+    sprites: ArrayList(*SpriteComponent),
+    ball: *Entity,
+    walls: ArrayList(*Entity),
 
     pub fn deltaTime(self: *State) f32 {
         return @as(f32, @floatFromInt(self.delta_time)) / 1000;
     }
 
-    pub fn getEntity(self: *State, opt_id: ?ecs.EntityId) ?*ecs.Entity {
-        var result: ?*ecs.Entity = null;
+    pub fn getEntity(self: *State, opt_id: ?EntityId) ?*Entity {
+        var result: ?*Entity = null;
 
         if (opt_id) |id| {
             const potential = self.entities.items[id.index];
@@ -112,15 +122,15 @@ pub const State = struct {
         return result;
     }
 
-    pub fn addEntity(self: *State) !*ecs.Entity {
-        var result: *ecs.Entity = undefined;
+    pub fn addEntity(self: *State) !*Entity {
+        var result: *Entity = undefined;
 
         if (self.entities_free.pop()) |free_index| {
             result = self.entities.items[free_index];
             result.is_in_use = true;
             result.id.generation += 1;
         } else {
-            result = try ecs.Entity.init(self.allocator);
+            result = try Entity.init(self.allocator);
             result.id.index = @intCast(self.entities.items.len);
             result.id.generation = 0;
             result.is_in_use = true;
@@ -130,7 +140,7 @@ pub const State = struct {
         return result;
     }
 
-    pub fn removeEntity(self: *State, entity: *ecs.Entity) void {
+    pub fn removeEntity(self: *State, entity: *Entity) void {
         if (entity.transform) |_| {
             var opt_remove_at: ?usize = null;
             for (self.transforms.items, 0..) |stored_transform, index| {
@@ -207,7 +217,7 @@ pub const Assets = struct {
 
     background: ?SpriteAsset,
 
-    pub fn getSpriteAsset(self: *Assets, sprite: *const ecs.SpriteComponent) ?*SpriteAsset {
+    pub fn getSpriteAsset(self: *Assets, sprite: *const SpriteComponent) ?*SpriteAsset {
         var result: ?*SpriteAsset = null;
 
         if (sprite.entity.color) |color| {
@@ -230,7 +240,7 @@ pub const Assets = struct {
         return result;
     }
 
-    pub fn getWall(self: *Assets, color: ecs.ColorComponentValue, block_type: ecs.BlockType) *SpriteAsset {
+    pub fn getWall(self: *Assets, color: ColorComponentValue, block_type: BlockType) *SpriteAsset {
         switch (block_type) {
             .Wall => {
                 return switch (color) {
@@ -257,7 +267,7 @@ pub const Assets = struct {
         unreachable;
     }
 
-    pub fn getBall(self: *Assets, color: ecs.ColorComponentValue) *SpriteAsset {
+    pub fn getBall(self: *Assets, color: ColorComponentValue) *SpriteAsset {
         return switch (color) {
             .Red => &self.ball_red.?,
             .Blue => &self.ball_blue.?,
@@ -501,7 +511,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
         }
     }
 
-    const collisions = ecs.ColliderComponent.checkForCollisions(state.colliders.items, state.deltaTime());
+    const collisions = ColliderComponent.checkForCollisions(state.colliders.items, state.deltaTime());
 
     // Handle vertical collisions.
     if (collisions.vertical) |collision| {
@@ -555,15 +565,15 @@ pub export fn tick(state_ptr: *anyopaque) void {
         }
     }
 
-    ecs.TransformComponent.tick(state.transforms.items, state.deltaTime());
-    ecs.SpriteComponent.tick(&state.assets, state.sprites.items, state.deltaTime());
+    TransformComponent.tick(state.transforms.items, state.deltaTime());
+    SpriteComponent.tick(&state.assets, state.sprites.items, state.deltaTime());
 
     if (isLevelCompleted(state)) {
         nextLevel(state);
     }
 }
 
-fn handleBallCollision(state: *State, ball: *ecs.Entity, block: *ecs.Entity) void {
+fn handleBallCollision(state: *State, ball: *Entity, block: *Entity) void {
     if (ball.color) |ball_color| {
         if (block.block) |other_block| {
             if (other_block.type == .Deadly) {
@@ -743,14 +753,14 @@ fn spawnBackground(state: *State) !void {
 
 fn spawnBall(state: *State) !void {
     if (addSprite(state, BALL_SPAWN) catch null) |entity| {
-        var collider_component: *ecs.ColliderComponent = state.allocator.create(ecs.ColliderComponent) catch undefined;
+        var collider_component: *ColliderComponent = state.allocator.create(ColliderComponent) catch undefined;
         entity.entity_type = .Ball;
         collider_component.entity = entity;
         collider_component.shape = .Circle;
         collider_component.radius = 6;
         collider_component.offset = @splat(1);
 
-        var color_component: *ecs.ColorComponent = state.allocator.create(ecs.ColorComponent) catch undefined;
+        var color_component: *ColorComponent = state.allocator.create(ColorComponent) catch undefined;
         color_component.entity = entity;
         color_component.color = .Red;
 
@@ -828,10 +838,10 @@ fn isLevelCompleted(state: *State) bool {
     return result;
 }
 
-fn addSprite(state: *State, position: Vector2) !*ecs.Entity {
-    var entity: *ecs.Entity = try state.addEntity();
-    var sprite: *ecs.SpriteComponent = try state.allocator.create(ecs.SpriteComponent);
-    var transform: *ecs.TransformComponent = try state.allocator.create(ecs.TransformComponent);
+fn addSprite(state: *State, position: Vector2) !*Entity {
+    var entity: *Entity = try state.addEntity();
+    var sprite: *SpriteComponent = try state.allocator.create(SpriteComponent);
+    var transform: *TransformComponent = try state.allocator.create(TransformComponent);
 
     sprite.entity = entity;
     sprite.frame_index = 0;
@@ -853,7 +863,7 @@ fn addSprite(state: *State, position: Vector2) !*ecs.Entity {
     return entity;
 }
 
-pub fn addWall(state: *State, color: ecs.ColorComponentValue, block_type: ecs.BlockType, position: Vector2) !*ecs.Entity {
+pub fn addWall(state: *State, color: ColorComponentValue, block_type: BlockType, position: Vector2) !*Entity {
     const new_entity = try addSprite(state, position);
 
     if (block_type == .ColorChange and color == .Gray) {
@@ -865,7 +875,7 @@ pub fn addWall(state: *State, color: ecs.ColorComponentValue, block_type: ecs.Bl
     }
 
     const sprite_asset = state.assets.getWall(color, block_type);
-    var collider_component: *ecs.ColliderComponent = state.allocator.create(ecs.ColliderComponent) catch undefined;
+    var collider_component: *ColliderComponent = state.allocator.create(ColliderComponent) catch undefined;
     new_entity.entity_type = .Wall;
     collider_component.entity = new_entity;
     collider_component.shape = .Square;
@@ -876,12 +886,12 @@ pub fn addWall(state: *State, color: ecs.ColorComponentValue, block_type: ecs.Bl
     collider_component.offset = @splat(0);
     new_entity.collider = collider_component;
 
-    var color_component: *ecs.ColorComponent = try state.allocator.create(ecs.ColorComponent);
+    var color_component: *ColorComponent = try state.allocator.create(ColorComponent);
     color_component.entity = new_entity;
     color_component.color = color;
     new_entity.color = color_component;
 
-    var block_component: *ecs.BlockComponent = try state.allocator.create(ecs.BlockComponent);
+    var block_component: *BlockComponent = try state.allocator.create(BlockComponent);
     block_component.entity = new_entity;
     block_component.type = block_type;
     new_entity.block = block_component;

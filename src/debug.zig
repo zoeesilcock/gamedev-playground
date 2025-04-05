@@ -1,6 +1,6 @@
 const std = @import("std");
 const game = @import("game.zig");
-const ecs = @import("ecs.zig");
+const entities = @import("entities.zig");
 const math = @import("math.zig");
 const imgui = @import("imgui.zig");
 
@@ -8,6 +8,13 @@ const c = game.c;
 const State = game.State;
 const Assets = game.Assets;
 const SpriteAsset = game.SpriteAsset;
+const Entity = entities.Entity;
+const EntityId = entities.EntityId;
+const EntityType = entities.EntityType;
+const Collision = entities.Collision;
+const ColliderComponent = entities.ColliderComponent;
+const ColorComponentValue = entities.ColorComponentValue;
+const BlockType = entities.BlockType;
 
 const Vector2 = math.Vector2;
 const X = math.X;
@@ -38,10 +45,10 @@ pub const DebugState = struct {
     },
     show_editor: bool,
     current_level_name: [LEVEL_NAME_BUFFER_SIZE:0]u8,
-    current_block_color: ecs.ColorComponentValue,
-    current_block_type: ecs.BlockType,
-    hovered_entity_id: ?ecs.EntityId,
-    selected_entity_id: ?ecs.EntityId,
+    current_block_color: ColorComponentValue,
+    current_block_type: BlockType,
+    hovered_entity_id: ?EntityId,
+    selected_entity_id: ?EntityId,
 
     show_colliders: bool,
     collisions: ArrayList(DebugCollision),
@@ -84,7 +91,7 @@ pub const DebugState = struct {
     pub fn addCollision(
         self: *DebugState,
         allocator: std.mem.Allocator,
-        collision: *const ecs.Collision,
+        collision: *const Collision,
         time: u64,
     ) void {
         self.collisions.append(allocator, .{
@@ -123,7 +130,7 @@ const DebugInput = struct {
     left_mouse_down: bool = false,
     left_mouse_pressed: bool = false,
     left_mouse_last_time: u64 = 0,
-    left_mouse_last_entity_id: ?ecs.EntityId = null,
+    left_mouse_last_entity_id: ?EntityId = null,
 
     mouse_position: Vector2 = @splat(0),
     alt_key_down: bool = false,
@@ -134,7 +141,7 @@ const DebugInput = struct {
 };
 
 const DebugCollision = struct {
-    collision: ecs.Collision,
+    collision: Collision,
     time_added: u64,
 };
 
@@ -282,8 +289,8 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
     }
 }
 
-fn getHoveredEntity(state: *State) ?ecs.EntityId {
-    var result: ?ecs.EntityId = null;
+fn getHoveredEntity(state: *State) ?EntityId {
+    var result: ?EntityId = null;
 
     for (state.colliders.items) |collider| {
         if (collider.containsPoint(
@@ -479,19 +486,19 @@ fn runtimeFieldPointer(ptr: anytype, comptime field_name: []const u8) *@TypeOf(@
     return @ptrCast(@alignCast(&base_ptr[field_offset]));
 }
 
-fn inspectEntity(entity: *ecs.Entity) void {
+fn inspectEntity(entity: *Entity) void {
     const entity_info = @typeInfo(@TypeOf(entity.*));
     inline for (entity_info.@"struct".fields) |entity_field| {
-        if (entity_field.type == ecs.EntityId) {
-            const entity_id: *ecs.EntityId = runtimeFieldPointer(entity, entity_field.name);
+        if (entity_field.type == EntityId) {
+            const entity_id: *EntityId = runtimeFieldPointer(entity, entity_field.name);
             var buf: [64]u8 = undefined;
             const id = std.fmt.bufPrintZ(&buf, "ID: {d} ({d})", .{entity_id.index, entity_id.generation}) catch "";
             c.ImGui_Text(id.ptr);
         } else if (entity_field.type == bool) {
             // Skip this, since it will always be true if the entity can be inspected.
-        } else if (entity_field.type == ecs.EntityType) {
+        } else if (entity_field.type == EntityType) {
             const entity_type = runtimeFieldPointer(entity, entity_field.name);
-            inline for (@typeInfo(ecs.EntityType).@"enum".fields, 0..) |field, i| {
+            inline for (@typeInfo(EntityType).@"enum".fields, 0..) |field, i| {
                 if (@intFromEnum(entity_type.*) == i) {
                     c.ImGui_Text("Type: " ++ field.name);
                 }
@@ -643,7 +650,7 @@ pub fn drawDebugOverlay(state: *State) void {
 
 fn drawDebugCollider(
     renderer: *c.SDL_Renderer,
-    collider: *ecs.ColliderComponent,
+    collider: *ColliderComponent,
     color: Color,
     scale: f32,
     offset: Vector2,
@@ -718,7 +725,7 @@ fn drawEntityHighlight(
     state: *State,
     renderer: *c.SDL_Renderer,
     assets: *Assets,
-    entity_id: ?ecs.EntityId,
+    entity_id: ?EntityId,
     color: Color,
     scale: f32,
     offset: Vector2,
@@ -763,7 +770,7 @@ fn getTiledPosition(position: Vector2, asset: *const SpriteAsset) Vector2 {
     };
 }
 
-fn openSprite(state: *State, allocator: std.mem.Allocator, entity: *ecs.Entity) void {
+fn openSprite(state: *State, allocator: std.mem.Allocator, entity: *Entity) void {
     if (entity.sprite) |sprite| {
         if (state.assets.getSpriteAsset(sprite)) |sprite_asset| {
             const process_args = if (PLATFORM == .windows) [_][]const u8{
