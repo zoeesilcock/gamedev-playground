@@ -21,6 +21,7 @@ pub const c = @cImport({
 
 const Entity = entities.Entity;
 const EntityId = entities.EntityId;
+const EntityIterator = entities.EntityIterator;
 const TransformComponent = entities.TransformComponent;
 const ColliderComponent = entities.ColliderComponent;
 const SpriteComponent = entities.SpriteComponent;
@@ -97,13 +98,8 @@ pub const State = struct {
     // Entities.
     entities: ArrayList(*Entity),
     entities_free: ArrayList(u32),
-
-    // Components.
-    transforms: ArrayList(*TransformComponent),
-    colliders: ArrayList(*ColliderComponent),
-    sprites: ArrayList(*SpriteComponent),
+    entities_iterator: EntityIterator,
     ball: *Entity,
-    walls: ArrayList(*Entity),
 
     pub fn deltaTime(self: *State) f32 {
         return @as(f32, @floatFromInt(self.delta_time)) / 1000;
@@ -142,54 +138,6 @@ pub const State = struct {
 
     pub fn removeEntity(self: *State, entity: *Entity) void {
         std.debug.assert(entity.is_in_use == true);
-
-        if (entity.transform) |_| {
-            var opt_remove_at: ?usize = null;
-            for (self.transforms.items, 0..) |stored_transform, index| {
-                if (stored_transform.entity == entity) {
-                    opt_remove_at = index;
-                }
-            }
-            if (opt_remove_at) |remove_at| {
-                _ = self.transforms.swapRemove(remove_at);
-            }
-        }
-
-        if (entity.collider) |_| {
-            var opt_remove_at: ?usize = null;
-            for (self.colliders.items, 0..) |stored_collider, index| {
-                if (stored_collider.entity == entity) {
-                    opt_remove_at = index;
-                }
-            }
-            if (opt_remove_at) |remove_at| {
-                _ = self.colliders.swapRemove(remove_at);
-            }
-        }
-
-        if (entity.sprite) |_| {
-            var opt_remove_at: ?usize = null;
-            for (self.sprites.items, 0..) |stored_sprite, index| {
-                if (stored_sprite.entity == entity) {
-                    opt_remove_at = index;
-                }
-            }
-            if (opt_remove_at) |remove_at| {
-                _ = self.sprites.swapRemove(remove_at);
-            }
-        }
-
-        {
-            var opt_remove_at: ?usize = null;
-            for (self.walls.items, 0..) |stored_wall, index| {
-                if (stored_wall == entity) {
-                    opt_remove_at = index;
-                }
-            }
-            if (opt_remove_at) |remove_at| {
-                _ = self.walls.swapRemove(remove_at);
-            }
-        }
 
         entity.is_in_use = false;
         self.entities_free.append(self.allocator, entity.id.index) catch @panic("Failed to allocate free index");
@@ -335,18 +283,17 @@ pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window,
 
     state.entities = .empty;
     state.entities_free = .empty;
+    state.entities_iterator = .{ .entities = &state.entities };
 
     state.level_index = 0;
     state.lives_remaining = MAX_LIVES;
-    state.walls = .empty;
-    state.transforms = .empty;
-    state.colliders = .empty;
-    state.sprites = .empty;
 
     loadAssets(state);
     spawnBackground(state) catch unreachable;
     spawnBall(state) catch unreachable;
     loadLevel(state, LEVELS[state.level_index]) catch unreachable;
+
+    _ = state.addEntity() catch @panic("Can't create bogus test entity");
 
     setupRenderTexture(state);
 
@@ -513,7 +460,8 @@ pub export fn tick(state_ptr: *anyopaque) void {
         }
     }
 
-    const collisions = ColliderComponent.checkForCollisions(state.colliders.items, state.deltaTime());
+    var iter: EntityIterator = .{ .entities = &state.entities };
+    const collisions = ColliderComponent.checkForCollisions(&iter, state.deltaTime());
 
     // Handle vertical collisions.
     if (collisions.vertical) |collision| {
@@ -571,8 +519,11 @@ pub export fn tick(state_ptr: *anyopaque) void {
         }
     }
 
-    TransformComponent.tick(state.transforms.items, state.deltaTime());
-    SpriteComponent.tick(&state.assets, state.sprites.items, state.deltaTime());
+    iter.reset();
+    TransformComponent.tick(&iter, state.deltaTime());
+
+    iter.reset();
+    SpriteComponent.tick(&state.assets, &iter, state.deltaTime());
 
     if (isLevelCompleted(state)) {
         nextLevel(state);
@@ -630,15 +581,14 @@ pub export fn draw(state_ptr: *anyopaque) void {
 }
 
 fn drawWorld(state: *State) void {
-    for (state.sprites.items) |sprite| {
-        if (sprite.entity.transform) |transform| {
-            if (sprite.getTexture(&state.assets)) |texture| {
-                const offset = sprite.getOffset(&state.assets);
-                var position = transform.position;
-                position += offset;
+    var iter: EntityIterator = .{ .entities = &state.entities };
+    while (iter.next(&.{"sprite", "transform"})) |entity| {
+        if (entity.sprite.?.getTexture(&state.assets)) |texture| {
+            const offset = entity.sprite.?.getOffset(&state.assets);
+            var position = entity.transform.?.position;
+            position += offset;
 
-                drawTextureAt(state, texture, position);
-            }
+            drawTextureAt(state, texture, position);
         }
     }
 }
@@ -774,7 +724,6 @@ fn spawnBall(state: *State) !void {
         entity.collider = collider_component;
 
         state.ball = entity;
-        try state.colliders.append(state.allocator, collider_component);
 
         if (entity.sprite) |ball_sprite| {
             ball_sprite.startAnimation("idle", &state.assets);
@@ -792,11 +741,10 @@ fn resetBall(state: *State) void {
 }
 
 fn unloadLevel(state: *State) void {
-    for (state.walls.items) |wall| {
-        state.removeEntity(wall);
+    var iter: EntityIterator = .{ .entities = &state.entities };
+    while (iter.next(&.{"block"})) |entity| {
+        state.removeEntity(entity);
     }
-
-    state.walls.clearRetainingCapacity();
 }
 
 pub fn loadLevel(state: *State, name: []const u8) !void {
@@ -834,9 +782,9 @@ fn nextLevel(state: *State) void {
 
 fn isLevelCompleted(state: *State) bool {
     var result = true;
-
-    for (state.walls.items) |wall| {
-        if (wall.block.?.type == .Wall and wall.color.?.color != .Gray) {
+    var iter: EntityIterator = .{ .entities = &state.entities };
+    while (iter.next(&.{"block", "color"})) |entity| {
+        if (entity.block.?.type == .Wall and entity.color.?.color != .Gray) {
             result = false;
         }
     }
@@ -862,9 +810,6 @@ fn addSprite(state: *State, position: Vector2) !*Entity {
 
     entity.transform = transform;
     entity.sprite = sprite;
-
-    try state.transforms.append(state.allocator, transform);
-    try state.sprites.append(state.allocator, sprite);
 
     return entity;
 }
@@ -901,9 +846,6 @@ pub fn addWall(state: *State, color: ColorComponentValue, block_type: BlockType,
     block_component.entity = new_entity;
     block_component.type = block_type;
     new_entity.block = block_component;
-
-    try state.walls.append(state.allocator, new_entity);
-    try state.colliders.append(state.allocator, collider_component);
 
     return new_entity;
 }

@@ -10,6 +10,9 @@ const X = math.X;
 const Y = math.Y;
 const Z = math.Z;
 
+// TODO: Remove once Zig has finished migrating to unmanaged-style containers.
+const ArrayList = std.ArrayListUnmanaged;
+
 pub const EntityType = enum(u8) {
     Background,
     Ball,
@@ -24,6 +27,43 @@ pub const EntityId = struct {
         return other != null and
             self.index == other.?.index and
             self.generation == other.?.generation;
+    }
+};
+
+pub const EntityIterator = struct {
+    entities: *ArrayList(*Entity),
+    index: usize = 0,
+
+    pub fn next(self: *EntityIterator, comptime with_components: []const []const u8) ?*Entity {
+        const index = self.index;
+        var result: ?*Entity = null;
+        for (self.entities.items[index..]) |entity| {
+            self.index += 1;
+
+            var has_all_components: bool = true;
+            inline for (with_components) |component| {
+                const component_type = @TypeOf(@field(entity.*, component));
+                std.debug.assert(@typeInfo(component_type) == .optional);
+
+                const field_offset = @offsetOf(@TypeOf(entity.*), component);
+                const base_ptr: [*]u8 = @ptrCast(entity);
+                const field_ptr: *component_type = @ptrCast(@alignCast(&base_ptr[field_offset]));
+
+                if (field_ptr.* == null) {
+                    has_all_components = false;
+                }
+            }
+
+            if (has_all_components and entity.is_in_use) {
+                result = entity;
+                break;
+            }
+        }
+        return result;
+    }
+
+    pub fn reset(self: *EntityIterator) void {
+        self.index = 0;
     }
 };
 
@@ -78,9 +118,9 @@ pub const TransformComponent = struct {
     velocity: Vector2,
     next_velocity: Vector2,
 
-    pub fn tick(transforms: []*TransformComponent, delta_time: f32) void {
-        for (transforms) |transform| {
-            transform.position += transform.velocity * @as(Vector2, @splat(delta_time));
+    pub fn tick(iter: *EntityIterator, delta_time: f32) void {
+        while (iter.next(&.{"transform"})) |entity| {
+            entity.transform.?.position += entity.transform.?.velocity * @as(Vector2, @splat(delta_time));
         }
     }
 };
@@ -172,12 +212,12 @@ pub const ColliderComponent = struct {
         return contains_point;
     }
 
-    fn collidesWithAnyAt(self: *ColliderComponent, others: []*ColliderComponent, at: TransformComponent) ?*Entity {
+    fn collidesWithAnyAt(self: *ColliderComponent, iter: *EntityIterator, at: TransformComponent) ?*Entity {
         var result: ?*Entity = null;
 
-        for (others) |other| {
-            if (self.entity != other.entity and self.collidesWithAt(other, at)) {
-                result = other.entity;
+        while (iter.next(&.{"collider"})) |entity| {
+            if (self.entity != entity and self.collidesWithAt(entity.collider.?, at)) {
+                result = entity;
                 break;
             }
         }
@@ -255,27 +295,30 @@ pub const ColliderComponent = struct {
         return collides;
     }
 
-    pub fn checkForCollisions(colliders: []*ColliderComponent, delta_time: f32) CollisionResult {
+    pub fn checkForCollisions(iter: *EntityIterator, delta_time: f32) CollisionResult {
         var result: CollisionResult = .{};
+        var inner_iter: EntityIterator = iter.*;
 
-        for (colliders) |collider| {
-            if (collider.entity.transform) |transform| {
-                // Check in the Y direction.
-                if (transform.velocity[Y] != 0) {
-                    var next_transform = transform.*;
-                    next_transform.position[Y] += next_transform.velocity[Y] * delta_time;
-                    if (collider.collidesWithAnyAt(colliders, next_transform)) |other_entity| {
-                        result.vertical = .{ .id = collider.entity.id, .other_id = other_entity.id };
-                    }
+        while (iter.next(&.{"collider", "transform"})) |entity| {
+            const transform = entity.transform.?;
+
+            // Check in the Y direction.
+            if (transform.velocity[Y] != 0) {
+                var next_transform = transform.*;
+                next_transform.position[Y] += next_transform.velocity[Y] * delta_time;
+                inner_iter.reset();
+                if (entity.collider.?.collidesWithAnyAt(&inner_iter, next_transform)) |other_entity| {
+                    result.vertical = .{ .id = entity.id, .other_id = other_entity.id };
                 }
+            }
 
-                // Check in the X direction.
-                if (transform.velocity[X] != 0) {
-                    var next_transform = transform.*;
-                    next_transform.position[X] += next_transform.velocity[X] * delta_time;
-                    if (collider.collidesWithAnyAt(colliders, next_transform)) |other_entity| {
-                        result.horizontal = .{ .id = collider.entity.id, .other_id = other_entity.id };
-                    }
+            // Check in the X direction.
+            if (transform.velocity[X] != 0) {
+                var next_transform = transform.*;
+                next_transform.position[X] += next_transform.velocity[X] * delta_time;
+                inner_iter.reset();
+                if (entity.collider.?.collidesWithAnyAt(&inner_iter, next_transform)) |other_entity| {
+                    result.horizontal = .{ .id = entity.id, .other_id = other_entity.id };
                 }
             }
         }
@@ -293,8 +336,9 @@ pub const SpriteComponent = struct {
     animation_completed: bool,
     current_animation: ?*aseprite.AseTagsChunk,
 
-    pub fn tick(assets: *game.Assets, sprites: []*SpriteComponent, delta_time: f32) void {
-        for (sprites) |sprite| {
+    pub fn tick(assets: *game.Assets, iter: *EntityIterator, delta_time: f32) void {
+        while (iter.next(&.{"sprite"})) |entity| {
+            const sprite = entity.sprite.?;
             if (assets.getSpriteAsset(sprite)) |sprite_asset| {
                 if (sprite_asset.document.frames.len > 1) {
                     const current_frame = sprite_asset.document.frames[sprite.frame_index];

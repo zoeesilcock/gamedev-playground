@@ -9,6 +9,7 @@ const State = game.State;
 const Assets = game.Assets;
 const SpriteAsset = game.SpriteAsset;
 const Entity = entities.Entity;
+const EntityIterator = entities.EntityIterator;
 const EntityId = entities.EntityId;
 const EntityType = entities.EntityType;
 const Collision = entities.Collision;
@@ -292,22 +293,24 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
 fn getHoveredEntity(state: *State) ?EntityId {
     var result: ?EntityId = null;
 
-    for (state.colliders.items) |collider| {
-        if (collider.containsPoint(
+    var iter: EntityIterator = .{ .entities = &state.entities };
+    while (iter.next(&.{"collider"})) |entity| {
+        if (entity.collider.?.containsPoint(
             state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)),
         )) {
-            result = collider.entity.id;
+            result = entity.id;
             break;
         }
     }
 
     if (result == null) {
-        for (state.sprites.items) |sprite| {
-            if (sprite.containsPoint(
+        iter.reset();
+        while (iter.next(&.{"sprite"})) |entity| {
+            if (entity.sprite.?.containsPoint(
                 state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)),
                 &state.assets,
             )) {
-                result = sprite.entity.id;
+                result = entity.id;
                 break;
             }
         }
@@ -587,8 +590,9 @@ pub fn drawDebugOverlay(state: *State) void {
     };
 
     if (state.debug_state.show_colliders) {
-        for (state.colliders.items) |collider| {
-            drawDebugCollider(state.renderer, collider.entity, Color{ 0, 255, 0, 255 }, scale, offset);
+        var iter: EntityIterator = .{ .entities = &state.entities };
+        while (iter.next(&.{"collider"})) |entity| {
+            drawDebugCollider(state.renderer, entity, Color{ 0, 255, 0, 255 }, scale, offset);
         }
 
         // Highlight collisions.
@@ -799,18 +803,18 @@ fn saveLevel(state: *State, name: []const u8) !void {
     const file = try std.fs.cwd().createFile(path, .{ .truncate = true });
     defer file.close();
 
-    try file.writer().writeInt(u32, @intCast(state.walls.items.len), .little);
+    var walls_count: u32 = 0;
+    var iter: EntityIterator = .{ .entities = &state.entities };
+    while (iter.next(&.{"block", "color", "transform"})) |_| {
+        walls_count += 1;
+    }
+    try file.writer().writeInt(u32, walls_count, .little);
 
-    for (state.walls.items) |wall| {
-        if (wall.color) |color| {
-            if (wall.block) |block| {
-                if (wall.transform) |transform| {
-                    try file.writer().writeInt(u32, @intFromEnum(color.color), .little);
-                    try file.writer().writeInt(u32, @intFromEnum(block.type), .little);
-                    try file.writer().writeInt(i32, @intFromFloat(@round(transform.position[X])), .little);
-                    try file.writer().writeInt(i32, @intFromFloat(@round(transform.position[Y])), .little);
-                }
-            }
-        }
+    iter.reset();
+    while (iter.next(&.{"block", "color", "transform"})) |entity| {
+        try file.writer().writeInt(u32, @intFromEnum(entity.color.?.color), .little);
+        try file.writer().writeInt(u32, @intFromEnum(entity.block.?.type), .little);
+        try file.writer().writeInt(i32, @intFromFloat(@round(entity.transform.?.position[X])), .little);
+        try file.writer().writeInt(i32, @intFromFloat(@round(entity.transform.?.position[Y])), .little);
     }
 }
