@@ -45,6 +45,7 @@ pub const DebugState = struct {
         Edit,
     },
     show_editor: bool,
+    testing_level: bool,
     current_level_name: [LEVEL_NAME_BUFFER_SIZE:0]u8,
     current_block_color: ColorComponentValue,
     current_block_type: BlockType,
@@ -180,6 +181,11 @@ pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
             c.SDLK_E => {
                 state.debug_state.show_editor = !state.debug_state.show_editor;
                 state.debug_state.mode = if (state.debug_state.show_editor) .Edit else .Select;
+
+                if (state.debug_state.show_editor) {
+                    state.debug_state.testing_level = false;
+                    state.is_paused = true;
+                }
             },
             c.SDLK_S => {
                 saveLevel(state, state.debug_state.currentLevelName()) catch unreachable;
@@ -431,7 +437,7 @@ pub fn drawDebugUI(state: *State) void {
         const button_size: c.ImVec2 = c.ImVec2{ .x = 140, .y = 20 };
         const half_button_size: c.ImVec2 = c.ImVec2{ .x = 65, .y = 20 };
 
-        c.ImGui_SetNextWindowSize(c.ImVec2{ .x = 160, .y = 175 }, 0);
+        c.ImGui_SetNextWindowSize(c.ImVec2{ .x = 160, .y = 200 }, 0);
 
         _ = c.ImGui_Begin(
             "Editor",
@@ -454,6 +460,14 @@ pub fn drawDebugUI(state: *State) void {
         c.ImGui_SameLineEx(0, 10);
         if (c.ImGui_ButtonEx("Save", half_button_size)) {
             saveLevel(state, state.debug_state.currentLevelName()) catch unreachable;
+        }
+
+        if (c.ImGui_ButtonEx("Test level", button_size)) {
+            state.debug_state.show_editor = false;
+            state.debug_state.testing_level = true;
+            state.is_paused = false;
+
+            game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
         }
 
         if (c.ImGui_ButtonEx("Restart", button_size)) {

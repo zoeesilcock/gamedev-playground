@@ -532,8 +532,16 @@ pub export fn tick(state_ptr: *anyopaque) void {
     iter.reset();
     SpriteComponent.tick(&state.assets, &iter, state.deltaTime());
 
-    if (isLevelCompleted(state) and !(INTERNAL and state.debug_state.show_editor)) {
-        nextLevel(state);
+    if (isLevelCompleted(state)) {
+        if (!INTERNAL) {
+            nextLevel(state);
+        } else {
+            if (!state.debug_state.show_editor and !state.debug_state.testing_level) {
+                nextLevel(state);
+            } else if (state.debug_state.testing_level) {
+                loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
+            }
+        }
     }
 }
 
@@ -542,7 +550,9 @@ fn handleBallCollision(state: *State, ball: *Entity, block: *Entity) void {
         if (block.block) |other_block| {
             if (other_block.type == .Deadly) {
                 if (state.lives_remaining > 0) {
-                    state.lives_remaining -= 1;
+                    if (!INTERNAL or !state.debug_state.testing_level) {
+                        state.lives_remaining -= 1;
+                    }
                     resetBall(state);
                 } else {
                     // Game over!
@@ -777,6 +787,12 @@ pub fn loadLevel(state: *State, name: []const u8) !void {
             Vector2{ @floatFromInt(x), @floatFromInt(y) },
         );
     }
+
+    resetBall(state);
+}
+
+pub fn reloadCurrentLevel(state: *State) void {
+    loadLevel(state, LEVELS[state.level_index]) catch unreachable;
 }
 
 fn nextLevel(state: *State) void {
