@@ -34,7 +34,7 @@ pub const EntityIterator = struct {
     entities: *ArrayList(*Entity),
     index: usize = 0,
 
-    pub fn next(self: *EntityIterator, comptime with_components: []const []const u8) ?*Entity {
+    pub fn next(self: *EntityIterator, comptime with_components: []const @TypeOf(.EnumLiteral)) ?*Entity {
         const index = self.index;
         var result: ?*Entity = null;
         for (self.entities.items[index..]) |entity| {
@@ -42,10 +42,11 @@ pub const EntityIterator = struct {
 
             var has_all_components: bool = true;
             inline for (with_components) |component| {
-                const component_type = @TypeOf(@field(entity.*, component));
+                const component_name = @tagName(component);
+                const component_type = @TypeOf(@field(entity.*, component_name));
                 std.debug.assert(@typeInfo(component_type) == .optional);
 
-                const field_offset = @offsetOf(@TypeOf(entity.*), component);
+                const field_offset = @offsetOf(@TypeOf(entity.*), component_name);
                 const base_ptr: [*]u8 = @ptrCast(entity);
                 const field_ptr: *component_type = @ptrCast(@alignCast(&base_ptr[field_offset]));
 
@@ -119,7 +120,7 @@ pub const TransformComponent = struct {
     next_velocity: Vector2,
 
     pub fn tick(iter: *EntityIterator, delta_time: f32) void {
-        while (iter.next(&.{"transform"})) |entity| {
+        while (iter.next(&.{.transform})) |entity| {
             entity.transform.?.position += entity.transform.?.velocity * @as(Vector2, @splat(delta_time));
         }
     }
@@ -215,7 +216,7 @@ pub const ColliderComponent = struct {
     fn collidesWithAnyAt(self: *ColliderComponent, iter: *EntityIterator, at: TransformComponent) ?*Entity {
         var result: ?*Entity = null;
 
-        while (iter.next(&.{"collider"})) |entity| {
+        while (iter.next(&.{.collider})) |entity| {
             if (self.entity != entity and self.collidesWithAt(entity.collider.?, at)) {
                 result = entity;
                 break;
@@ -299,7 +300,7 @@ pub const ColliderComponent = struct {
         var result: CollisionResult = .{};
         var inner_iter: EntityIterator = iter.*;
 
-        while (iter.next(&.{"collider", "transform"})) |entity| {
+        while (iter.next(&.{ .collider, .transform })) |entity| {
             const transform = entity.transform.?;
 
             // Check in the Y direction.
@@ -337,7 +338,7 @@ pub const SpriteComponent = struct {
     current_animation: ?*aseprite.AseTagsChunk,
 
     pub fn tick(assets: *game.Assets, iter: *EntityIterator, delta_time: f32) void {
-        while (iter.next(&.{"sprite"})) |entity| {
+        while (iter.next(&.{.sprite})) |entity| {
             const sprite = entity.sprite.?;
             if (assets.getSpriteAsset(sprite)) |sprite_asset| {
                 if (sprite_asset.document.frames.len > 1) {

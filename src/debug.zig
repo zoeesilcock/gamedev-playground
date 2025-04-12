@@ -300,7 +300,7 @@ fn getHoveredEntity(state: *State) ?EntityId {
     var result: ?EntityId = null;
 
     var iter: EntityIterator = .{ .entities = &state.entities };
-    while (iter.next(&.{"collider"})) |entity| {
+    while (iter.next(&.{.collider})) |entity| {
         if (entity.collider.?.containsPoint(
             state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)),
         )) {
@@ -311,7 +311,7 @@ fn getHoveredEntity(state: *State) ?EntityId {
 
     if (result == null) {
         iter.reset();
-        while (iter.next(&.{"sprite"})) |entity| {
+        while (iter.next(&.{.sprite})) |entity| {
             if (entity.sprite.?.containsPoint(
                 state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)),
                 &state.assets,
@@ -509,7 +509,7 @@ fn inspectEntity(entity: *Entity) void {
         if (entity_field.type == EntityId) {
             const entity_id: *EntityId = runtimeFieldPointer(entity, entity_field.name);
             var buf: [64]u8 = undefined;
-            const id = std.fmt.bufPrintZ(&buf, "ID: {d} ({d})", .{entity_id.index, entity_id.generation}) catch "";
+            const id = std.fmt.bufPrintZ(&buf, "ID: {d} ({d})", .{ entity_id.index, entity_id.generation }) catch "";
             c.ImGui_Text(id.ptr);
         } else if (entity_field.type == bool) {
             // Skip this, since it will always be true if the entity can be inspected.
@@ -605,7 +605,7 @@ pub fn drawDebugOverlay(state: *State) void {
 
     if (state.debug_state.show_colliders) {
         var iter: EntityIterator = .{ .entities = &state.entities };
-        while (iter.next(&.{"collider"})) |entity| {
+        while (iter.next(&.{.collider})) |entity| {
             drawDebugCollider(state.renderer, entity, Color{ 0, 255, 0, 255 }, scale, offset);
         }
 
@@ -819,13 +819,13 @@ fn saveLevel(state: *State, name: []const u8) !void {
 
     var walls_count: u32 = 0;
     var iter: EntityIterator = .{ .entities = &state.entities };
-    while (iter.next(&.{"block", "color", "transform"})) |_| {
+    while (iter.next(&.{ .block, .color, .transform })) |_| {
         walls_count += 1;
     }
     try file.writer().writeInt(u32, walls_count, .little);
 
     iter.reset();
-    while (iter.next(&.{"block", "color", "transform"})) |entity| {
+    while (iter.next(&.{ .block, .color, .transform })) |entity| {
         try file.writer().writeInt(u32, @intFromEnum(entity.color.?.color), .little);
         try file.writer().writeInt(u32, @intFromEnum(entity.block.?.type), .little);
         try file.writer().writeInt(i32, @intFromFloat(@round(entity.transform.?.position[X])), .little);

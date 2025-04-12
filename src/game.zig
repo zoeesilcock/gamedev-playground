@@ -599,7 +599,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
 
 fn drawWorld(state: *State) void {
     var iter: EntityIterator = .{ .entities = &state.entities };
-    while (iter.next(&.{ "sprite", "transform" })) |entity| {
+    while (iter.next(&.{ .sprite, .transform })) |entity| {
         if (entity.sprite.?.getTexture(&state.assets)) |texture| {
             const offset = entity.sprite.?.getOffset(&state.assets);
             var position = entity.transform.?.position;
@@ -761,7 +761,7 @@ fn resetBall(state: *State) void {
 
 fn unloadLevel(state: *State) void {
     var iter: EntityIterator = .{ .entities = &state.entities };
-    while (iter.next(&.{"block"})) |entity| {
+    while (iter.next(&.{.block})) |entity| {
         state.removeEntity(entity);
     }
 }
@@ -808,7 +808,7 @@ fn nextLevel(state: *State) void {
 fn isLevelCompleted(state: *State) bool {
     var result = true;
     var iter: EntityIterator = .{ .entities = &state.entities };
-    while (iter.next(&.{"block", "color"})) |entity| {
+    while (iter.next(&.{ .block, .color })) |entity| {
         if (entity.block.?.type == .Wall and entity.color.?.color != .Gray) {
             result = false;
         }
