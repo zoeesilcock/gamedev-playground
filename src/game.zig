@@ -99,7 +99,7 @@ pub const State = struct {
     entities: ArrayList(*Entity),
     entities_free: ArrayList(u32),
     entities_iterator: EntityIterator,
-    ball: *Entity,
+    ball_id: EntityId,
 
     pub fn deltaTime(self: *State) f32 {
         return @as(f32, @floatFromInt(self.delta_time)) / 1000;
@@ -372,8 +372,10 @@ pub export fn reloaded(state_ptr: *anyopaque) void {
         imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
     }
 
-    if (state.ball.transform) |transform| {
-        transform.velocity[Y] = if (transform.velocity[Y] > 0) BALL_VELOCITY else -BALL_VELOCITY;
+    if (state.getEntity(state.ball_id)) |ball| {
+        if (ball.transform) |transform| {
+            transform.velocity[Y] = if (transform.velocity[Y] > 0) BALL_VELOCITY else -BALL_VELOCITY;
+        }
     }
 }
 
@@ -448,14 +450,17 @@ pub export fn tick(state_ptr: *anyopaque) void {
         debug.recordMemoryUsage(state);
     }
 
-    if (state.ball.transform) |transform| {
-        if ((state.ball_horizontal_bounce_start_time + BALL_HORIZONTAL_BOUNCE_TIME) < state.time) {
-            if (state.input.left) {
-                transform.velocity[X] = -BALL_VELOCITY;
-            } else if (state.input.right) {
-                transform.velocity[X] = BALL_VELOCITY;
-            } else {
-                transform.velocity[X] = 0;
+    const opt_ball = state.getEntity(state.ball_id);
+    if (opt_ball) |ball| {
+        if (ball.transform) |transform| {
+            if ((state.ball_horizontal_bounce_start_time + BALL_HORIZONTAL_BOUNCE_TIME) < state.time) {
+                if (state.input.left) {
+                    transform.velocity[X] = -BALL_VELOCITY;
+                } else if (state.input.right) {
+                    transform.velocity[X] = BALL_VELOCITY;
+                } else {
+                    transform.velocity[X] = 0;
+                }
             }
         }
     }
@@ -465,7 +470,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
 
     // Handle vertical collisions.
     if (collisions.vertical) |collision| {
-        if (collision.id.equals(state.ball.id)) {
+        if (collision.id.equals(state.ball_id)) {
             if (state.getEntity(collision.id)) |entity| {
                 if (state.getEntity(collision.other_id)) |other_entity| {
                     if (entity.transform) |transform| {
@@ -491,7 +496,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
 
     // Handle horizontal collisions.
     if (collisions.horizontal) |collision| {
-        if (collision.id.equals(state.ball.id)) {
+        if (collision.id.equals(state.ball_id)) {
             if (state.getEntity(collision.id)) |entity| {
                 if (state.getEntity(collision.other_id)) |other_entity| {
                     if (entity.transform) |transform| {
@@ -510,11 +515,13 @@ pub export fn tick(state_ptr: *anyopaque) void {
     }
 
     // Handle ball specific animations.
-    if (state.ball.sprite) |sprite| {
-        if (state.ball.transform) |transform| {
-            if (sprite.animation_completed and (sprite.isAnimating("bounce_up") or sprite.isAnimating("bounce_down"))) {
-                transform.velocity = transform.next_velocity;
-                sprite.startAnimation("idle", &state.assets);
+    if (opt_ball) |ball| {
+        if (ball.sprite) |sprite| {
+            if (ball.transform) |transform| {
+                if (sprite.animation_completed and (sprite.isAnimating("bounce_up") or sprite.isAnimating("bounce_down"))) {
+                    transform.velocity = transform.next_velocity;
+                    sprite.startAnimation("idle", &state.assets);
+                }
             }
         }
     }
@@ -582,7 +589,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
 
 fn drawWorld(state: *State) void {
     var iter: EntityIterator = .{ .entities = &state.entities };
-    while (iter.next(&.{"sprite", "transform"})) |entity| {
+    while (iter.next(&.{ "sprite", "transform" })) |entity| {
         if (entity.sprite.?.getTexture(&state.assets)) |texture| {
             const offset = entity.sprite.?.getOffset(&state.assets);
             var position = entity.transform.?.position;
@@ -723,7 +730,7 @@ fn spawnBall(state: *State) !void {
         entity.color = color_component;
         entity.collider = collider_component;
 
-        state.ball = entity;
+        state.ball_id = entity.id;
 
         if (entity.sprite) |ball_sprite| {
             ball_sprite.startAnimation("idle", &state.assets);
@@ -734,10 +741,12 @@ fn spawnBall(state: *State) !void {
 }
 
 fn resetBall(state: *State) void {
-    state.ball.transform.?.position = BALL_SPAWN;
-    state.ball.transform.?.velocity[Y] = BALL_VELOCITY;
-    state.ball.color.?.color = .Red;
-    state.ball.sprite.?.startAnimation("idle", &state.assets);
+    if (state.getEntity(state.ball_id)) |ball| {
+        ball.transform.?.position = BALL_SPAWN;
+        ball.transform.?.velocity[Y] = BALL_VELOCITY;
+        ball.color.?.color = .Red;
+        ball.sprite.?.startAnimation("idle", &state.assets);
+    }
 }
 
 fn unloadLevel(state: *State) void {
