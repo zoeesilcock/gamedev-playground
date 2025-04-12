@@ -532,7 +532,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
     iter.reset();
     SpriteComponent.tick(&state.assets, &iter, state.deltaTime());
 
-    if (isLevelCompleted(state)) {
+    if (isLevelCompleted(state) and !(INTERNAL and state.debug_state.show_editor)) {
         nextLevel(state);
     }
 }
