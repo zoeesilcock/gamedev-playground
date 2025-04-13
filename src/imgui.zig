@@ -41,7 +41,17 @@ pub fn deinit() void {
 pub fn processEvent(event: *c.SDL_Event) bool {
     _ = ImGui_ImplSDL3_ProcessEvent(event);
     const im_io = c.ImGui_GetIO()[0];
-    return im_io.WantCaptureMouse or im_io.WantCaptureKeyboard;
+    const is_key_event =
+        event.type == c.SDL_EVENT_KEY_DOWN or
+        event.type == c.SDL_EVENT_KEY_UP;
+    const is_mouse_event =
+        event.type == c.SDL_EVENT_MOUSE_MOTION or
+        event.type == c.SDL_EVENT_MOUSE_BUTTON_DOWN or
+        event.type == c.SDL_EVENT_MOUSE_BUTTON_UP;
+
+    return
+        (is_mouse_event and im_io.WantCaptureMouse) or
+        (is_key_event and im_io.WantCaptureKeyboard);
 }
 
 pub fn newFrame() void {
