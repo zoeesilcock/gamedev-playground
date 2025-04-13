@@ -2,6 +2,7 @@ const std = @import("std");
 const aseprite = @import("aseprite.zig");
 const entities = @import("entities.zig");
 const math = @import("math.zig");
+const pool = @import("pool.zig");
 const imgui = if (INTERNAL) @import("imgui.zig") else struct {};
 const debug = if (INTERNAL) @import("debug.zig") else struct {
     pub const DebugState = void;
@@ -29,6 +30,7 @@ const ColorComponent = entities.ColorComponent;
 const ColorComponentValue = entities.ColorComponentValue;
 const BlockComponent = entities.BlockComponent;
 const BlockType = entities.BlockType;
+const Pool = pool.Pool;
 
 const Vector2 = math.Vector2;
 const X = math.X;
@@ -101,6 +103,12 @@ pub const State = struct {
     entities_iterator: EntityIterator,
     ball_id: EntityId,
 
+    transform_pool: Pool(TransformComponent),
+    collider_pool: Pool(ColliderComponent),
+    sprite_pool: Pool(SpriteComponent),
+    color_pool: Pool(ColorComponent),
+    block_pool: Pool(BlockComponent),
+
     pub fn deltaTime(self: *State) f32 {
         return @as(f32, @floatFromInt(self.delta_time)) / 1000;
     }
@@ -141,7 +149,22 @@ pub const State = struct {
 
         entity.is_in_use = false;
         self.entities_free.append(self.allocator, entity.id.index) catch @panic("Failed to allocate free index");
-        entity.freeAllComponents(self.allocator);
+
+        if (entity.transform) |transform| {
+            self.transform_pool.free(transform.pool_id, self.allocator) catch @panic("Failed to free transform component");
+        }
+        if (entity.collider) |collider| {
+            self.collider_pool.free(collider.pool_id, self.allocator) catch @panic("Failed to free collider component");
+        }
+        if (entity.sprite) |sprite| {
+            self.sprite_pool.free(sprite.pool_id, self.allocator) catch @panic("Failed to free sprite component");
+        }
+        if (entity.color) |color| {
+            self.color_pool.free(color.pool_id, self.allocator) catch @panic("Failed to free color component");
+        }
+        if (entity.block) |block| {
+            self.block_pool.free(block.pool_id, self.allocator) catch @panic("Failed to free block component");
+        }
     }
 };
 
@@ -285,6 +308,12 @@ pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window,
     state.entities_free = .empty;
     state.entities_iterator = .{ .entities = &state.entities };
 
+    state.transform_pool = Pool(TransformComponent).init(100, state.allocator) catch @panic("Failed to create transform pool");
+    state.collider_pool = Pool(ColliderComponent).init(100, state.allocator) catch @panic("Failed to create transform pool");
+    state.sprite_pool = Pool(SpriteComponent).init(100, state.allocator) catch @panic("Failed to create transform pool");
+    state.color_pool = Pool(ColorComponent).init(100, state.allocator) catch @panic("Failed to create transform pool");
+    state.block_pool = Pool(BlockComponent).init(100, state.allocator) catch @panic("Failed to create transform pool");
+
     state.level_index = 0;
     state.lives_remaining = MAX_LIVES;
 
@@ -292,8 +321,6 @@ pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window,
     spawnBackground(state) catch unreachable;
     spawnBall(state) catch unreachable;
     loadLevel(state, LEVELS[state.level_index]) catch unreachable;
-
-    _ = state.addEntity() catch @panic("Can't create bogus test entity");
 
     setupRenderTexture(state);
 
@@ -726,14 +753,14 @@ fn spawnBackground(state: *State) !void {
 
 fn spawnBall(state: *State) !void {
     if (addSprite(state, BALL_SPAWN) catch null) |entity| {
-        var collider_component: *ColliderComponent = state.allocator.create(ColliderComponent) catch undefined;
+        var collider_component: *ColliderComponent = state.collider_pool.getOrCreate(state.allocator) catch undefined;
         entity.entity_type = .Ball;
         collider_component.entity = entity;
         collider_component.shape = .Circle;
         collider_component.radius = 6;
         collider_component.offset = @splat(1);
 
-        var color_component: *ColorComponent = state.allocator.create(ColorComponent) catch undefined;
+        var color_component: *ColorComponent = state.color_pool.getOrCreate(state.allocator) catch undefined;
         color_component.entity = entity;
         color_component.color = .Red;
 
@@ -819,8 +846,8 @@ fn isLevelCompleted(state: *State) bool {
 
 fn addSprite(state: *State, position: Vector2) !*Entity {
     var entity: *Entity = try state.addEntity();
-    var sprite: *SpriteComponent = try state.allocator.create(SpriteComponent);
-    var transform: *TransformComponent = try state.allocator.create(TransformComponent);
+    var sprite: *SpriteComponent = try state.sprite_pool.getOrCreate(state.allocator);
+    var transform: *TransformComponent = try state.transform_pool.getOrCreate(state.allocator);
 
     sprite.entity = entity;
     sprite.frame_index = 0;
@@ -832,6 +859,7 @@ fn addSprite(state: *State, position: Vector2) !*Entity {
     transform.entity = entity;
     transform.position = position;
     transform.velocity = @splat(0);
+    transform.next_velocity = @splat(0);
 
     entity.transform = transform;
     entity.sprite = sprite;
@@ -851,7 +879,7 @@ pub fn addWall(state: *State, color: ColorComponentValue, block_type: BlockType,
     }
 
     const sprite_asset = state.assets.getWall(color, block_type);
-    var collider_component: *ColliderComponent = state.allocator.create(ColliderComponent) catch undefined;
+    var collider_component: *ColliderComponent = state.collider_pool.getOrCreate(state.allocator) catch undefined;
     new_entity.entity_type = .Wall;
     collider_component.entity = new_entity;
     collider_component.shape = .Square;
@@ -862,12 +890,12 @@ pub fn addWall(state: *State, color: ColorComponentValue, block_type: BlockType,
     collider_component.offset = @splat(0);
     new_entity.collider = collider_component;
 
-    var color_component: *ColorComponent = try state.allocator.create(ColorComponent);
+    var color_component: *ColorComponent = try state.color_pool.getOrCreate(state.allocator);
     color_component.entity = new_entity;
     color_component.color = color;
     new_entity.color = color_component;
 
-    var block_component: *BlockComponent = try state.allocator.create(BlockComponent);
+    var block_component: *BlockComponent = try state.block_pool.getOrCreate(state.allocator);
     block_component.entity = new_entity;
     block_component.type = block_type;
     new_entity.block = block_component;

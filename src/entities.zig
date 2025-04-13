@@ -2,6 +2,7 @@ const std = @import("std");
 const game = @import("game.zig");
 const math = @import("math.zig");
 const aseprite = @import("aseprite.zig");
+const pool = @import("pool.zig");
 
 const c = game.c;
 
@@ -12,6 +13,7 @@ const Z = math.Z;
 
 // TODO: Remove once Zig has finished migrating to unmanaged-style containers.
 const ArrayList = std.ArrayListUnmanaged;
+const PoolId = pool.PoolId;
 
 pub const EntityType = enum(u8) {
     Background,
@@ -87,32 +89,10 @@ pub const Entity = struct {
         entity.block = null;
         return entity;
     }
-
-    pub fn deinit(self: *Entity, allocator: std.mem.Allocator) void {
-        self.freeAllComponents(allocator);
-        allocator.destroy(self);
-    }
-
-    pub fn freeAllComponents(self: *Entity, allocator: std.mem.Allocator) void {
-        if (self.transform) |transform| {
-            allocator.destroy(transform);
-        }
-        if (self.collider) |collider| {
-            allocator.destroy(collider);
-        }
-        if (self.sprite) |sprite| {
-            allocator.destroy(sprite);
-        }
-        if (self.color) |color| {
-            allocator.destroy(color);
-        }
-        if (self.block) |block| {
-            allocator.destroy(block);
-        }
-    }
 };
 
 pub const TransformComponent = struct {
+    pool_id: PoolId,
     entity: *Entity,
 
     position: Vector2,
@@ -142,6 +122,7 @@ pub const Collision = struct {
 };
 
 pub const ColliderComponent = struct {
+    pool_id: PoolId,
     entity: *Entity,
 
     offset: Vector2,
@@ -329,6 +310,7 @@ pub const ColliderComponent = struct {
 };
 
 pub const SpriteComponent = struct {
+    pool_id: PoolId,
     entity: *Entity,
 
     frame_index: u32,
@@ -469,6 +451,7 @@ pub const ColorComponentValue = enum {
 };
 
 pub const ColorComponent = struct {
+    pool_id: PoolId,
     entity: *Entity,
 
     color: ColorComponentValue,
@@ -481,6 +464,7 @@ pub const BlockType = enum {
 };
 
 pub const BlockComponent = struct {
+    pool_id: PoolId,
     entity: *Entity,
 
     type: BlockType,
