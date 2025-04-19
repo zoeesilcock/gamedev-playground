@@ -5,9 +5,11 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const lib_only = b.option(bool, "lib_only", "only build the shared library") orelse false;
     const internal = b.option(bool, "internal", "include debug interface") orelse true;
+    const log_allocations = b.option(bool, "log_allocations", "log all allocations") orelse false;
 
     const build_options = b.addOptions();
     build_options.addOption(bool, "internal", internal);
+    build_options.addOption(bool, "log_allocations", log_allocations);
 
     const test_step = b.step("test", "Run unit tests");
 

@@ -8,6 +8,8 @@ const debug = if (INTERNAL) @import("debug.zig") else struct {
     pub const DebugState = void;
 };
 
+const loggingAllocator = if(INTERNAL) @import("logging_allocator.zig").loggingAllocator else undefined;
+
 pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
     @cInclude("SDL3/SDL.h");
@@ -52,6 +54,7 @@ const DebugAllocator = std.heap.DebugAllocator(.{
 });
 
 const INTERNAL: bool = @import("build_options").internal;
+const LOG_ALLOCATIONS: bool = @import("build_options").log_allocations;
 const WORLD_WIDTH: u32 = 200;
 const WORLD_HEIGHT: u32 = 150;
 const BALL_VELOCITY: f32 = 64;
@@ -280,7 +283,14 @@ pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window,
     var backing_allocator = std.heap.page_allocator;
     var debug_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize allocator."));
     debug_allocator.* = .init;
+
     var allocator = debug_allocator.allocator();
+    if (INTERNAL and LOG_ALLOCATIONS) {
+        const logging_allocator = loggingAllocator(debug_allocator.allocator());
+        var logging_allocator_ptr = (backing_allocator.create(@TypeOf(logging_allocator)) catch @panic("Failed to initialize allocator."));
+        logging_allocator_ptr.* = logging_allocator;
+        allocator = logging_allocator_ptr.allocator();
+    }
 
     var state: *State = allocator.create(State) catch @panic("Out of memory");
 
