@@ -4,11 +4,11 @@ const entities = @import("entities.zig");
 const math = @import("math.zig");
 const pool = @import("pool.zig");
 const imgui = if (INTERNAL) @import("imgui.zig") else struct {};
-const debug = if (INTERNAL) @import("debug.zig") else struct {
+const debug = if (INTERNAL) @import("internal/debug.zig") else struct {
     pub const DebugState = void;
 };
 
-const loggingAllocator = if(INTERNAL) @import("logging_allocator.zig").loggingAllocator else undefined;
+const loggingAllocator = if(INTERNAL) @import("internal/logging_allocator.zig").loggingAllocator else undefined;
 
 pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});

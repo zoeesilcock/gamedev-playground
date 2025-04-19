@@ -1,8 +1,8 @@
 const std = @import("std");
-const game = @import("game.zig");
-const entities = @import("entities.zig");
-const math = @import("math.zig");
-const imgui = @import("imgui.zig");
+const game = @import("../game.zig");
+const entities = @import("../entities.zig");
+const math = @import("../math.zig");
+const imgui = @import("../imgui.zig");
 
 const c = game.c;
 const State = game.State;
