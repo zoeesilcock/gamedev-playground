@@ -318,7 +318,9 @@ pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window,
     state.ball_horizontal_bounce_start_time = 0;
 
     state.entities = .empty;
+    state.entities.ensureUnusedCapacity(state.allocator, 100) catch @panic("Failed to allocate space for entities.");
     state.entities_free = .empty;
+    state.entities_free.ensureUnusedCapacity(state.allocator, 100) catch @panic("Failed to allocate space for free entities.");
     state.entities_iterator = .{ .entities = &state.entities };
 
     state.transform_pool = Pool(TransformComponent).init(100, state.allocator) catch @panic("Failed to create transform pool");
