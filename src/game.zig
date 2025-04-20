@@ -71,6 +71,7 @@ const LEVELS: []const []const u8 = &.{
 
 pub const State = struct {
     debug_allocator: *DebugAllocator,
+    game_allocator: *DebugAllocator,
     allocator: std.mem.Allocator,
     debug_state: debug.DebugState,
 
@@ -281,13 +282,13 @@ fn sdlPanic(result: bool, message: []const u8) void {
 
 pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, renderer: *c.SDL_Renderer) *anyopaque {
     var backing_allocator = std.heap.page_allocator;
-    var debug_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize allocator."));
-    debug_allocator.* = .init;
+    var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
+    game_allocator.* = .init;
 
-    var allocator = debug_allocator.allocator();
+    var allocator = game_allocator.allocator();
     if (INTERNAL and LOG_ALLOCATIONS) {
-        const logging_allocator = loggingAllocator(debug_allocator.allocator());
-        var logging_allocator_ptr = (backing_allocator.create(@TypeOf(logging_allocator)) catch @panic("Failed to initialize allocator."));
+        const logging_allocator = loggingAllocator(game_allocator.allocator());
+        var logging_allocator_ptr = (backing_allocator.create(@TypeOf(logging_allocator)) catch @panic("Failed to initialize logging allocator."));
         logging_allocator_ptr.* = logging_allocator;
         allocator = logging_allocator_ptr.allocator();
     }
@@ -295,9 +296,11 @@ pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window,
     var state: *State = allocator.create(State) catch @panic("Out of memory");
 
     state.allocator = allocator;
-    state.debug_allocator = debug_allocator;
+    state.game_allocator = game_allocator;
 
     if (INTERNAL) {
+        state.debug_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize debug allocator."));
+        state.debug_allocator.* = .init;
         state.debug_state.init() catch @panic("Failed to init DebugState");
     }
 
@@ -466,7 +469,7 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
     }
 
     if (INTERNAL) {
-        debug.handleInput(state, state.allocator);
+        debug.handleInput(state, state.debug_allocator.allocator());
     }
 
     return continue_running;
@@ -521,7 +524,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
                         transform.velocity[Y] = 0;
 
                         if (INTERNAL) {
-                            state.debug_state.addCollision(state.allocator, &collision, state.time);
+                            state.debug_state.addCollision(state.debug_allocator.allocator(), &collision, state.time);
                         }
 
                         handleBallCollision(state, entity, other_entity);
@@ -541,7 +544,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
                         state.ball_horizontal_bounce_start_time = state.time;
 
                         if (INTERNAL) {
-                            state.debug_state.addCollision(state.allocator, &collision, state.time);
+                            state.debug_state.addCollision(state.debug_allocator.allocator(), &collision, state.time);
                         }
 
                         handleBallCollision(state, entity, other_entity);

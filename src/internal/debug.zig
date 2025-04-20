@@ -347,7 +347,7 @@ pub fn recordMemoryUsage(state: *State) void {
             state.debug_state.memory_usage_current_index = 0;
         }
         state.debug_state.memory_usage[state.debug_state.memory_usage_current_index] =
-            state.debug_allocator.total_requested_bytes;
+            state.game_allocator.total_requested_bytes;
     }
 }
 
