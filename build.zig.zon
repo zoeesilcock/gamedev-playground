@@ -16,6 +16,10 @@
             .url = "git+https://github.com/dearimgui/dear_bindings.git#b8e5511d80f084c3f71e132ae577ffcbd9a02b72",
             .hash = "1220ddff183fed80f88003c913951cdb5eccc73ee8d41a963b4180518966b5537ce0",
         },
+        .tracy = .{
+            .url = "git+https://github.com/Games-by-Mason/tracy_zig#0cad4646be2791982f692a7a47716ec92b62eb2e",
+            .hash = "tracy-0.0.0-R7l8BdlCAQBFp6uysnan3Alaxap65HBF1mzGdabdKe8z",
+        },
     },
     .paths = .{
         "build.zig",
