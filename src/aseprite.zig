@@ -8,7 +8,7 @@ pub const AseDocument = struct {
     header: *const AseHeader,
     frames: []const AseFrame,
 
-    pub fn deinit(self: *AseDocument, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *const AseDocument, allocator: std.mem.Allocator) void {
         for (self.frames) |frame| {
             frame.deinit(allocator);
         }
@@ -435,7 +435,7 @@ test "single frame" {
     try std.testing.expect(aseprite_doc != null);
 
     if (aseprite_doc) |doc| {
-        defer doc.deinit();
+        defer doc.deinit(std.testing.allocator);
 
         try std.testing.expectEqual(0xA5E0, doc.header.magic_number);
         try std.testing.expectEqual(0xF1FA, doc.frames[0].header.magic_number);
@@ -457,7 +457,7 @@ test "multiple frames" {
     try std.testing.expect(aseprite_doc != null);
 
     if (aseprite_doc) |doc| {
-        defer doc.deinit();
+        defer doc.deinit(std.testing.allocator);
 
         try std.testing.expectEqual(0xA5E0, doc.header.magic_number);
         try std.testing.expectEqual(0xF1FA, doc.frames[0].header.magic_number);
