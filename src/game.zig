@@ -8,7 +8,7 @@ const debug = if (INTERNAL) @import("internal/debug.zig") else struct {
     pub const DebugState = void;
 };
 
-const loggingAllocator = if(INTERNAL) @import("internal/logging_allocator.zig").loggingAllocator else undefined;
+const loggingAllocator = if (INTERNAL) @import("internal/logging_allocator.zig").loggingAllocator else undefined;
 
 pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
@@ -643,11 +643,7 @@ fn drawWorld(state: *State) void {
     var iter: EntityIterator = .{ .entities = &state.entities };
     while (iter.next(&.{ .sprite, .transform })) |entity| {
         if (entity.sprite.?.getTexture(&state.assets)) |texture| {
-            const offset = entity.sprite.?.getOffset(&state.assets);
-            var position = entity.transform.?.position;
-            position += offset;
-
-            drawTextureAt(state, texture, position);
+            drawTextureAt(state, texture, entity.transform.?.position);
         }
     }
 }
@@ -732,14 +728,40 @@ fn loadSprite(path: []const u8, renderer: *c.SDL_Renderer, allocator: std.mem.Al
         var textures: ArrayList(*c.SDL_Texture) = .empty;
 
         for (doc.frames) |frame| {
-            const surface = sdlPanicIfNull(c.SDL_CreateSurfaceFrom(
-                frame.cel_chunk.data.compressedImage.width,
-                frame.cel_chunk.data.compressedImage.height,
-                c.SDL_PIXELFORMAT_RGBA32,
-                @ptrCast(@constCast(frame.cel_chunk.data.compressedImage.pixels)),
-                frame.cel_chunk.data.compressedImage.width * @sizeOf(u32),
-            ), "Failed to create surface from data");
+            const surface = sdlPanicIfNull(
+                c.SDL_CreateSurface(
+                    doc.header.width,
+                    doc.header.height,
+                    c.SDL_PIXELFORMAT_RGBA32,
+                ),
+                "Failed to create a surface to blit sprite data into",
+            );
             defer c.SDL_DestroySurface(surface);
+
+            for (frame.cel_chunks) |cel_chunk| {
+                var dest_rect = c.SDL_Rect{
+                    .x = cel_chunk.x,
+                    .y = cel_chunk.y,
+                    .w = cel_chunk.data.compressedImage.width,
+                    .h = cel_chunk.data.compressedImage.height,
+                };
+                const cel_surface = sdlPanicIfNull(
+                    c.SDL_CreateSurfaceFrom(
+                        cel_chunk.data.compressedImage.width,
+                        cel_chunk.data.compressedImage.height,
+                        c.SDL_PIXELFORMAT_RGBA32,
+                        @ptrCast(@constCast(cel_chunk.data.compressedImage.pixels)),
+                        cel_chunk.data.compressedImage.width * @sizeOf(u32),
+                    ),
+                    "Failed to create surface from data",
+                );
+                defer c.SDL_DestroySurface(cel_surface);
+
+                sdlPanic(
+                    c.SDL_BlitSurface(cel_surface, null, surface, &dest_rect),
+                    "Failed to blit cel surface into sprite surface",
+                );
+            }
 
             const texture = sdlPanicIfNull(
                 c.SDL_CreateTextureFromSurface(renderer, surface),

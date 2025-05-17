@@ -373,20 +373,6 @@ pub const SpriteComponent = struct {
         return result;
     }
 
-    pub fn getOffset(self: *SpriteComponent, assets: *game.Assets) Vector2 {
-        var result: Vector2 = .{ 0, 0 };
-
-        if (assets.getSpriteAsset(self)) |sprite_asset| {
-            if (self.frame_index < sprite_asset.frames.len) {
-                const cel_chunk = sprite_asset.document.frames[self.frame_index].cel_chunk;
-                result[0] = @floatFromInt(cel_chunk.x);
-                result[1] = @floatFromInt(cel_chunk.y);
-            }
-        }
-
-        return result;
-    }
-
     pub fn startAnimation(self: *SpriteComponent, name: []const u8, assets: *game.Assets) void {
         var opt_tag: ?*aseprite.AseTagsChunk = null;
 

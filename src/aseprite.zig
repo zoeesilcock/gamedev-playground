@@ -20,7 +20,7 @@ pub const AseDocument = struct {
 
 const AseFrame = struct {
     header: *AseFrameHeader,
-    cel_chunk: *AseCelChunk,
+    cel_chunks: []*AseCelChunk,
     tags: []*AseTagsChunk,
 
     pub fn deinit(self: AseFrame, allocator: std.mem.Allocator) void {
@@ -29,9 +29,14 @@ const AseFrame = struct {
             allocator.destroy(tag);
         }
         allocator.free(self.tags);
-        allocator.free(self.cel_chunk.data.compressedImage.pixels);
+
+        for (self.cel_chunks) |cel_chunk| {
+            allocator.free(cel_chunk.data.compressedImage.pixels);
+            allocator.destroy(cel_chunk);
+        }
+        allocator.free(self.cel_chunks);
+
         allocator.destroy(self.header);
-        allocator.destroy(self.cel_chunk);
     }
 };
 
@@ -57,7 +62,7 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
                         .{ frame_header.byte_count, frame_header.chunkCount() },
                     );
 
-                    var opt_cel_chunk: ?*AseCelChunk = null;
+                    var cel_chunks: ArrayList(*AseCelChunk) = .empty;
                     var opt_tags: ?[]*AseTagsChunk = null;
 
                     for (0..frame_header.chunkCount()) |_| {
@@ -70,7 +75,9 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
 
                             switch (chunk_header.chunk_type) {
                                 .Cel => {
-                                    opt_cel_chunk = try parseCelChunk(&file, chunk_header, allocator);
+                                    if (try parseCelChunk(&file, chunk_header, allocator)) |cel_chunk| {
+                                        try cel_chunks.append(allocator, cel_chunk);
+                                    }
                                 },
                                 .Tags => {
                                     opt_tags = try parseTagsChunks(&file, allocator);
@@ -82,10 +89,10 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
                         }
                     }
 
-                    if (opt_cel_chunk) |cel_chunk| {
+                    if (cel_chunks.items.len > 0) {
                         try frames.append(allocator, AseFrame{
                             .header = frame_header,
-                            .cel_chunk = cel_chunk,
+                            .cel_chunks = try cel_chunks.toOwnedSlice(allocator),
                             .tags = opt_tags orelse &.{},
                         });
                     }
@@ -441,8 +448,9 @@ test "single frame" {
         try std.testing.expectEqual(0xF1FA, doc.frames[0].header.magic_number);
 
         try std.testing.expectEqual(1, doc.header.frames);
+        try std.testing.expectEqual(2, doc.frames[0].cel_chunks.len);
 
-        const cel_chunk = doc.frames[0].cel_chunk;
+        const cel_chunk = doc.frames[0].cel_chunks[0];
 
         try std.testing.expectEqual(0, cel_chunk.x);
         try std.testing.expectEqual(0, cel_chunk.y);
@@ -464,7 +472,7 @@ test "multiple frames" {
 
         try std.testing.expectEqual(12, doc.header.frames);
 
-        const cel_chunk = doc.frames[0].cel_chunk;
+        const cel_chunk = doc.frames[0].cel_chunks[0];
 
         try std.testing.expectEqual(0, cel_chunk.x);
         try std.testing.expectEqual(0, cel_chunk.y);
