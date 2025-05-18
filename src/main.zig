@@ -124,11 +124,11 @@ pub fn main() !void {
 
 fn initChangeTimes(allocator: std.mem.Allocator) void {
     _ = dllHasChanged();
-    _ = srcHasChanged(allocator);
     _ = assetsHaveChanged(allocator);
 }
 
 fn checkForChanges(state: GameStatePtr, allocator: std.mem.Allocator) void {
+    const assetsChanged = assetsHaveChanged(allocator);
     if (dllHasChanged()) {
         if (build_process != null) {
             checkRecompileResult() catch {
@@ -140,8 +140,7 @@ fn checkForChanges(state: GameStatePtr, allocator: std.mem.Allocator) void {
         unloadDll() catch unreachable;
         loadDll() catch @panic("Failed to load the game lib.");
         gameReloaded(state);
-        _ = assetsHaveChanged(allocator);
-    } else if (assetsHaveChanged(allocator)) {
+    } else if (assetsChanged) {
         gameWillReload(state);
         gameReloaded(state);
     }
@@ -155,10 +154,6 @@ fn dllHasChanged() bool {
         result = true;
     }
     return result;
-}
-
-fn srcHasChanged(allocator: std.mem.Allocator) bool {
-    return checkForChangesInDirectory(allocator, "src", &src_last_modified) catch false;
 }
 
 fn assetsHaveChanged(allocator: std.mem.Allocator) bool {
@@ -175,10 +170,13 @@ fn checkForChangesInDirectory(allocator: std.mem.Allocator, path: []const u8, la
     defer walker.deinit();
 
     while (try walker.next()) |entry| {
-        const stat = try assets.statFile(entry.path);
-        if (stat.mtime > last_change.*) {
-            last_change.* = stat.mtime;
-            result = true;
+        if (entry.kind == .file) {
+            const stat = try assets.statFile(entry.path);
+            if (stat.mtime > last_change.*) {
+                last_change.* = stat.mtime;
+                result = true;
+                break;
+            }
         }
     }
 
