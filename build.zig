@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const lib_only = b.option(bool, "lib_only", "only build the shared library") orelse false;
     const internal = b.option(bool, "internal", "include debug interface") orelse true;
-    const tracy_enabled = b.option(bool, "tracy", "Build with Tracy support.") orelse internal;
+    const tracy_enabled = b.option(bool, "tracy", "includ Tracy support") orelse internal;
     const log_allocations = b.option(bool, "log_allocations", "log all allocations") orelse false;
 
     const build_options = b.addOptions();
