@@ -20,8 +20,8 @@ const LIB_PATH_RUNTIME = if (PLATFORM == .windows) "zig-out/bin/playground_temp.
 
 const WINDOW_WIDTH = if (DEBUG) 800 else 1600;
 const WINDOW_HEIGHT = if (DEBUG) 600 else 1200;
-const WINDOW_DECORATIONS_WIDTH = if (PLATFORM == .windows) 16 else 0;
-const WINDOW_DECORATIONS_HEIGHT = if (PLATFORM == .windows) 39 else 0;
+const WINDOW_DECORATIONS_WIDTH = if (PLATFORM == .windows) 0 else 0;
+const WINDOW_DECORATIONS_HEIGHT = if (PLATFORM == .windows) 31 else 0;
 const TARGET_FPS = 120;
 const TARGET_FRAME_TIME: f32 = 1000 / TARGET_FPS;
 
@@ -62,8 +62,8 @@ pub fn main() !void {
         const displays = c.SDL_GetDisplays(&num_displays);
         if (num_displays > 0) {
             const display_mode = c.SDL_GetCurrentDisplayMode(displays[0]);
-            const window_offset_x: c_int = 12;
-            const window_offset_y: c_int = 12 + WINDOW_DECORATIONS_HEIGHT;
+            const window_offset_x: c_int = WINDOW_DECORATIONS_WIDTH;
+            const window_offset_y: c_int = WINDOW_DECORATIONS_HEIGHT;
 
             _ = c.SDL_SetWindowPosition(window, display_mode[0].w - WINDOW_WIDTH - window_offset_x, window_offset_y);
         }
