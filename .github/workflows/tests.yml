@@ -1,0 +1,10 @@
+name: Tests
+on: [push]
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    name: Run tests
+    steps:
+      - uses: actions/checkout@v3
+      - uses: mlugg/setup-zig@v2
+      - run: zig build test
