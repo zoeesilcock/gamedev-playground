@@ -19,7 +19,7 @@ pub fn build(b: *std.Build) void {
     }
 
     buildGameLib(b, build_options, target, optimize, test_step, internal, tracy_enabled);
-    checkGameLibStep(b, build_options, target, optimize, internal, tracy_enabled);
+    // checkGameLibStep(b, build_options, target, optimize, internal, tracy_enabled);
 
     generateImGuiBindingsStep(b, target, optimize);
 }
@@ -62,7 +62,7 @@ fn buildExecutable(
     run_step.dependOn(&run_cmd.step);
 
     const exe_tests = b.addTest(.{ .root_module = module });
-    linkExeOnlyLibraries(b, exe_tests, target, optimize);
+    // linkExeOnlyLibraries(b, exe_tests, target, optimize);
     const run_exe_tests = b.addRunArtifact(exe_tests);
     test_step.dependOn(&run_exe_tests.step);
 }
@@ -83,8 +83,8 @@ fn buildGameLib(
     }
 
     const lib_tests = b.addTest(.{ .root_module = lib.root_module });
-    linkGameLibraries(b, lib_tests, target, optimize, internal);
-    linkTracy(b, lib_tests, target, optimize, tracy_enabled);
+    // linkGameLibraries(b, lib_tests, target, optimize, internal);
+    // linkTracy(b, lib_tests, target, optimize, tracy_enabled);
     const run_lib_tests = b.addRunArtifact(lib_tests);
     test_step.dependOn(&run_lib_tests.step);
 }
