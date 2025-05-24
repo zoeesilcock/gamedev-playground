@@ -194,6 +194,8 @@ pub const Assets = struct {
 
     background: ?SpriteAsset,
 
+    title_paused: ?SpriteAsset,
+
     pub fn getSpriteAsset(self: *Assets, sprite: *const SpriteComponent) ?*SpriteAsset {
         var result: ?*SpriteAsset = null;
 
@@ -672,6 +674,19 @@ fn drawGameUI(state: *State) void {
             }
         }
     }
+
+    if (state.is_paused) {
+        if (state.assets.title_paused) |title| {
+            const texture = title.frames[0];
+            const title_position: Vector2 = .{
+                (@as(f32, @floatFromInt(state.window_width)) / state.world_scale / 2) -
+                (@as(f32, @floatFromInt(texture.w)) / 2),
+                (@as(f32, @floatFromInt(state.window_height)) / state.world_scale / 2) -
+                (@as(f32, @floatFromInt(texture.h)) / 2)
+            };
+            drawTextureAt(state, texture, title_position);
+        }
+    }
 }
 
 fn drawTextureAt(state: *State, texture: *c.SDL_Texture, position: Vector2) void {
@@ -701,6 +716,8 @@ fn loadAssets(state: *State) void {
     state.assets.block_deadly = loadSprite("assets/block_deadly.aseprite", state.renderer, state.allocator);
 
     state.assets.background = loadSprite("assets/background.aseprite", state.renderer, state.allocator);
+
+    state.assets.title_paused = loadSprite("assets/title_paused.aseprite", state.renderer, state.allocator);
 }
 
 fn unloadAssets(state: *State) void {
