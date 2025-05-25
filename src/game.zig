@@ -73,6 +73,15 @@ const LEVELS: []const []const u8 = &.{
 //     "test",
 // };
 
+const Title = enum {
+    NONE,
+    PAUSED,
+    GET_READY,
+    CLEARED,
+    DEATH,
+    GAME_OVER,
+};
+
 pub const State = struct {
     debug_allocator: *DebugAllocator,
     game_allocator: *DebugAllocator,
@@ -97,6 +106,7 @@ pub const State = struct {
 
     time: u64,
     delta_time: u64,
+    delta_time_actual: u64,
     input: Input,
     ball_horizontal_bounce_start_time: u64,
 
@@ -116,6 +126,11 @@ pub const State = struct {
     sprite_pool: Pool(SpriteComponent),
     color_pool: Pool(ColorComponent),
     block_pool: Pool(BlockComponent),
+
+    // Titles
+    current_title: Title,
+    current_title_has_duration: bool,
+    current_title_duration_remaining: u64,
 
     pub fn deltaTime(self: *State) f32 {
         return @as(f32, @floatFromInt(self.delta_time)) / 1000;
@@ -174,6 +189,50 @@ pub const State = struct {
             self.block_pool.free(block.pool_id, self.allocator) catch @panic("Failed to free block component");
         }
     }
+
+    pub fn showTitle(self: *State, title: Title) void {
+        self.current_title = title;
+        self.current_title_has_duration = false;
+    }
+
+    pub fn showTitleForDuration(self: *State, title: Title, duration: u64) void {
+        self.showTitle(title);
+        self.current_title_has_duration = true;
+        self.current_title_duration_remaining = duration;
+    }
+
+    pub fn updateTitles(self: *State) void {
+        if (self.current_title != .NONE and self.current_title_has_duration) {
+            if (self.current_title_duration_remaining >= self.delta_time_actual) {
+                self.current_title_duration_remaining -= self.delta_time_actual;
+            } else {
+                self.current_title_duration_remaining = 0;
+            }
+
+            if (self.current_title_duration_remaining == 0) {
+                self.titleDurationOver();
+            }
+        }
+    }
+
+    fn titleDurationOver(self: *State) void {
+        switch (self.current_title) {
+            .CLEARED => nextLevel(self),
+            .DEATH => resetBall(self),
+            .GAME_OVER => restart(self),
+            else => {},
+        }
+
+        self.current_title = .NONE;
+        self.current_title_has_duration = false;
+    }
+
+    pub fn pausedDueToTitle(self: *State) bool {
+        switch (self.current_title) {
+            .NONE => return false,
+            else => return true,
+        }
+    }
 };
 
 const Input = struct {
@@ -199,6 +258,10 @@ pub const Assets = struct {
     background: ?SpriteAsset,
 
     title_paused: ?SpriteAsset,
+    title_get_ready: ?SpriteAsset,
+    title_cleared: ?SpriteAsset,
+    title_death: ?SpriteAsset,
+    title_game_over: ?SpriteAsset,
 
     pub fn getSpriteAsset(self: *Assets, sprite: *const SpriteComponent) ?*SpriteAsset {
         var result: ?*SpriteAsset = null;
@@ -338,6 +401,10 @@ pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window,
     state.level_index = 0;
     state.lives_remaining = MAX_LIVES;
 
+    state.current_title = .NONE;
+    state.current_title_has_duration = false;
+    state.current_title_duration_remaining = 0;
+
     loadAssets(state);
     spawnBackground(state) catch unreachable;
     spawnBall(state) catch unreachable;
@@ -470,6 +537,12 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
                 c.SDLK_P => {
                     if (is_down) {
                         state.is_paused = !state.is_paused;
+
+                        if (state.is_paused) {
+                            state.showTitle(.PAUSED);
+                        } else {
+                            state.showTitle(.NONE);
+                        }
                     }
                 },
                 else => {},
@@ -491,8 +564,9 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
 pub export fn tick(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    if (!state.is_paused) {
-        state.delta_time = c.SDL_GetTicks() - state.time;
+    state.delta_time_actual = c.SDL_GetTicks() - state.time;
+    if (!state.is_paused and !state.pausedDueToTitle()) {
+        state.delta_time = state.delta_time_actual;
     } else {
         state.delta_time = 0;
     }
@@ -502,6 +576,8 @@ pub export fn tick(state_ptr: *anyopaque) void {
         debug.calculateFPS(state);
         debug.recordMemoryUsage(state);
     }
+
+    state.updateTitles();
 
     const opt_ball = state.getEntity(state.ball_id);
     if (opt_ball) |ball| {
@@ -585,12 +661,12 @@ pub export fn tick(state_ptr: *anyopaque) void {
     iter.reset();
     SpriteComponent.tick(&state.assets, &iter, state.deltaTime());
 
-    if (isLevelCompleted(state)) {
+    if (isLevelCompleted(state) and state.current_title == .NONE) {
         if (!INTERNAL) {
-            nextLevel(state);
+            state.showTitleForDuration(.CLEARED, 2000);
         } else {
             if (!state.debug_state.show_editor and !state.debug_state.testing_level) {
-                nextLevel(state);
+                state.showTitleForDuration(.CLEARED, 2000);
             } else if (state.debug_state.testing_level) {
                 loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
             }
@@ -606,10 +682,9 @@ fn handleBallCollision(state: *State, ball: *Entity, block: *Entity) void {
                     if (!INTERNAL or !state.debug_state.testing_level) {
                         state.lives_remaining -= 1;
                     }
-                    resetBall(state);
+                    state.showTitleForDuration(.DEATH, 2000);
                 } else {
-                    // Game over!
-                    restart(state);
+                    state.showTitleForDuration(.GAME_OVER, 2000);
                     return;
                 }
             }
@@ -684,17 +759,24 @@ fn drawGameUI(state: *State) void {
         }
     }
 
-    if (state.is_paused) {
-        if (state.assets.title_paused) |title| {
-            const texture = title.frames[0];
-            const title_position: Vector2 = .{
-                (@as(f32, @floatFromInt(state.window_width)) / state.world_scale / 2) -
+    const opt_title: ?SpriteAsset = switch (state.current_title) {
+        .PAUSED => state.assets.title_paused,
+        .GET_READY => state.assets.title_get_ready,
+        .CLEARED => state.assets.title_cleared,
+        .DEATH => state.assets.title_death,
+        .GAME_OVER => state.assets.title_game_over,
+        else => null,
+    };
+
+    if (opt_title) |title| {
+        const texture = title.frames[0];
+        const title_position: Vector2 = .{
+            (@as(f32, @floatFromInt(state.window_width)) / state.world_scale / 2) -
                 (@as(f32, @floatFromInt(texture.w)) / 2),
-                (@as(f32, @floatFromInt(state.window_height)) / state.world_scale / 2) -
+            (@as(f32, @floatFromInt(state.window_height)) / state.world_scale / 2) -
                 (@as(f32, @floatFromInt(texture.h)) / 2)
             };
-            drawTextureAt(state, texture, title_position);
-        }
+        drawTextureAt(state, texture, title_position);
     }
 }
 
@@ -727,6 +809,10 @@ fn loadAssets(state: *State) void {
     state.assets.background = loadSprite("assets/background.aseprite", state.renderer, state.allocator);
 
     state.assets.title_paused = loadSprite("assets/title_paused.aseprite", state.renderer, state.allocator);
+    state.assets.title_get_ready = loadSprite("assets/title_get_ready.aseprite", state.renderer, state.allocator);
+    state.assets.title_cleared = loadSprite("assets/title_cleared.aseprite", state.renderer, state.allocator);
+    state.assets.title_death = loadSprite("assets/title_death.aseprite", state.renderer, state.allocator);
+    state.assets.title_game_over = loadSprite("assets/title_game_over.aseprite", state.renderer, state.allocator);
 }
 
 fn unloadAssets(state: *State) void {
@@ -846,6 +932,8 @@ fn resetBall(state: *State) void {
         ball.transform.?.velocity[Y] = BALL_VELOCITY;
         ball.color.?.color = .Red;
         ball.sprite.?.startAnimation("idle", &state.assets);
+
+        state.showTitleForDuration(.GET_READY, 2000);
     }
 }
 
