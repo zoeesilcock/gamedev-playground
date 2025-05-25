@@ -162,9 +162,6 @@ pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
     }
     if (event.type == c.SDL_EVENT_KEY_DOWN) {
         switch (event.key.key) {
-            c.SDLK_P => {
-                state.is_paused = !state.is_paused;
-            },
             c.SDLK_F1 => {
                 var mode: u32 = @intFromEnum(state.debug_state.fps_display_mode) + 1;
                 if (mode >= @typeInfo(FPSDisplayMode).@"enum".fields.len) {

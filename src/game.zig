@@ -467,6 +467,11 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
                         _ = c.SDL_SetWindowFullscreen(state.window, state.fullscreen);
                     }
                 },
+                c.SDLK_P => {
+                    if (is_down) {
+                        state.is_paused = !state.is_paused;
+                    }
+                },
                 else => {},
             }
         }
