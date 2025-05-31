@@ -729,7 +729,7 @@ fn drawWorld(state: *State) void {
     var iter: EntityIterator = .{ .entities = &state.entities };
     while (iter.next(&.{ .sprite, .transform })) |entity| {
         if (entity.sprite.?.getTexture(&state.assets)) |texture| {
-            drawTextureAt(state, texture, entity.transform.?.position);
+            drawTextureAt(state, texture, entity.transform.?.position, entity.transform.?.scale, entity.sprite.?.tint);
         }
     }
 }
@@ -744,7 +744,7 @@ fn drawGameUI(state: *State) void {
         position[X] =
             (@as(f32, @floatFromInt(state.window_width)) / state.world_scale / 2) -
             (@as(f32, @floatFromInt(texture.w)) / 2);
-        drawTextureAt(state, texture, position);
+        drawTextureAt(state, texture, position, @splat(1), @splat(255));
     }
 
     position += inner_offset;
@@ -753,7 +753,7 @@ fn drawGameUI(state: *State) void {
         if (state.assets.life_outlined) |outlined| {
             for (0..MAX_LIVES) |i| {
                 const texture = (if (state.lives_remaining > i) filled else outlined).frames[0];
-                drawTextureAt(state, texture, position);
+                drawTextureAt(state, texture, position, @splat(1), @splat(255));
                 position[X] += @floatFromInt(texture.w + horizontal_space);
             }
         }
@@ -776,17 +776,20 @@ fn drawGameUI(state: *State) void {
             (@as(f32, @floatFromInt(state.window_height)) / state.world_scale / 2) -
                 (@as(f32, @floatFromInt(texture.h)) / 2)
             };
-        drawTextureAt(state, texture, title_position);
+        drawTextureAt(state, texture, title_position, @splat(1), @splat(255));
     }
 }
 
-fn drawTextureAt(state: *State, texture: *c.SDL_Texture, position: Vector2) void {
+fn drawTextureAt(state: *State, texture: *c.SDL_Texture, position: Vector2, scale: Vector2, tint: Color) void {
     const texture_rect = c.SDL_FRect{
         .x = @round(position[X]),
         .y = @round(position[Y]),
-        .w = @floatFromInt(texture.w),
-        .h = @floatFromInt(texture.h),
+        .w = @as(f32, @floatFromInt(texture.w)) * scale[X],
+        .h = @as(f32, @floatFromInt(texture.h)) * scale[Y],
     };
+
+    sdlPanic(c.SDL_SetTextureColorMod(texture, tint[R], tint[G], tint[B]), "Failed to set texture color mod.");
+    sdlPanic(c.SDL_SetTextureAlphaMod(texture, tint[A]), "Failed to set texture alpha mod.");
 
     _ = c.SDL_RenderTexture(state.renderer, texture, null, &texture_rect);
 }
@@ -1001,6 +1004,7 @@ fn addSprite(state: *State, position: Vector2) !*Entity {
     var transform: *TransformComponent = try state.transform_pool.getOrCreate(state.allocator);
 
     sprite.entity = entity;
+    sprite.tint = @splat(255);
     sprite.frame_index = 0;
     sprite.duration_shown = 0;
     sprite.loop_animation = false;
@@ -1009,6 +1013,7 @@ fn addSprite(state: *State, position: Vector2) !*Entity {
 
     transform.entity = entity;
     transform.position = position;
+    transform.scale = @splat(1);
     transform.velocity = @splat(0);
     transform.next_velocity = @splat(0);
 

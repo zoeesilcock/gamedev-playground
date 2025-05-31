@@ -535,6 +535,9 @@ fn inspectEntity(entity: *Entity) void {
                         Vector2 => {
                             inputVector2(component_field.name, field_ptr);
                         },
+                        Color => {
+                            inputColorU8(component_field.name, field_ptr);
+                        },
                         else => |field_type| {
                             if (@typeInfo(field_type) == .@"enum") {
                                 inputEnum(component_field.name, field_ptr);
@@ -573,6 +576,13 @@ fn inputVector2(heading: ?[*:0]const u8, value: *Vector2) void {
     defer c.ImGui_PopID();
 
     _ = c.ImGui_InputFloat2Ex(heading, @ptrCast(value), "%.2f", 0);
+}
+
+fn inputColorU8(heading: ?[*:0]const u8, value: *Color) void {
+    c.ImGui_PushIDPtr(value);
+    defer c.ImGui_PopID();
+
+    _ = c.ImGui_InputScalarNEx(heading, c.ImGuiDataType_U8, @ptrCast(value), 4, null, null, null, 0);
 }
 
 fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {

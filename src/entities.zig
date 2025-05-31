@@ -6,6 +6,7 @@ const pool = @import("pool.zig");
 
 const c = game.c;
 
+const Color = math.Color;
 const Vector2 = math.Vector2;
 const X = math.X;
 const Y = math.Y;
@@ -96,6 +97,7 @@ pub const TransformComponent = struct {
     entity: *Entity,
 
     position: Vector2,
+    scale: Vector2,
     velocity: Vector2,
     next_velocity: Vector2,
 
@@ -314,6 +316,7 @@ pub const SpriteComponent = struct {
     entity: *Entity,
 
     frame_index: u32,
+    tint: Color,
     duration_shown: f32,
     loop_animation: bool,
     animation_completed: bool,
