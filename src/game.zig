@@ -220,11 +220,11 @@ pub const State = struct {
             .CLEARED => nextLevel(self),
             .DEATH => resetBall(self),
             .GAME_OVER => restart(self),
-            else => {},
+            else => {
+                self.current_title = .NONE;
+                self.current_title_has_duration = false;
+            },
         }
-
-        self.current_title = .NONE;
-        self.current_title_has_duration = false;
     }
 
     pub fn pausedDueToTitle(self: *State) bool {
