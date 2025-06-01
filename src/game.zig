@@ -32,6 +32,8 @@ const ColorComponent = entities.ColorComponent;
 const ColorComponentValue = entities.ColorComponentValue;
 const BlockComponent = entities.BlockComponent;
 const BlockType = entities.BlockType;
+const TitleComponent = entities.TitleComponent;
+const TitleType = entities.TitleType;
 const Pool = pool.Pool;
 
 const Vector2 = math.Vector2;
@@ -67,19 +69,7 @@ const LEVELS: []const []const u8 = &.{
     "level1",
     "level2",
     "level3",
-};
-
-// const LEVELS: []const []const u8 = &.{
-//     "test",
-// };
-
-const Title = enum {
-    NONE,
-    PAUSED,
-    GET_READY,
-    CLEARED,
-    DEATH,
-    GAME_OVER,
+    // "test",
 };
 
 pub const State = struct {
@@ -120,17 +110,14 @@ pub const State = struct {
     entities_free: ArrayList(u32),
     entities_iterator: EntityIterator,
     ball_id: EntityId,
+    current_title_id: ?EntityId,
 
     transform_pool: Pool(TransformComponent),
     collider_pool: Pool(ColliderComponent),
     sprite_pool: Pool(SpriteComponent),
     color_pool: Pool(ColorComponent),
     block_pool: Pool(BlockComponent),
-
-    // Titles
-    current_title: Title,
-    current_title_has_duration: bool,
-    current_title_duration_remaining: u64,
+    title_pool: Pool(TitleComponent),
 
     pub fn deltaTime(self: *State) f32 {
         return @as(f32, @floatFromInt(self.delta_time)) / 1000;
@@ -175,63 +162,97 @@ pub const State = struct {
 
         if (entity.transform) |transform| {
             self.transform_pool.free(transform.pool_id, self.allocator) catch @panic("Failed to free transform component");
+            entity.transform = null;
         }
         if (entity.collider) |collider| {
             self.collider_pool.free(collider.pool_id, self.allocator) catch @panic("Failed to free collider component");
+            entity.collider = null;
         }
         if (entity.sprite) |sprite| {
             self.sprite_pool.free(sprite.pool_id, self.allocator) catch @panic("Failed to free sprite component");
+            entity.sprite = null;
         }
         if (entity.color) |color| {
             self.color_pool.free(color.pool_id, self.allocator) catch @panic("Failed to free color component");
+            entity.color = null;
         }
         if (entity.block) |block| {
             self.block_pool.free(block.pool_id, self.allocator) catch @panic("Failed to free block component");
+            entity.block = null;
+        }
+        if (entity.title) |title| {
+            self.title_pool.free(title.pool_id, self.allocator) catch @panic("Failed to free title component");
+            entity.title = null;
         }
     }
 
-    pub fn showTitle(self: *State, title: Title) void {
-        self.current_title = title;
-        self.current_title_has_duration = false;
+    pub fn showTitle(self: *State, title_type: TitleType) !void {
+        try self.spawnTitle(title_type, false, 0);
     }
 
-    pub fn showTitleForDuration(self: *State, title: Title, duration: u64) void {
-        self.showTitle(title);
-        self.current_title_has_duration = true;
-        self.current_title_duration_remaining = duration;
+    pub fn showTitleForDuration(self: *State, title_type: TitleType, duration: u64) !void {
+        try self.spawnTitle(title_type, true, duration);
     }
+
+    pub fn hideTitle(self: *State) void {
+        if (self.getEntity(self.current_title_id)) |title_entity| {
+            self.removeEntity(title_entity);
+            self.current_title_id = null;
+        }
+    }
+
+    fn spawnTitle(self: *State, title_type: TitleType, has_duration: bool, duration: u64) !void {
+        self.hideTitle();
+        std.debug.assert(self.current_title_id == null);
+
+        if (addSprite(self, @splat(0)) catch null) |title_entity| {
+            var title_component: *TitleComponent = try self.title_pool.getOrCreate(self.allocator);
+            title_component.entity = title_entity;
+            title_component.type = title_type;
+            title_component.has_duration = has_duration;
+            title_component.duration_remaining = duration;
+
+            title_entity.title = title_component;
+            self.current_title_id = title_entity.id;
+        }
+    }
+
 
     pub fn updateTitles(self: *State) void {
-        if (self.current_title != .NONE and self.current_title_has_duration) {
-            if (self.current_title_duration_remaining >= self.delta_time_actual) {
-                self.current_title_duration_remaining -= self.delta_time_actual;
-            } else {
-                self.current_title_duration_remaining = 0;
-            }
+        if (self.getEntity(self.current_title_id)) |title_entity| {
+            if (title_entity.title) |title| {
+                if (title.has_duration) {
+                    if (title.duration_remaining >= self.delta_time_actual) {
+                        title.duration_remaining -= self.delta_time_actual;
+                    } else {
+                        title.duration_remaining = 0;
+                    }
 
-            if (self.current_title_duration_remaining == 0) {
-                self.titleDurationOver();
+                    if (title.duration_remaining == 0) {
+                        self.titleDurationOver(title.type);
+                    }
+                }
             }
         }
     }
 
-    fn titleDurationOver(self: *State) void {
-        switch (self.current_title) {
+    fn titleDurationOver(self: *State, title: TitleType) void {
+        self.hideTitle();
+
+        switch (title) {
             .CLEARED => nextLevel(self),
             .DEATH => resetBall(self),
             .GAME_OVER => restart(self),
-            else => {
-                self.current_title = .NONE;
-                self.current_title_has_duration = false;
-            },
+            else => {},
         }
     }
 
     pub fn pausedDueToTitle(self: *State) bool {
-        switch (self.current_title) {
-            .NONE => return false,
-            else => return true,
+        var result: bool = false;
+        if (self.getEntity(self.current_title_id)) |title_entity| {
+            result = title_entity.title != null;
         }
+        return result;
     }
 };
 
@@ -266,7 +287,15 @@ pub const Assets = struct {
     pub fn getSpriteAsset(self: *Assets, sprite: *const SpriteComponent) ?*SpriteAsset {
         var result: ?*SpriteAsset = null;
 
-        if (sprite.entity.color) |color| {
+        if (sprite.entity.title) |title| {
+            result = switch (title.type) {
+                .PAUSED => &self.title_paused.?,
+                .GET_READY => &self.title_get_ready.?,
+                .CLEARED => &self.title_cleared.?,
+                .DEATH => &self.title_death.?,
+                .GAME_OVER => &self.title_game_over.?,
+            };
+        } else if (sprite.entity.color) |color| {
             switch (sprite.entity.entity_type) {
                 .Ball => result = self.getBall(color.color),
                 .Wall => {
@@ -391,19 +420,18 @@ pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window,
     state.entities_free = .empty;
     state.entities_free.ensureUnusedCapacity(state.allocator, 100) catch @panic("Failed to allocate space for free entities.");
     state.entities_iterator = .{ .entities = &state.entities };
+    state.current_title_id = null;
 
     state.transform_pool = Pool(TransformComponent).init(100, state.allocator) catch @panic("Failed to create transform pool");
-    state.collider_pool = Pool(ColliderComponent).init(100, state.allocator) catch @panic("Failed to create transform pool");
-    state.sprite_pool = Pool(SpriteComponent).init(100, state.allocator) catch @panic("Failed to create transform pool");
-    state.color_pool = Pool(ColorComponent).init(100, state.allocator) catch @panic("Failed to create transform pool");
-    state.block_pool = Pool(BlockComponent).init(100, state.allocator) catch @panic("Failed to create transform pool");
+    state.collider_pool = Pool(ColliderComponent).init(100, state.allocator) catch @panic("Failed to create collider pool");
+    state.sprite_pool = Pool(SpriteComponent).init(100, state.allocator) catch @panic("Failed to create sprite pool");
+    state.color_pool = Pool(ColorComponent).init(100, state.allocator) catch @panic("Failed to create color pool");
+    state.block_pool = Pool(BlockComponent).init(100, state.allocator) catch @panic("Failed to create block pool");
+    state.title_pool =
+        Pool(TitleComponent).init(@typeInfo(TitleType).@"enum".fields.len, state.allocator) catch @panic("Failed to create title pool");
 
     state.level_index = 0;
     state.lives_remaining = MAX_LIVES;
-
-    state.current_title = .NONE;
-    state.current_title_has_duration = false;
-    state.current_title_duration_remaining = 0;
 
     loadAssets(state);
     spawnBackground(state) catch unreachable;
@@ -539,9 +567,9 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
                         state.is_paused = !state.is_paused;
 
                         if (state.is_paused) {
-                            state.showTitle(.PAUSED);
+                            state.showTitle(.PAUSED) catch @panic("Failed to show Paused title");
                         } else {
-                            state.showTitle(.NONE);
+                            state.hideTitle();
                         }
                     }
                 },
@@ -661,12 +689,12 @@ pub export fn tick(state_ptr: *anyopaque) void {
     iter.reset();
     SpriteComponent.tick(&state.assets, &iter, state.deltaTime());
 
-    if (isLevelCompleted(state) and state.current_title == .NONE) {
+    if (isLevelCompleted(state) and state.getEntity(state.current_title_id) == null) {
         if (!INTERNAL) {
-            state.showTitleForDuration(.CLEARED, 2000);
+            state.showTitleForDuration(.CLEARED, 2000) catch @panic("Failed to show Cleared title");
         } else {
             if (!state.debug_state.show_editor and !state.debug_state.testing_level) {
-                state.showTitleForDuration(.CLEARED, 2000);
+                state.showTitleForDuration(.CLEARED, 2000) catch @panic("Failed to show Cleared title");
             } else if (state.debug_state.testing_level) {
                 loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
             }
@@ -682,9 +710,9 @@ fn handleBallCollision(state: *State, ball: *Entity, block: *Entity) void {
                     if (!INTERNAL or !state.debug_state.testing_level) {
                         state.lives_remaining -= 1;
                     }
-                    state.showTitleForDuration(.DEATH, 2000);
+                    state.showTitleForDuration(.DEATH, 2000) catch @panic("Failed to show Death title");
                 } else {
-                    state.showTitleForDuration(.GAME_OVER, 2000);
+                    state.showTitleForDuration(.GAME_OVER, 2000) catch @panic("Failed to show Game Over title");
                     return;
                 }
             }
@@ -728,8 +756,10 @@ pub export fn draw(state_ptr: *anyopaque) void {
 fn drawWorld(state: *State) void {
     var iter: EntityIterator = .{ .entities = &state.entities };
     while (iter.next(&.{ .sprite, .transform })) |entity| {
-        if (entity.sprite.?.getTexture(&state.assets)) |texture| {
-            drawTextureAt(state, texture, entity.transform.?.position, entity.transform.?.scale, entity.sprite.?.tint);
+        if (entity.title == null) {
+            if (entity.sprite.?.getTexture(&state.assets)) |texture| {
+                drawTextureAt(state, texture, entity.transform.?.position, entity.transform.?.scale, entity.sprite.?.tint);
+            }
         }
     }
 }
@@ -759,24 +789,18 @@ fn drawGameUI(state: *State) void {
         }
     }
 
-    const opt_title: ?SpriteAsset = switch (state.current_title) {
-        .PAUSED => state.assets.title_paused,
-        .GET_READY => state.assets.title_get_ready,
-        .CLEARED => state.assets.title_cleared,
-        .DEATH => state.assets.title_death,
-        .GAME_OVER => state.assets.title_game_over,
-        else => null,
-    };
+    var iter: EntityIterator = .{ .entities = &state.entities };
+    while (iter.next(&.{ .sprite, .title })) |entity| {
+        if (entity.sprite.?.getTexture(&state.assets)) |texture| {
+            const title_position: Vector2 = .{
+                (@as(f32, @floatFromInt(state.window_width)) / state.world_scale / 2) -
+                    (@as(f32, @floatFromInt(texture.w)) / 2),
+                (@as(f32, @floatFromInt(state.window_height)) / state.world_scale / 2) -
+                    (@as(f32, @floatFromInt(texture.h)) / 2)
+                };
 
-    if (opt_title) |title| {
-        const texture = title.frames[0];
-        const title_position: Vector2 = .{
-            (@as(f32, @floatFromInt(state.window_width)) / state.world_scale / 2) -
-                (@as(f32, @floatFromInt(texture.w)) / 2),
-            (@as(f32, @floatFromInt(state.window_height)) / state.world_scale / 2) -
-                (@as(f32, @floatFromInt(texture.h)) / 2)
-            };
-        drawTextureAt(state, texture, title_position, @splat(1), @splat(255));
+            drawTextureAt(state, texture, title_position, entity.transform.?.scale, entity.sprite.?.tint);
+        }
     }
 }
 
@@ -834,6 +858,12 @@ fn unloadAssets(state: *State) void {
     state.assets.block_deadly.?.deinit(state.allocator);
 
     state.assets.background.?.deinit(state.allocator);
+
+    state.assets.title_paused.?.deinit(state.allocator);
+    state.assets.title_get_ready.?.deinit(state.allocator);
+    state.assets.title_cleared.?.deinit(state.allocator);
+    state.assets.title_death.?.deinit(state.allocator);
+    state.assets.title_game_over.?.deinit(state.allocator);
 }
 
 fn loadSprite(path: []const u8, renderer: *c.SDL_Renderer, allocator: std.mem.Allocator) ?SpriteAsset {
@@ -936,7 +966,7 @@ fn resetBall(state: *State) void {
         ball.color.?.color = .Red;
         ball.sprite.?.startAnimation("idle", &state.assets);
 
-        state.showTitleForDuration(.GET_READY, 2000);
+        state.showTitleForDuration(.GET_READY, 2000) catch @panic("Failed to show Get Ready title");
     }
 }
 
@@ -983,7 +1013,6 @@ fn nextLevel(state: *State) void {
     }
 
     loadLevel(state, LEVELS[state.level_index]) catch unreachable;
-    resetBall(state);
 }
 
 fn isLevelCompleted(state: *State) bool {

@@ -75,11 +75,13 @@ pub const Entity = struct {
     id: EntityId,
     is_in_use: bool,
     entity_type: EntityType,
+
     transform: ?*TransformComponent,
     collider: ?*ColliderComponent,
     sprite: ?*SpriteComponent,
     color: ?*ColorComponent,
     block: ?*BlockComponent,
+    title: ?*TitleComponent,
 
     pub fn init(allocator: std.mem.Allocator) !*Entity {
         var entity: *Entity = try allocator.create(Entity);
@@ -88,6 +90,7 @@ pub const Entity = struct {
         entity.sprite = null;
         entity.color = null;
         entity.block = null;
+        entity.title = null;
         return entity;
     }
 };
@@ -457,4 +460,21 @@ pub const BlockComponent = struct {
     entity: *Entity,
 
     type: BlockType,
+};
+
+pub const TitleType = enum {
+    PAUSED,
+    GET_READY,
+    CLEARED,
+    DEATH,
+    GAME_OVER,
+};
+
+pub const TitleComponent = struct {
+    pool_id: PoolId,
+    entity: *Entity,
+
+    type: TitleType,
+    has_duration: bool,
+    duration_remaining: u64,
 };
