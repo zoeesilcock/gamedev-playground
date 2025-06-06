@@ -38,29 +38,32 @@ pub const EntityIterator = struct {
     index: usize = 0,
 
     pub fn next(self: *EntityIterator, comptime with_components: []const @TypeOf(.EnumLiteral)) ?*Entity {
-        const index = self.index;
         var result: ?*Entity = null;
-        for (self.entities.items[index..]) |entity| {
+        const start = self.index;
+        for (self.entities.items[start..]) |entity| {
             self.index += 1;
 
-            var has_all_components: bool = true;
-            inline for (with_components) |component| {
-                const component_name = @tagName(component);
-                const component_type = @TypeOf(@field(entity.*, component_name));
-                std.debug.assert(@typeInfo(component_type) == .optional);
+            if (entity.is_in_use) {
+                var has_all_components: bool = true;
+                inline for (with_components) |component| {
+                    const component_name = @tagName(component);
+                    const component_type = @TypeOf(@field(entity.*, component_name));
 
-                const field_offset = @offsetOf(@TypeOf(entity.*), component_name);
-                const base_ptr: [*]u8 = @ptrCast(entity);
-                const field_ptr: *component_type = @ptrCast(@alignCast(&base_ptr[field_offset]));
+                    std.debug.assert(@typeInfo(component_type) == .optional);
 
-                if (field_ptr.* == null) {
-                    has_all_components = false;
+                    const field_offset = @offsetOf(@TypeOf(entity.*), component_name);
+                    const base_ptr: [*]u8 = @ptrCast(entity);
+                    const field_ptr: *component_type = @ptrCast(@alignCast(&base_ptr[field_offset]));
+
+                    if (field_ptr.* == null) {
+                        has_all_components = false;
+                    }
                 }
-            }
 
-            if (has_all_components and entity.is_in_use) {
-                result = entity;
-                break;
+                if (has_all_components) {
+                    result = entity;
+                    break;
+                }
             }
         }
         return result;
