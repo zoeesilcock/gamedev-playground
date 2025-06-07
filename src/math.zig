@@ -15,8 +15,8 @@ pub const B = 2;
 pub const A = 3;
 
 pub const Rect = struct {
-    position: Vector2,
-    size: Vector2,
+    position: Vector2 = @splat(0),
+    size: Vector2 = @splat(0),
 
     pub fn scaled(self: *const Rect, scale: f32) Rect {
         return Rect{

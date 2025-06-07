@@ -416,13 +416,22 @@ pub const SpriteComponent = struct {
         return result;
     }
 
-    pub fn containsPoint(self: *const SpriteComponent, point: Vector2, assets: *game.Assets) bool {
+    pub fn containsPoint(
+        self: *const SpriteComponent,
+        point: Vector2,
+        dest_rect: c.SDL_FRect,
+        world_scale: f32,
+        assets: *game.Assets,
+    ) bool {
         var contains_point = false;
         var position: Vector2 = .{ 0, 0 };
 
         if (assets.getSpriteAsset(self)) |sprite_asset| {
             if (self.entity.transform) |transform| {
                 position = transform.position;
+            }
+            if (self.entity.title) |title| {
+                position = title.getPosition(dest_rect, world_scale, assets);
             }
 
             const width: f32 = @floatFromInt(sprite_asset.document.header.width);
@@ -480,4 +489,32 @@ pub const TitleComponent = struct {
     type: TitleType,
     has_duration: bool,
     duration_remaining: u64,
+
+    pub fn getPosition(
+        self: *const TitleComponent,
+        dest_rect: c.SDL_FRect,
+        world_scale: f32,
+        assets: *game.Assets,
+    ) Vector2 {
+        var result: Vector2 = @splat(0);
+        const half: Vector2 = @splat(0.5);
+        const scale: Vector2 = @splat(world_scale);
+
+        if (self.entity.sprite) |sprite| {
+            if (sprite.getTexture(assets)) |texture| {
+                const size: Vector2 = .{
+                    (@as(f32, @floatFromInt(texture.w))),
+                    (@as(f32, @floatFromInt(texture.h))),
+                };
+                result = Vector2{ dest_rect.w, dest_rect.h } / scale - size;
+                result *= half;
+
+                if (self.entity.transform) |transform| {
+                    result += transform.position;
+                }
+            }
+        }
+
+        return result;
+    }
 };

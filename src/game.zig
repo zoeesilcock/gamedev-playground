@@ -217,7 +217,6 @@ pub const State = struct {
         }
     }
 
-
     pub fn updateTitles(self: *State) void {
         if (self.getEntity(self.current_title_id)) |title_entity| {
             if (title_entity.title) |title| {
@@ -789,19 +788,10 @@ fn drawGameUI(state: *State) void {
         }
     }
 
-    const half: Vector2 = @splat(0.5);
-    const world_scale: Vector2 = @splat(state.world_scale);
-
     var iter: EntityIterator = .{ .entities = &state.entities };
     while (iter.next(&.{ .sprite, .title })) |entity| {
         if (entity.sprite.?.getTexture(&state.assets)) |texture| {
-            const size: Vector2 = .{
-                (@as(f32, @floatFromInt(texture.w))),
-                (@as(f32, @floatFromInt(texture.h))),
-            };
-            var title_position: Vector2 = Vector2{ state.dest_rect.w, state.dest_rect.h } / world_scale - size;
-            title_position *= half;
-
+            const title_position: Vector2 = entity.title.?.getPosition(state.dest_rect, state.world_scale, &state.assets);
             drawTextureAt(state, texture, title_position, entity.transform.?.scale, entity.sprite.?.tint);
         }
     }

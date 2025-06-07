@@ -293,27 +293,46 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
     }
 }
 
+fn entityContainsPoint(state: *State, mouse_position: Vector2, entity: *Entity) ?EntityId {
+    var result: ?EntityId = null;
+    if (entity.sprite.?.containsPoint(
+        mouse_position,
+        state.dest_rect,
+        state.world_scale,
+        &state.assets,
+    )) {
+        result = entity.id;
+    }
+    return result;
+}
+
 fn getHoveredEntity(state: *State) ?EntityId {
     var result: ?EntityId = null;
+    const mouse_position = state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale));
 
     var iter: EntityIterator = .{ .entities = &state.entities };
-    while (iter.next(&.{.collider})) |entity| {
-        if (entity.collider.?.containsPoint(
-            state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)),
-        )) {
-            result = entity.id;
+    while (iter.next(&.{ .title, .sprite })) |entity| {
+        if (entityContainsPoint(state, mouse_position, entity)) |id| {
+            result = id;
             break;
         }
     }
 
     if (result == null) {
         iter.reset();
+        while (iter.next(&.{ .collider, .sprite })) |entity| {
+            if (entityContainsPoint(state, mouse_position, entity)) |id| {
+                result = id;
+                break;
+            }
+        }
+    }
+
+    if (result == null) {
+        iter.reset();
         while (iter.next(&.{.sprite})) |entity| {
-            if (entity.sprite.?.containsPoint(
-                state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale)),
-                &state.assets,
-            )) {
-                result = entity.id;
+            if (entityContainsPoint(state, mouse_position, entity)) |id| {
+                result = id;
                 break;
             }
         }
@@ -761,8 +780,9 @@ fn drawEntityHighlight(
 ) void {
     if (state.getEntity(entity_id)) |entity| {
         if (entity.transform) |transform| {
+            var entity_rect: math.Rect = .{};
             if (entity.collider) |collider| {
-                const entity_rect: math.Rect = .{
+                entity_rect = .{
                     .position = Vector2{
                         transform.position[X] + collider.left(),
                         transform.position[Y] + collider.top(),
@@ -772,20 +792,25 @@ fn drawEntityHighlight(
                         collider.bottom() - collider.top(),
                     },
                 };
-                _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-                _ = c.SDL_RenderRect(renderer, &entity_rect.scaled(scale).toSDL());
             } else if (entity.sprite) |sprite| {
                 if (assets.getSpriteAsset(sprite)) |sprite_asset| {
-                    const width: f32 = @floatFromInt(sprite_asset.document.header.width);
-                    const height: f32 = @floatFromInt(sprite_asset.document.header.height);
-                    const entity_rect: math.Rect = .{
+                    entity_rect = .{
                         .position = Vector2{ transform.position[X], transform.position[Y] } + offset,
-                        .size = Vector2{ width, height },
+                        .size = Vector2{
+                            @floatFromInt(sprite_asset.document.header.width),
+                            @floatFromInt(sprite_asset.document.header.height),
+                        },
                     };
-                    _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-                    _ = c.SDL_RenderRect(renderer, &entity_rect.scaled(scale).toSDL());
                 }
             }
+
+            if (entity.title) |title| {
+                const title_position: Vector2 = title.getPosition(state.dest_rect, state.world_scale, &state.assets);
+                entity_rect.position = title_position + offset;
+            }
+
+            _ = c.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
+            _ = c.SDL_RenderRect(renderer, &entity_rect.scaled(scale).toSDL());
         }
     }
 }
