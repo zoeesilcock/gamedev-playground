@@ -502,7 +502,7 @@ pub fn drawDebugUI(state: *State) void {
 
     if (state.getEntity(state.debug_state.selected_entity_id)) |selected_entity| {
         c.ImGui_SetNextWindowPosEx(c.ImVec2{ .x = 30, .y = 30 }, c.ImGuiCond_FirstUseEver, c.ImVec2{ .x = 0, .y = 0 });
-        c.ImGui_SetNextWindowSize(c.ImVec2{ .x = 300, .y = 460 }, c.ImGuiCond_FirstUseEver);
+        c.ImGui_SetNextWindowSize(c.ImVec2{ .x = 300, .y = 540 }, c.ImGuiCond_FirstUseEver);
 
         _ = c.ImGui_Begin("Inspector", null, c.ImGuiWindowFlags_NoFocusOnAppearing);
         defer c.ImGui_End();
