@@ -240,8 +240,6 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
                     var should_add: bool = true;
 
                     if (hovered_entity.entity_type == .Wall) {
-                        state.removeEntity(hovered_entity);
-
                         if (hovered_entity.color) |hovered_color| {
                             if (hovered_entity.block) |hovered_block_type| {
                                 should_add =
@@ -249,6 +247,8 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
                                     block_type != hovered_block_type.type;
                             }
                         }
+
+                        state.removeEntity(hovered_entity);
                     }
 
                     if (should_add) {
