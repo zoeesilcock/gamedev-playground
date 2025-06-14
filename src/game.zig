@@ -73,15 +73,16 @@ const LEVELS: []const []const u8 = &.{
 };
 
 pub const State = struct {
-    debug_allocator: *DebugAllocator,
     game_allocator: *DebugAllocator,
     allocator: std.mem.Allocator,
-    debug_state: debug.DebugState,
+
+    debug_allocator: *DebugAllocator = undefined,
+    debug_state: *debug.DebugState = undefined,
 
     window: *c.SDL_Window,
     renderer: *c.SDL_Renderer,
-    render_texture: *c.SDL_Texture,
-    dest_rect: c.SDL_FRect,
+    render_texture: *c.SDL_Texture = undefined,
+    dest_rect: c.SDL_FRect = undefined,
 
     window_width: u32,
     window_height: u32,
@@ -92,7 +93,6 @@ pub const State = struct {
     world_height: u32,
 
     assets: Assets,
-    level_index: u32,
 
     time: u64,
     delta_time: u64,
@@ -100,16 +100,17 @@ pub const State = struct {
     input: Input,
     ball_horizontal_bounce_start_time: u64,
 
-    is_paused: bool,
+    paused: bool,
     fullscreen: bool,
 
+    level_index: u32,
     lives_remaining: u32,
 
     // Entities.
     entities: ArrayList(*Entity),
     entities_free: ArrayList(u32),
     entities_iterator: EntityIterator,
-    ball_id: EntityId,
+    ball_id: ?EntityId,
     current_title_id: ?EntityId,
 
     transform_pool: Pool(TransformComponent),
@@ -261,27 +262,27 @@ const Input = struct {
 };
 
 pub const Assets = struct {
-    life_filled: ?SpriteAsset,
-    life_outlined: ?SpriteAsset,
-    life_backdrop: ?SpriteAsset,
+    life_filled: ?SpriteAsset = null,
+    life_outlined: ?SpriteAsset = null,
+    life_backdrop: ?SpriteAsset = null,
 
-    ball_red: ?SpriteAsset,
-    ball_blue: ?SpriteAsset,
+    ball_red: ?SpriteAsset = null,
+    ball_blue: ?SpriteAsset = null,
 
-    block_gray: ?SpriteAsset,
-    block_red: ?SpriteAsset,
-    block_blue: ?SpriteAsset,
-    block_change_red: ?SpriteAsset,
-    block_change_blue: ?SpriteAsset,
-    block_deadly: ?SpriteAsset,
+    block_gray: ?SpriteAsset = null,
+    block_red: ?SpriteAsset = null,
+    block_blue: ?SpriteAsset = null,
+    block_change_red: ?SpriteAsset = null,
+    block_change_blue: ?SpriteAsset = null,
+    block_deadly: ?SpriteAsset = null,
 
-    background: ?SpriteAsset,
+    background: ?SpriteAsset = null,
 
-    title_paused: ?SpriteAsset,
-    title_get_ready: ?SpriteAsset,
-    title_cleared: ?SpriteAsset,
-    title_death: ?SpriteAsset,
-    title_game_over: ?SpriteAsset,
+    title_paused: ?SpriteAsset = null,
+    title_get_ready: ?SpriteAsset = null,
+    title_cleared: ?SpriteAsset = null,
+    title_death: ?SpriteAsset = null,
+    title_game_over: ?SpriteAsset = null,
 
     pub fn getSpriteAsset(self: *Assets, sprite: *const SpriteComponent) ?*SpriteAsset {
         var result: ?*SpriteAsset = null;
@@ -391,46 +392,58 @@ pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window,
     }
 
     var state: *State = allocator.create(State) catch @panic("Out of memory");
+    state.* = .{
+        .allocator = allocator,
+        .game_allocator = game_allocator,
 
-    state.allocator = allocator;
-    state.game_allocator = game_allocator;
+        .window = window,
+        .renderer = renderer,
+
+        .window_width = window_width,
+        .window_height = window_height,
+
+        .world_scale = 1,
+        .ui_scale = 1,
+        .world_width = WORLD_WIDTH,
+        .world_height = WORLD_HEIGHT,
+
+        .assets = .{},
+
+        .time = c.SDL_GetTicks(),
+        .delta_time = 0,
+        .delta_time_actual = 0,
+        .input = .{},
+        .ball_horizontal_bounce_start_time = 0,
+
+        .paused = false,
+        .fullscreen = false,
+
+        .level_index = 0,
+        .lives_remaining = MAX_LIVES,
+
+        .entities = .empty,
+        .entities_free = .empty,
+        .entities_iterator = .{ .entities = &state.entities },
+        .ball_id = null,
+        .current_title_id = null,
+
+        .transform_pool = Pool(TransformComponent).init(100, state.allocator) catch @panic("Failed to create transform pool"),
+        .collider_pool = Pool(ColliderComponent).init(100, state.allocator) catch @panic("Failed to create collider pool"),
+        .sprite_pool = Pool(SpriteComponent).init(100, state.allocator) catch @panic("Failed to create sprite pool"),
+        .color_pool = Pool(ColorComponent).init(100, state.allocator) catch @panic("Failed to create color pool"),
+        .block_pool = Pool(BlockComponent).init(100, state.allocator) catch @panic("Failed to create block pool"),
+        .title_pool = Pool(TitleComponent).init(@typeInfo(TitleType).@"enum".fields.len, state.allocator) catch @panic("Failed to create title pool"),
+    };
+
+    state.entities.ensureUnusedCapacity(state.allocator, 100) catch @panic("Failed to allocate space for entities.");
+    state.entities_free.ensureUnusedCapacity(state.allocator, 100) catch @panic("Failed to allocate space for free entities.");
 
     if (INTERNAL) {
         state.debug_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize debug allocator."));
         state.debug_allocator.* = .init;
+        state.debug_state = state.debug_allocator.allocator().create(debug.DebugState) catch @panic("Out of memory");
         state.debug_state.init() catch @panic("Failed to init DebugState");
     }
-
-    state.window = window;
-    state.renderer = renderer;
-
-    state.window_width = window_width;
-    state.window_height = window_height;
-    state.world_width = WORLD_WIDTH;
-    state.world_height = WORLD_HEIGHT;
-
-    state.time = c.SDL_GetTicks();
-    state.delta_time = 0;
-    state.input = Input{};
-    state.ball_horizontal_bounce_start_time = 0;
-
-    state.entities = .empty;
-    state.entities.ensureUnusedCapacity(state.allocator, 100) catch @panic("Failed to allocate space for entities.");
-    state.entities_free = .empty;
-    state.entities_free.ensureUnusedCapacity(state.allocator, 100) catch @panic("Failed to allocate space for free entities.");
-    state.entities_iterator = .{ .entities = &state.entities };
-    state.current_title_id = null;
-
-    state.transform_pool = Pool(TransformComponent).init(100, state.allocator) catch @panic("Failed to create transform pool");
-    state.collider_pool = Pool(ColliderComponent).init(100, state.allocator) catch @panic("Failed to create collider pool");
-    state.sprite_pool = Pool(SpriteComponent).init(100, state.allocator) catch @panic("Failed to create sprite pool");
-    state.color_pool = Pool(ColorComponent).init(100, state.allocator) catch @panic("Failed to create color pool");
-    state.block_pool = Pool(BlockComponent).init(100, state.allocator) catch @panic("Failed to create block pool");
-    state.title_pool =
-        Pool(TitleComponent).init(@typeInfo(TitleType).@"enum".fields.len, state.allocator) catch @panic("Failed to create title pool");
-
-    state.level_index = 0;
-    state.lives_remaining = MAX_LIVES;
 
     loadAssets(state);
     spawnBackground(state) catch unreachable;
@@ -563,9 +576,9 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
                 },
                 c.SDLK_P => {
                     if (is_down) {
-                        state.is_paused = !state.is_paused;
+                        state.paused = !state.paused;
 
-                        if (state.is_paused) {
+                        if (state.paused) {
                             state.showTitle(.PAUSED) catch @panic("Failed to show Paused title");
                         } else {
                             state.hideTitle();
@@ -592,7 +605,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     state.delta_time_actual = c.SDL_GetTicks() - state.time;
-    if (!state.is_paused and !state.pausedDueToTitle()) {
+    if (!state.paused and !state.pausedDueToTitle()) {
         state.delta_time = state.delta_time_actual;
     } else {
         state.delta_time = 0;

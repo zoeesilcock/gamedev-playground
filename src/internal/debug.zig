@@ -66,28 +66,33 @@ pub const DebugState = struct {
     memory_usage_display: bool,
 
     pub fn init(self: *DebugState) !void {
-        self.input = DebugInput{};
+        self.* = .{
+            .input = DebugInput{},
 
-        self.mode = .Select;
-        self.current_block_color = .Red;
-        self.current_block_type = .Wall;
-        self.show_editor = false;
+            .mode = .Select,
+            .show_editor = false,
+            .testing_level = false,
+            .current_level_name = undefined,
+            .current_block_color = .Red,
+            .current_block_type = .Wall,
+            .hovered_entity_id = null,
+            .selected_entity_id = null,
+
+            .show_colliders = false,
+            .collisions = .empty,
+
+            .current_frame_index = 0,
+            .frame_times = [1]u64{0} ** MAX_FRAME_TIME_COUNT,
+            .fps_average = 0,
+            .fps_display_mode = .Number,
+
+            .memory_usage = [1]u64{0} ** MAX_MEMORY_USAGE_COUNT,
+            .memory_usage_current_index = 0,
+            .memory_usage_last_collected_at = 0,
+            .memory_usage_display = false,
+        };
+
         _ = try std.fmt.bufPrintZ(&self.current_level_name, "level1", .{});
-
-        self.show_colliders = false;
-        self.collisions = .empty;
-
-        self.selected_entity_id = null;
-        self.hovered_entity_id = null;
-
-        self.frame_times = [1]u64{0} ** MAX_FRAME_TIME_COUNT;
-        self.fps_average = 0;
-        self.fps_display_mode = .Number;
-
-        self.memory_usage = [1]u64{0} ** MAX_MEMORY_USAGE_COUNT;
-        self.memory_usage_current_index = 0;
-        self.memory_usage_last_collected_at = 0;
-        self.memory_usage_display = false;
     }
 
     pub fn addCollision(
@@ -181,7 +186,7 @@ pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
 
                 if (state.debug_state.show_editor) {
                     state.debug_state.testing_level = false;
-                    state.is_paused = true;
+                    state.paused = true;
                 }
             },
             c.SDLK_S => {
@@ -481,7 +486,7 @@ pub fn drawDebugUI(state: *State) void {
         if (c.ImGui_ButtonEx("Test level", button_size)) {
             state.debug_state.show_editor = false;
             state.debug_state.testing_level = true;
-            state.is_paused = false;
+            state.paused = false;
 
             game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
         }
