@@ -52,6 +52,8 @@ pub const DebugState = struct {
     hovered_entity_id: ?EntityId,
     selected_entity_id: ?EntityId,
 
+    show_state_inspector: bool,
+
     show_colliders: bool,
     collisions: ArrayList(DebugCollision),
 
@@ -77,6 +79,8 @@ pub const DebugState = struct {
             .current_block_type = .Wall,
             .hovered_entity_id = null,
             .selected_entity_id = null,
+
+            .show_state_inspector = false,
 
             .show_colliders = false,
             .collisions = .empty,
@@ -179,6 +183,9 @@ pub fn processInputEvent(state: *State, event: c.SDL_Event) void {
             },
             c.SDLK_C => {
                 state.debug_state.show_colliders = !state.debug_state.show_colliders;
+            },
+            c.SDLK_G => {
+                state.debug_state.show_state_inspector = !state.debug_state.show_state_inspector;
             },
             c.SDLK_E => {
                 state.debug_state.show_editor = !state.debug_state.show_editor;
@@ -515,63 +522,133 @@ pub fn drawDebugUI(state: *State) void {
         inspectEntity(selected_entity);
     }
 
+    if (state.debug_state.show_state_inspector) {
+        c.ImGui_SetNextWindowPosEx(c.ImVec2{ .x = 350, .y = 30 }, c.ImGuiCond_FirstUseEver, c.ImVec2{ .x = 0, .y = 0 });
+        c.ImGui_SetNextWindowSize(c.ImVec2{ .x = 300, .y = 540 }, c.ImGuiCond_FirstUseEver);
+
+        _ = c.ImGui_Begin("Game state", null, c.ImGuiWindowFlags_NoFocusOnAppearing);
+        defer c.ImGui_End();
+
+        inspectState(state);
+    }
+
     imgui.render(state.renderer);
 }
 
-fn runtimeFieldPointer(ptr: anytype, comptime field_name: []const u8) *@TypeOf(@field(ptr.*, field_name)) {
-    const field_offset = @offsetOf(@TypeOf(ptr.*), field_name);
-    const base_ptr: [*]u8 = @ptrCast(ptr);
-    return @ptrCast(@alignCast(&base_ptr[field_offset]));
+fn inspectEntity(entity: *Entity) void {
+    inspectStruct(entity, &.{ "entity", "is_in_use" });
 }
 
-fn inspectEntity(entity: *Entity) void {
-    const entity_info = @typeInfo(@TypeOf(entity.*));
-    inline for (entity_info.@"struct".fields) |entity_field| {
-        if (entity_field.type == EntityId) {
-            const entity_id: *EntityId = runtimeFieldPointer(entity, entity_field.name);
-            var buf: [64]u8 = undefined;
-            const id = std.fmt.bufPrintZ(&buf, "ID: {d} ({d})", .{ entity_id.index, entity_id.generation }) catch "";
-            c.ImGui_Text(id.ptr);
-        } else if (entity_field.type == bool) {
-            // Skip this, since it will always be true if the entity can be inspected.
-        } else if (entity_field.type == EntityType) {
-            const entity_type = runtimeFieldPointer(entity, entity_field.name);
-            inline for (@typeInfo(EntityType).@"enum".fields, 0..) |field, i| {
-                if (@intFromEnum(entity_type.*) == i) {
-                    c.ImGui_Text("Type: " ++ field.name);
-                }
+fn inspectState(state: *State) void {
+    inspectStruct(state, &.{"entity"});
+}
+
+fn inspectStruct(struct_ptr: anytype, ignored_fields: []const []const u8) void {
+    const struct_info = @typeInfo(@TypeOf(struct_ptr.*));
+    inline for (struct_info.@"struct".fields) |struct_field| {
+        var skip_field = false;
+        for (ignored_fields) |ignored| {
+            if (std.mem.eql(u8, ignored, struct_field.name)) {
+                skip_field = true;
+                break;
             }
-        } else if (runtimeFieldPointer(entity, entity_field.name).*) |component| {
-            if (c.ImGui_CollapsingHeaderBoolPtr(entity_field.name, null, c.ImGuiTreeNodeFlags_DefaultOpen)) {
-                const component_info = @typeInfo(@TypeOf(component.*));
-                inline for (component_info.@"struct".fields) |component_field| {
-                    const field_ptr = runtimeFieldPointer(component, component_field.name);
-                    switch (@TypeOf(field_ptr.*)) {
-                        bool => {
-                            inputBool(component_field.name, field_ptr);
-                        },
-                        f32 => {
-                            inputF32(component_field.name, field_ptr);
-                        },
-                        u32 => {
-                            inputU32(component_field.name, field_ptr);
-                        },
-                        Vector2 => {
-                            inputVector2(component_field.name, field_ptr);
-                        },
-                        Color => {
-                            inputColorU8(component_field.name, field_ptr);
-                        },
-                        else => |field_type| {
-                            if (@typeInfo(field_type) == .@"enum") {
-                                inputEnum(component_field.name, field_ptr);
+        }
+
+        if (!skip_field) {
+            const field_ptr = &@field(struct_ptr, struct_field.name);
+            switch (@TypeOf(field_ptr.*)) {
+                bool => {
+                    inputBool(struct_field.name, field_ptr);
+                },
+                f32 => {
+                    inputF32(struct_field.name, field_ptr);
+                },
+                u32 => {
+                    inputU32(struct_field.name, field_ptr);
+                },
+                u64 => {
+                    inputU64(struct_field.name, field_ptr);
+                },
+                Vector2 => {
+                    inputVector2(struct_field.name, field_ptr);
+                },
+                EntityId => {
+                    const entity_id: *EntityId = &@field(struct_ptr, struct_field.name);
+                    var buf: [64]u8 = undefined;
+                    const id = std.fmt.bufPrintZ(
+                        &buf,
+                        "ID: {d} ({d})",
+                        .{ entity_id.index, entity_id.generation },
+                    ) catch "";
+                    c.ImGui_Text(id.ptr);
+                },
+                EntityType => {
+                    const entity_type = &@field(struct_ptr, struct_field.name);
+                    inline for (@typeInfo(EntityType).@"enum".fields, 0..) |field, i| {
+                        if (@intFromEnum(entity_type.*) == i) {
+                            c.ImGui_Text("Type: " ++ field.name);
+                        }
+                    }
+                },
+                *DebugState => {
+                    inputStructSection(field_ptr.*, struct_field.name, ignored_fields);
+                },
+                else => {
+                    const field_info = @typeInfo(@TypeOf(field_ptr.*));
+                    switch (field_info) {
+                        .optional => |o| {
+                            const child_info = @typeInfo(o.child);
+                            switch (child_info) {
+                                .pointer => {
+                                    if (field_ptr.*) |inner| {
+                                        inputStructSection(inner, struct_field.name, ignored_fields);
+                                    } else {
+                                        inputNull(struct_field.name);
+                                    }
+                                },
+                                else => {
+                                    if (field_ptr.*) |inner| {
+                                        var mutable_inner = inner;
+                                        inputStructSection(&mutable_inner, struct_field.name, ignored_fields);
+                                    } else {
+                                        inputNull(struct_field.name);
+                                    }
+                                },
                             }
                         },
+                        .pointer => |p| {
+                            const inner_info = @typeInfo(p.child);
+                            switch (inner_info) {
+                                .@"struct" => {
+                                    inputStructSection(field_ptr.*, struct_field.name, ignored_fields);
+                                },
+                                else => {},
+                            }
+                        },
+                        .@"enum" => {
+                            inputEnum(struct_field.name, field_ptr);
+                        },
+                        else => {},
                     }
-                }
+                },
             }
         }
     }
+}
+
+fn inputStructSection(target: anytype, heading: ?[*:0]const u8, ignored_fields: []const []const u8) void {
+    if (c.ImGui_CollapsingHeaderBoolPtr(heading, null, c.ImGuiTreeNodeFlags_DefaultOpen)) {
+        c.ImGui_Indent();
+        inspectStruct(target, ignored_fields);
+        c.ImGui_Unindent();
+    }
+}
+
+fn inputNull(comptime heading: [:0]const u8) void {
+    c.ImGui_PushIDPtr(@ptrCast(heading));
+    defer c.ImGui_PopID();
+
+    c.ImGui_Text(heading ++ ": null");
 }
 
 fn inputBool(heading: ?[*:0]const u8, value: *bool) void {
@@ -593,6 +670,13 @@ fn inputU32(heading: ?[*:0]const u8, value: *u32) void {
     defer c.ImGui_PopID();
 
     _ = c.ImGui_InputScalarEx(heading, c.ImGuiDataType_U32, @ptrCast(value), null, null, null, 0);
+}
+
+fn inputU64(heading: ?[*:0]const u8, value: *u64) void {
+    c.ImGui_PushIDPtr(value);
+    defer c.ImGui_PopID();
+
+    _ = c.ImGui_InputScalarEx(heading, c.ImGuiDataType_U64, @ptrCast(value), null, null, null, 0);
 }
 
 fn inputVector2(heading: ?[*:0]const u8, value: *Vector2) void {
