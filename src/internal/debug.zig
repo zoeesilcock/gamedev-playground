@@ -1,6 +1,7 @@
 const std = @import("std");
 const game = @import("../game.zig");
 const entities = @import("../entities.zig");
+const pool = @import("../pool.zig");
 const math = @import("../math.zig");
 const imgui = @import("../imgui.zig");
 
@@ -16,6 +17,7 @@ const Collision = entities.Collision;
 const ColliderComponent = entities.ColliderComponent;
 const ColorComponentValue = entities.ColorComponentValue;
 const BlockType = entities.BlockType;
+const PoolId = pool.PoolId;
 
 const Vector2 = math.Vector2;
 const X = math.X;
@@ -536,110 +538,180 @@ pub fn drawDebugUI(state: *State) void {
 }
 
 fn inspectEntity(entity: *Entity) void {
-    inspectStruct(entity, &.{ "entity", "is_in_use" });
+    inspectStruct(entity, &.{ "entity", "is_in_use" }, true);
 }
 
 fn inspectState(state: *State) void {
-    inspectStruct(state, &.{"entity"});
+    inspectStruct(state, &.{"entity"}, false);
 }
 
-fn inspectStruct(struct_ptr: anytype, ignored_fields: []const []const u8) void {
+fn inspectStruct(struct_ptr: anytype, ignored_fields: []const []const u8, expand_sections: bool) void {
     const struct_info = @typeInfo(@TypeOf(struct_ptr.*));
-    inline for (struct_info.@"struct".fields) |struct_field| {
-        var skip_field = false;
-        for (ignored_fields) |ignored| {
-            if (std.mem.eql(u8, ignored, struct_field.name)) {
-                skip_field = true;
-                break;
-            }
-        }
+    switch (struct_info) {
+        .@"struct" => {
+            inline for (struct_info.@"struct".fields) |struct_field| {
+                var skip_field = false;
+                for (ignored_fields) |ignored| {
+                    if (std.mem.eql(u8, ignored, struct_field.name)) {
+                        skip_field = true;
+                        break;
+                    }
+                }
 
-        if (!skip_field) {
-            const field_ptr = &@field(struct_ptr, struct_field.name);
-            switch (@TypeOf(field_ptr.*)) {
-                bool => {
-                    inputBool(struct_field.name, field_ptr);
-                },
-                f32 => {
-                    inputF32(struct_field.name, field_ptr);
-                },
-                u32 => {
-                    inputU32(struct_field.name, field_ptr);
-                },
-                u64 => {
-                    inputU64(struct_field.name, field_ptr);
-                },
-                Vector2 => {
-                    inputVector2(struct_field.name, field_ptr);
-                },
-                EntityId => {
-                    const entity_id: *EntityId = &@field(struct_ptr, struct_field.name);
-                    var buf: [64]u8 = undefined;
-                    const id = std.fmt.bufPrintZ(
-                        &buf,
-                        "ID: {d} ({d})",
-                        .{ entity_id.index, entity_id.generation },
-                    ) catch "";
-                    c.ImGui_Text(id.ptr);
-                },
-                EntityType => {
-                    const entity_type = &@field(struct_ptr, struct_field.name);
-                    inline for (@typeInfo(EntityType).@"enum".fields, 0..) |field, i| {
-                        if (@intFromEnum(entity_type.*) == i) {
-                            c.ImGui_Text("Type: " ++ field.name);
-                        }
-                    }
-                },
-                *DebugState => {
-                    inputStructSection(field_ptr.*, struct_field.name, ignored_fields);
-                },
-                else => {
-                    const field_info = @typeInfo(@TypeOf(field_ptr.*));
-                    switch (field_info) {
-                        .optional => |o| {
-                            const child_info = @typeInfo(o.child);
-                            switch (child_info) {
-                                .pointer => {
-                                    if (field_ptr.*) |inner| {
-                                        inputStructSection(inner, struct_field.name, ignored_fields);
-                                    } else {
-                                        inputNull(struct_field.name);
-                                    }
-                                },
-                                else => {
-                                    if (field_ptr.*) |inner| {
-                                        var mutable_inner = inner;
-                                        inputStructSection(&mutable_inner, struct_field.name, ignored_fields);
-                                    } else {
-                                        inputNull(struct_field.name);
-                                    }
-                                },
-                            }
-                        },
+                if (!skip_field) {
+                    const field_ptr = &@field(struct_ptr, struct_field.name);
+                    const field_ptr_info = @typeInfo(@TypeOf(field_ptr.*));
+                    switch (field_ptr_info) {
                         .pointer => |p| {
-                            const inner_info = @typeInfo(p.child);
-                            switch (inner_info) {
-                                .@"struct" => {
-                                    inputStructSection(field_ptr.*, struct_field.name, ignored_fields);
-                                },
-                                else => {},
+                            if (p.is_const) {
+                                displayConst(struct_field, field_ptr);
+                            } else {
+                                inputStruct(struct_field, field_ptr, ignored_fields, expand_sections);
                             }
                         },
-                        .@"enum" => {
-                            inputEnum(struct_field.name, field_ptr);
+                        else => {
+                            inputStruct(struct_field, field_ptr, ignored_fields, expand_sections);
                         },
-                        else => {},
                     }
-                },
+                }
             }
-        }
+        },
+        else => {},
     }
 }
 
-fn inputStructSection(target: anytype, heading: ?[*:0]const u8, ignored_fields: []const []const u8) void {
-    if (c.ImGui_CollapsingHeaderBoolPtr(heading, null, c.ImGuiTreeNodeFlags_DefaultOpen)) {
+fn displayConst(
+    struct_field: std.builtin.Type.StructField,
+    field_ptr: anytype,
+) void {
+    switch (@TypeOf(field_ptr.*)) {
+        []const u8 => {
+            c.ImGui_LabelText(struct_field.name, field_ptr.ptr);
+        },
+        else => {
+            c.ImGui_LabelText(struct_field.name, "unknown const");
+        },
+    }
+}
+
+fn inputStruct(
+    struct_field: std.builtin.Type.StructField,
+    field_ptr: anytype,
+    ignored_fields: []const []const u8,
+    expand_sections: bool,
+) void {
+    switch (@TypeOf(field_ptr.*)) {
+        bool => {
+            inputBool(struct_field.name, field_ptr);
+        },
+        f32 => {
+            inputF32(struct_field.name, field_ptr);
+        },
+        u32 => {
+            inputU32(struct_field.name, field_ptr);
+        },
+        i32 => {
+            inputI32(struct_field.name, field_ptr);
+        },
+        u64 => {
+            inputU64(struct_field.name, field_ptr);
+        },
+        Vector2 => {
+            inputVector2(struct_field.name, field_ptr);
+        },
+        EntityId => {
+            const entity_id: *EntityId = @ptrCast(field_ptr);
+            var buf: [64]u8 = undefined;
+            const id = std.fmt.bufPrintZ(
+                &buf,
+                "{d} ({d})",
+                .{ entity_id.index, entity_id.generation },
+            ) catch "";
+            c.ImGui_LabelText("EntityId", id);
+        },
+        PoolId => {
+            const pool_id: *PoolId = @ptrCast(field_ptr);
+            var buf: [64]u8 = undefined;
+            const id = std.fmt.bufPrintZ(&buf, "pool index: {d}", .{pool_id.index}) catch "";
+            c.ImGui_Text(id.ptr);
+        },
+        EntityType => {
+            inline for (@typeInfo(EntityType).@"enum".fields, 0..) |field, i| {
+                if (@intFromEnum(field_ptr.*) == i) {
+                    c.ImGui_LabelText("Type", field.name);
+                }
+            }
+        },
+        else => {
+            const field_info = @typeInfo(@TypeOf(field_ptr.*));
+            switch (field_info) {
+                .optional => |o| {
+                    const child_info = @typeInfo(o.child);
+                    switch (child_info) {
+                        .pointer => |p| {
+                            if (p.size == .one) {
+                                if (field_ptr.*) |inner| {
+                                    inputStructSection(inner, struct_field.name, ignored_fields, expand_sections);
+                                } else {
+                                    inputNull(struct_field.name);
+                                }
+                            }
+                        },
+                        else => {
+                            if (field_ptr.*) |inner| {
+                                var mutable_inner = inner;
+                                inputStructSection(&mutable_inner, struct_field.name, ignored_fields, expand_sections);
+                            } else {
+                                inputNull(struct_field.name);
+                            }
+                        },
+                    }
+                },
+                .pointer => |p| {
+                    const inner_info = @typeInfo(p.child);
+                    if (p.size == .one) {
+                        switch (inner_info) {
+                            .@"struct" => {
+                                inputStructSection(field_ptr.*, struct_field.name, ignored_fields, expand_sections);
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                .@"enum" => {
+                    inputEnum(struct_field.name, field_ptr);
+                },
+                .@"struct" => {
+                    inputStructSection(field_ptr, struct_field.name, ignored_fields, expand_sections);
+                },
+                else => {},
+            }
+        },
+    }
+}
+
+fn inputStructSection(
+    target: anytype,
+    heading: ?[*:0]const u8,
+    ignored_fields: []const []const u8,
+    expand_sections: bool,
+) void {
+    c.ImGui_PushIDPtr(@ptrCast(heading));
+    defer c.ImGui_PopID();
+
+    const section_flags = if (expand_sections) c.ImGuiTreeNodeFlags_DefaultOpen else c.ImGuiTreeNodeFlags_None;
+    if (c.ImGui_CollapsingHeaderBoolPtr(heading, null, section_flags)) {
         c.ImGui_Indent();
-        inspectStruct(target, ignored_fields);
+        switch (@typeInfo(@TypeOf(target))) {
+            .pointer => |ptr_info| {
+                if (@typeInfo(ptr_info.child) != .@"opaque" and ptr_info.size == .one) {
+                    inspectStruct(target, ignored_fields, expand_sections);
+                }
+            },
+            else => {
+                inspectStruct(target, ignored_fields, expand_sections);
+            },
+        }
         c.ImGui_Unindent();
     }
 }
@@ -648,7 +720,7 @@ fn inputNull(comptime heading: [:0]const u8) void {
     c.ImGui_PushIDPtr(@ptrCast(heading));
     defer c.ImGui_PopID();
 
-    c.ImGui_Text(heading ++ ": null");
+    c.ImGui_LabelText(heading, "null");
 }
 
 fn inputBool(heading: ?[*:0]const u8, value: *bool) void {
@@ -670,6 +742,13 @@ fn inputU32(heading: ?[*:0]const u8, value: *u32) void {
     defer c.ImGui_PopID();
 
     _ = c.ImGui_InputScalarEx(heading, c.ImGuiDataType_U32, @ptrCast(value), null, null, null, 0);
+}
+
+fn inputI32(heading: ?[*:0]const u8, value: *u32) void {
+    c.ImGui_PushIDPtr(value);
+    defer c.ImGui_PopID();
+
+    _ = c.ImGui_InputScalarEx(heading, c.ImGuiDataType_I32, @ptrCast(value), null, null, null, 0);
 }
 
 fn inputU64(heading: ?[*:0]const u8, value: *u64) void {
