@@ -34,6 +34,8 @@ const BlockComponent = entities.BlockComponent;
 const BlockType = entities.BlockType;
 const TitleComponent = entities.TitleComponent;
 const TitleType = entities.TitleType;
+const TweenComponent = entities.TweenComponent;
+const TweenedValue = entities.TweenedValue;
 const Pool = pool.Pool;
 
 const Vector2 = math.Vector2;
@@ -119,9 +121,14 @@ pub const State = struct {
     color_pool: Pool(ColorComponent),
     block_pool: Pool(BlockComponent),
     title_pool: Pool(TitleComponent),
+    tween_pool: Pool(TweenComponent),
 
     pub fn deltaTime(self: *State) f32 {
         return @as(f32, @floatFromInt(self.delta_time)) / 1000;
+    }
+
+    pub fn deltaTimeActual(self: *State) f32 {
+        return @as(f32, @floatFromInt(self.delta_time_actual)) / 1000;
     }
 
     pub fn getEntity(self: *State, opt_id: ?EntityId) ?*Entity {
@@ -185,6 +192,10 @@ pub const State = struct {
             self.title_pool.free(title.pool_id, self.allocator) catch @panic("Failed to free title component");
             entity.title = null;
         }
+        if (entity.tween) |tween| {
+            self.tween_pool.free(tween.pool_id, self.allocator) catch @panic("Failed to free tween component");
+            entity.tween = null;
+        }
     }
 
     pub fn showTitle(self: *State, title_type: TitleType) !void {
@@ -215,6 +226,32 @@ pub const State = struct {
 
             title_entity.title = title_component;
             self.current_title_id = title_entity.id;
+
+            // Fade in tween.
+            _ = try addTween(
+                self,
+                title_entity.id,
+                "sprite",
+                "tint",
+                .{ .color = .{ 255, 255, 255, 0 } },
+                .{ .color = .{ 255, 255, 255, 255 } },
+                0,
+                500,
+            );
+
+            if (duration > 0) {
+                // Fade out tween.
+                _ = try addTween(
+                    self,
+                    title_entity.id,
+                    "sprite",
+                    "tint",
+                    .{ .color = .{ 255, 255, 255, 255 } },
+                    .{ .color = .{ 255, 255, 255, 0 } },
+                    duration - 500,
+                    500,
+                );
+            }
         }
     }
 
@@ -433,6 +470,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window,
         .color_pool = Pool(ColorComponent).init(100, state.allocator) catch @panic("Failed to create color pool"),
         .block_pool = Pool(BlockComponent).init(100, state.allocator) catch @panic("Failed to create block pool"),
         .title_pool = Pool(TitleComponent).init(@typeInfo(TitleType).@"enum".fields.len, state.allocator) catch @panic("Failed to create title pool"),
+        .tween_pool = Pool(TweenComponent).init(100, state.allocator) catch @panic("Failed to create tween pool"),
     };
 
     state.entities.ensureUnusedCapacity(state.allocator, 100) catch @panic("Failed to allocate space for entities.");
@@ -697,6 +735,20 @@ pub export fn tick(state_ptr: *anyopaque) void {
 
     iter.reset();
     TransformComponent.tick(&iter, state.deltaTime());
+
+    iter.reset();
+    TweenComponent.tick(state, &iter, state.deltaTimeActual());
+
+    // Remove any completed tweens.
+    iter.reset();
+    while (iter.next(&.{.tween})) |entity| {
+        const tween = entity.tween.?;
+        if (entity.is_in_use) {
+            if (tween.time_passed > tween.duration + tween.delay) {
+                state.removeEntity(entity);
+            }
+        }
+    }
 
     iter.reset();
     SpriteComponent.tick(&state.assets, &iter, state.deltaTime());
@@ -1031,6 +1083,34 @@ fn isLevelCompleted(state: *State) bool {
     }
 
     return result;
+}
+
+fn addTween(
+    state: *State,
+    target: EntityId,
+    comptime component: []const u8,
+    comptime field: []const u8,
+    start_value: TweenedValue,
+    end_value: TweenedValue,
+    delay: u64,
+    duration: u64,
+) !*Entity {
+    var entity: *Entity = try state.addEntity();
+    var tween: *TweenComponent = try state.tween_pool.getOrCreate(state.allocator);
+
+    tween.delay = delay;
+    tween.duration = duration;
+    tween.time_passed = 0;
+
+    tween.target = target;
+    tween.target_component = component;
+    tween.target_field = field;
+
+    tween.start_value = start_value;
+    tween.end_value = end_value;
+
+    entity.tween = tween;
+    return entity;
 }
 
 fn addSprite(state: *State, position: Vector2) !*Entity {

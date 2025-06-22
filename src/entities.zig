@@ -85,6 +85,7 @@ pub const Entity = struct {
     color: ?*ColorComponent,
     block: ?*BlockComponent,
     title: ?*TitleComponent,
+    tween: ?*TweenComponent,
 
     pub fn init(allocator: std.mem.Allocator) !*Entity {
         var entity: *Entity = try allocator.create(Entity);
@@ -94,6 +95,7 @@ pub const Entity = struct {
         entity.color = null;
         entity.block = null;
         entity.title = null;
+        entity.tween = null;
         return entity;
     }
 };
@@ -516,5 +518,81 @@ pub const TitleComponent = struct {
         }
 
         return result;
+    }
+};
+
+pub const TweenedValue = union {
+    f32: f32,
+    color: Color,
+};
+
+pub const TweenComponent = struct {
+    pool_id: PoolId,
+    entity: *Entity,
+
+    delay: u64,
+    duration: u64,
+    time_passed: u64,
+
+    target: EntityId,
+    target_component: []const u8,
+    target_field: []const u8,
+
+    start_value: TweenedValue,
+    end_value: TweenedValue,
+
+    pub fn tick(state: *game.State, iter: *EntityIterator, delta_time: f32) void {
+        while (iter.next(&.{.tween})) |entity| {
+            const tween = entity.tween.?;
+            const total_duration = tween.delay + tween.duration;
+            tween.time_passed += @intFromFloat(delta_time * 1000);
+
+            if (tween.time_passed <= total_duration and tween.delay <= tween.time_passed) {
+                const t: f32 =
+                    @as(f32, @floatFromInt(tween.time_passed - tween.delay)) /
+                    @as(f32, @floatFromInt(tween.duration));
+
+                const type_info = @typeInfo(Entity);
+                if (state.getEntity(tween.target)) |target| {
+                    inline for (type_info.@"struct".fields) |entity_field_info| {
+                        if (std.mem.eql(u8, entity_field_info.name, tween.target_component)) {
+                            const entity_field = @field(target, entity_field_info.name);
+                            if (@typeInfo(@TypeOf(entity_field)) == .optional) {
+                                if (entity_field) |component| {
+                                    const component_info = @typeInfo(@TypeOf(component.*));
+                                    inline for (component_info.@"struct".fields) |component_field_info| {
+                                        if (std.mem.eql(u8, component_field_info.name, tween.target_field)) {
+                                            const current_value = &@field(component, component_field_info.name);
+                                            switch (@TypeOf(current_value)) {
+                                                *f32 => {
+                                                    current_value.* = lerp(tween.start_value.f32, tween.end_value.f32, t);
+                                                },
+                                                *Color => {
+                                                    current_value.* = .{
+                                                        lerpU8(tween.start_value.color[0], tween.end_value.color[0], t),
+                                                        lerpU8(tween.start_value.color[1], tween.end_value.color[1], t),
+                                                        lerpU8(tween.start_value.color[2], tween.end_value.color[2], t),
+                                                        lerpU8(tween.start_value.color[3], tween.end_value.color[3], t),
+                                                    };
+                                                },
+                                                else => {},
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn lerpU8(min: u8, max: u8, t: f32) u8 {
+        return @intFromFloat(lerp(@floatFromInt(min), @floatFromInt(max), t));
+    }
+
+    fn lerp(min: f32, max: f32, t: f32) f32 {
+        return (1.0 - t) * min + t * max;
     }
 };
