@@ -9,12 +9,12 @@
             .hash = "1220f6f7200826a1cb73af6135be085b4abe02782d2821684fdd9b77355187e6b15c",
         },
         .imgui = .{
-            .url = "git+https://github.com/ocornut/imgui.git?ref=v1.91.9b-docking#4806a1924ff6181180bf5e4b8b79ab4394118875",
-            .hash = "1220dd1cb333dc4912f220c78abb661de854fc5593b8a9e677d8a4b129522ec4be25",
+            .url = "git+https://github.com/ocornut/imgui.git?ref=v1.92.1-docking#44aa9a4b3a6f27d09a4eb5770d095cbd376dfc4b",
+            .hash = "1220232253d1937e8637cd68a873abc00b5f99365d39c0e0e3604c14225ee3344a39",
         },
         .dear_bindings = .{
-            .url = "git+https://github.com/dearimgui/dear_bindings.git#b8e5511d80f084c3f71e132ae577ffcbd9a02b72",
-            .hash = "1220ddff183fed80f88003c913951cdb5eccc73ee8d41a963b4180518966b5537ce0",
+            .url = "git+https://github.com/dearimgui/dear_bindings.git?ref=DearBindings_v0.16_ImGui_v1.92.1-docking#089a24e9d9dd9b9ab950566a56f4c778e74fd70e",
+            .hash = "12204facbdecf41077398715569720a443707ef97051f30790e1e4c4046528a0b6dc",
         },
         .tracy = .{
             .url = "git+https://github.com/Games-by-Mason/tracy_zig#0cad4646be2791982f692a7a47716ec92b62eb2e",
