@@ -1,9 +1,7 @@
 const std = @import("std");
-const entities = @import("entities.zig");
 
 // TODO: Remove once Zig has finished migrating to unmanaged-style containers.
 const ArrayList = std.ArrayListUnmanaged;
-const TransformComponent = entities.TransformComponent;
 
 pub const PoolId = struct {
     index: u32,

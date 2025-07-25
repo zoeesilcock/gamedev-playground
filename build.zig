@@ -1,15 +1,22 @@
 const std = @import("std");
 
-pub fn build(b: *std.Build) void {
+const Example = enum {
+    diamonds,
+    cube,
+};
+
+pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const lib_only = b.option(bool, "lib_only", "only build the shared library") orelse false;
     const internal = b.option(bool, "internal", "include debug interface") orelse true;
     const log_allocations = b.option(bool, "log_allocations", "log all allocations") orelse false;
+    const example: Example = b.option(Example, "example", "which example to build") orelse .diamonds;
 
     const build_options = b.addOptions();
     build_options.addOption(bool, "internal", internal);
     build_options.addOption(bool, "log_allocations", log_allocations);
+    build_options.addOption(Example, "example", example);
 
     const test_step = b.step("test", "Run unit tests");
 
@@ -17,8 +24,8 @@ pub fn build(b: *std.Build) void {
         buildExecutable(b, build_options, target, optimize, test_step, internal);
     }
 
-    buildGameLib(b, build_options, target, optimize, test_step, internal);
-    checkGameLibStep(b, build_options, target, optimize, internal);
+    try buildGameLib(b, build_options, target, optimize, test_step, internal, example);
+    try checkGameLibStep(b, build_options, target, optimize, internal, example);
 
     generateImGuiBindingsStep(b, target, optimize);
 }
@@ -70,8 +77,9 @@ fn buildGameLib(
     optimize: std.builtin.OptimizeMode,
     test_step: *std.Build.Step,
     internal: bool,
-) void {
-    const lib = createGameLib(b, build_options, target, optimize, internal);
+    example: Example,
+) !void {
+    const lib = try createGameLib(b, build_options, target, optimize, internal, example);
 
     if (optimize == .Debug) {
         b.installArtifact(lib);
@@ -88,8 +96,9 @@ fn checkGameLibStep(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     internal: bool,
-) void {
-    const lib = createGameLib(b, build_options, target, optimize, internal);
+    example: Example,
+) !void {
+    const lib = try createGameLib(b, build_options, target, optimize, internal, example);
 
     const check = b.step("check", "Check if lib compiles");
     check.dependOn(&lib.step);
@@ -101,15 +110,54 @@ fn createGameLib(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     internal: bool,
-) *std.Build.Step.Compile {
+    example: Example,
+) !*std.Build.Step.Compile {
+    var buf: [64]u8 = undefined;
+    const example_name = @tagName(example);
     const module = b.createModule(.{
-        .root_source_file = b.path("src/game.zig"),
+        .root_source_file = b.path(try std.fmt.bufPrint(&buf, "src/examples/{s}/root.zig", .{example_name})),
         .target = target,
         .optimize = optimize,
     });
     module.addOptions("build_options", build_options);
+
+    const aseprite_module = b.createModule(.{
+        .root_source_file = b.path("src/aseprite.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const imgui_module = b.createModule(.{
+        .root_source_file = b.path("src/imgui.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const logging_allocator_module = b.createModule(.{
+        .root_source_file = b.path("src/internal/logging_allocator.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const math_module = b.createModule(.{
+        .root_source_file = b.path("src/math.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const pool_module = b.createModule(.{
+        .root_source_file = b.path("src/pool.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    module.addImport("math", math_module);
+    module.addImport("imgui", imgui_module);
+    module.addImport("logging_allocator", logging_allocator_module);
+    if (example == .diamonds) {
+        module.addImport("aseprite", aseprite_module);
+        module.addImport("pool", pool_module);
+    }
+
+    const lib_name = try std.fmt.bufPrint(&buf, "playground-{s}", .{example_name});
     const lib = b.addSharedLibrary(.{
-        .name = "playground",
+        .name = lib_name,
         .root_module = module,
     });
 
@@ -138,6 +186,9 @@ fn linkGameLibraries(
 ) void {
     if (createSDLLib(b, target, optimize)) |sdl_lib| {
         obj.root_module.linkLibrary(sdl_lib);
+
+        obj.root_module.import_table.get("imgui").?.linkLibrary(sdl_lib);
+        obj.root_module.import_table.get("math").?.linkLibrary(sdl_lib);
     }
 
     if (internal) {
@@ -147,8 +198,20 @@ fn linkGameLibraries(
         })) |imgui_dep| {
             obj.addIncludePath(b.path("src/dcimgui"));
             obj.addIncludePath(imgui_dep.path("."));
+
+            obj.root_module.import_table.get("imgui").?.addIncludePath(b.path("src/dcimgui"));
+            obj.root_module.import_table.get("imgui").?.addIncludePath(imgui_dep.path("."));
+
+            // TODO: This is required to make the C imports of SDL in math compatible with debug, but why?
+            obj.root_module.import_table.get("math").?.addIncludePath(b.path("src/dcimgui"));
+            obj.root_module.import_table.get("math").?.addIncludePath(imgui_dep.path("."));
+
             if (createImGuiLib(b, target, optimize, imgui_dep)) |imgui_lib| {
                 obj.linkLibrary(imgui_lib);
+                obj.root_module.import_table.get("imgui").?.linkLibrary(imgui_lib);
+
+                // TODO: This is required to make the C imports of SDL in math compatible with debug, but why?
+                obj.root_module.import_table.get("math").?.linkLibrary(imgui_lib);
             }
         }
     }

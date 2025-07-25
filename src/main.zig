@@ -10,10 +10,14 @@ const c = @cImport({
 
 const DEBUG = @import("builtin").mode == std.builtin.OptimizeMode.Debug;
 const PLATFORM = @import("builtin").os.tag;
+const EXAMPLE_NAME = @tagName(@import("build_options").example);
 
 const LIB_DIRECTORY = if (PLATFORM == .windows) "zig-out/bin/" else "zig-out/lib/";
-const LIB_NAME = if (PLATFORM == .windows) "playground.dll" else "libplayground.dylib";
-const LIB_NAME_RUNTIME = if (PLATFORM == .windows and DEBUG) "playground_temp.dll" else LIB_NAME;
+const LIB_NAME = if (PLATFORM == .windows)
+    "playground-" ++ EXAMPLE_NAME ++ ".dll"
+else
+    "libplayground-" ++ EXAMPLE_NAME ++ ".dylib";
+const LIB_NAME_RUNTIME = if (PLATFORM == .windows and DEBUG) "playground-" ++ EXAMPLE_NAME ++ "_temp.dll" else LIB_NAME;
 
 const WINDOW_WIDTH = if (DEBUG) 800 else 1600;
 const WINDOW_HEIGHT = if (DEBUG) 600 else 1200;
@@ -72,6 +76,7 @@ pub fn main() !void {
     };
 
     const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT, window.?, renderer.?);
+    defer gameDeinit();
 
     if (DEBUG) {
         initChangeTimes(allocator);
@@ -101,8 +106,6 @@ pub fn main() !void {
             }
         }
     }
-
-    gameDeinit();
 
     c.SDL_DestroyRenderer(renderer);
     c.SDL_DestroyWindow(window);
@@ -190,9 +193,9 @@ fn loadDll() !void {
 
     opt_dyn_lib = std.DynLib.open(LIB_DIRECTORY ++ LIB_NAME_RUNTIME) catch null;
     if (opt_dyn_lib == null) {
-        std.log.info("Failed to load DLL from first location ({s}).", .{ LIB_DIRECTORY ++ LIB_NAME_RUNTIME });
+        std.log.info("Failed to load DLL from first location ({s}).", .{LIB_DIRECTORY ++ LIB_NAME_RUNTIME});
         opt_dyn_lib = std.DynLib.open(LIB_NAME_RUNTIME) catch {
-            std.log.err("Failed to load DLL from secondary location ({s}).", .{ LIB_NAME_RUNTIME });
+            std.log.err("Failed to load DLL from secondary location ({s}).", .{LIB_NAME_RUNTIME});
             return error.OpenFail;
         };
     }

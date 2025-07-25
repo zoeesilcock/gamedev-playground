@@ -1,22 +1,24 @@
 const std = @import("std");
-const aseprite = @import("aseprite.zig");
+const aseprite = @import("aseprite");
 const entities = @import("entities.zig");
-const math = @import("math.zig");
-const pool = @import("pool.zig");
-const imgui = if (INTERNAL) @import("imgui.zig") else struct {};
-const debug = if (INTERNAL) @import("internal/debug.zig") else struct {
+const math = @import("math");
+const pool = @import("pool");
+const imgui = if (INTERNAL) @import("imgui") else struct {};
+const debug = if (INTERNAL) @import("debug.zig") else struct {
     pub const DebugState = void;
 };
 
-const loggingAllocator = if (INTERNAL) @import("internal/logging_allocator.zig").loggingAllocator else undefined;
+const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
 
-pub const c = @cImport({
+pub const c_sdl = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
     @cInclude("SDL3/SDL.h");
     @cInclude("SDL3/SDL_revision.h");
     @cDefine("SDL_MAIN_HANDLED", {});
     @cInclude("SDL3/SDL_main.h");
+});
 
+pub const c_imgui = @cImport({
     if (INTERNAL) {
         @cInclude("dcimgui.h");
     }
@@ -81,10 +83,10 @@ pub const State = struct {
     debug_allocator: *DebugAllocator = undefined,
     debug_state: *debug.DebugState = undefined,
 
-    window: *c.SDL_Window,
-    renderer: *c.SDL_Renderer,
-    render_texture: *c.SDL_Texture = undefined,
-    dest_rect: c.SDL_FRect = undefined,
+    window: *c_sdl.SDL_Window,
+    renderer: *c_sdl.SDL_Renderer,
+    render_texture: *c_sdl.SDL_Texture = undefined,
+    dest_rect: c_sdl.SDL_FRect = undefined,
 
     window_width: u32,
     window_height: u32,
@@ -390,7 +392,7 @@ pub const Assets = struct {
 
 pub const SpriteAsset = struct {
     document: aseprite.AseDocument,
-    frames: []*c.SDL_Texture,
+    frames: []*c_sdl.SDL_Texture,
     path: []const u8,
 
     pub fn deinit(self: *SpriteAsset, allocator: std.mem.Allocator) void {
@@ -401,7 +403,7 @@ pub const SpriteAsset = struct {
 
 fn sdlPanicIfNull(result: anytype, message: []const u8) @TypeOf(result) {
     if (result == null) {
-        std.log.err("{s} SDL error: {s}", .{ message, c.SDL_GetError() });
+        std.log.err("{s} SDL error: {s}", .{ message, c_sdl.SDL_GetError() });
         @panic(message);
     }
 
@@ -410,12 +412,12 @@ fn sdlPanicIfNull(result: anytype, message: []const u8) @TypeOf(result) {
 
 fn sdlPanic(result: bool, message: []const u8) void {
     if (result == false) {
-        std.log.err("{s} SDL error: {s}", .{ message, c.SDL_GetError() });
+        std.log.err("{s} SDL error: {s}", .{ message, c_sdl.SDL_GetError() });
         @panic(message);
     }
 }
 
-pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window, renderer: *c.SDL_Renderer) *anyopaque {
+pub export fn init(window_width: u32, window_height: u32, window: *c_sdl.SDL_Window, renderer: *c_sdl.SDL_Renderer) *anyopaque {
     var backing_allocator = std.heap.page_allocator;
     var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
     game_allocator.* = .init;
@@ -446,7 +448,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *c.SDL_Window,
 
         .assets = .{},
 
-        .time = c.SDL_GetTicks(),
+        .time = c_sdl.SDL_GetTicks(),
         .delta_time = 0,
         .delta_time_actual = 0,
         .input = .{},
@@ -521,28 +523,28 @@ pub export fn deinit() void {
 }
 
 pub fn setupRenderTexture(state: *State) void {
-    _ = c.SDL_GetWindowSize(state.window, @ptrCast(&state.window_width), @ptrCast(&state.window_height));
+    _ = c_sdl.SDL_GetWindowSize(state.window, @ptrCast(&state.window_width), @ptrCast(&state.window_height));
     state.world_scale = @as(f32, @floatFromInt(state.window_height)) / @as(f32, @floatFromInt(state.world_height));
 
     const horizontal_offset: f32 =
         (@as(f32, @floatFromInt(state.window_width)) - (@as(f32, @floatFromInt(state.world_width)) * state.world_scale)) / 2;
-    state.dest_rect = c.SDL_FRect{
+    state.dest_rect = c_sdl.SDL_FRect{
         .x = horizontal_offset,
         .y = 0,
         .w = @as(f32, @floatFromInt(state.world_width)) * state.world_scale,
         .h = @as(f32, @floatFromInt(state.world_height)) * state.world_scale,
     };
 
-    state.render_texture = sdlPanicIfNull(c.SDL_CreateTexture(
+    state.render_texture = sdlPanicIfNull(c_sdl.SDL_CreateTexture(
         state.renderer,
-        c.SDL_PIXELFORMAT_RGBA32,
-        c.SDL_TEXTUREACCESS_TARGET,
+        c_sdl.SDL_PIXELFORMAT_RGBA32,
+        c_sdl.SDL_TEXTUREACCESS_TARGET,
         @intCast(state.world_width),
         @intCast(state.world_height),
     ), "Failed to initialize main render texture.");
 
     sdlPanic(
-        c.SDL_SetTextureScaleMode(state.render_texture, c.SDL_SCALEMODE_NEAREST),
+        c_sdl.SDL_SetTextureScaleMode(state.render_texture, c_sdl.SDL_SCALEMODE_NEAREST),
         "Failed to set scale mode for the main render texture.",
     );
 }
@@ -580,14 +582,14 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
     }
 
     var continue_running: bool = true;
-    var event: c.SDL_Event = undefined;
-    while (c.SDL_PollEvent(&event)) {
+    var event: c_sdl.SDL_Event = undefined;
+    while (c_sdl.SDL_PollEvent(&event)) {
         const event_used = if (INTERNAL) imgui.processEvent(&event) else false;
         if (event_used) {
             continue;
         }
 
-        if (event.type == c.SDL_EVENT_QUIT or (event.type == c.SDL_EVENT_KEY_DOWN and event.key.key == c.SDLK_ESCAPE)) {
+        if (event.type == c_sdl.SDL_EVENT_QUIT or (event.type == c_sdl.SDL_EVENT_KEY_DOWN and event.key.key == c_sdl.SDLK_ESCAPE)) {
             continue_running = false;
             break;
         }
@@ -597,22 +599,22 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
         }
 
         // Game input.
-        if (event.type == c.SDL_EVENT_KEY_DOWN or event.type == c.SDL_EVENT_KEY_UP) {
-            const is_down = event.type == c.SDL_EVENT_KEY_DOWN;
+        if (event.type == c_sdl.SDL_EVENT_KEY_DOWN or event.type == c_sdl.SDL_EVENT_KEY_UP) {
+            const is_down = event.type == c_sdl.SDL_EVENT_KEY_DOWN;
             switch (event.key.key) {
-                c.SDLK_LEFT => {
+                c_sdl.SDLK_LEFT => {
                     state.input.left = is_down;
                 },
-                c.SDLK_RIGHT => {
+                c_sdl.SDLK_RIGHT => {
                     state.input.right = is_down;
                 },
-                c.SDLK_F => {
+                c_sdl.SDLK_F => {
                     if (is_down) {
                         state.fullscreen = !state.fullscreen;
-                        _ = c.SDL_SetWindowFullscreen(state.window, state.fullscreen);
+                        _ = c_sdl.SDL_SetWindowFullscreen(state.window, state.fullscreen);
                     }
                 },
-                c.SDLK_P => {
+                c_sdl.SDLK_P => {
                     if (is_down) {
                         state.paused = !state.paused;
 
@@ -627,7 +629,7 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
             }
         }
 
-        if (event.type == c.SDL_EVENT_WINDOW_RESIZED) {
+        if (event.type == c_sdl.SDL_EVENT_WINDOW_RESIZED) {
             setupRenderTexture(state);
         }
     }
@@ -642,13 +644,13 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
 pub export fn tick(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    state.delta_time_actual = c.SDL_GetTicks() - state.time;
+    state.delta_time_actual = c_sdl.SDL_GetTicks() - state.time;
     if (!state.paused and !state.pausedDueToTitle()) {
         state.delta_time = state.delta_time_actual;
     } else {
         state.delta_time = 0;
     }
-    state.time = c.SDL_GetTicks();
+    state.time = c_sdl.SDL_GetTicks();
 
     if (INTERNAL) {
         debug.calculateFPS(state);
@@ -795,26 +797,26 @@ fn handleBallCollision(state: *State, ball: *Entity, block: *Entity) void {
 pub export fn draw(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    sdlPanic(c.SDL_SetRenderTarget(state.renderer, state.render_texture), "Failed to set render target.");
+    sdlPanic(c_sdl.SDL_SetRenderTarget(state.renderer, state.render_texture), "Failed to set render target.");
     {
-        _ = c.SDL_SetRenderDrawColor(state.renderer, 0, 0, 0, 255);
-        _ = c.SDL_RenderClear(state.renderer);
+        _ = c_sdl.SDL_SetRenderDrawColor(state.renderer, 0, 0, 0, 255);
+        _ = c_sdl.SDL_RenderClear(state.renderer);
         drawWorld(state);
         drawGameUI(state);
     }
 
-    _ = c.SDL_SetRenderTarget(state.renderer, null);
+    _ = c_sdl.SDL_SetRenderTarget(state.renderer, null);
     {
-        _ = c.SDL_SetRenderDrawColor(state.renderer, 0, 0, 0, 255);
-        _ = c.SDL_RenderClear(state.renderer);
-        _ = c.SDL_RenderTexture(state.renderer, state.render_texture, null, &state.dest_rect);
+        _ = c_sdl.SDL_SetRenderDrawColor(state.renderer, 0, 0, 0, 255);
+        _ = c_sdl.SDL_RenderClear(state.renderer);
+        _ = c_sdl.SDL_RenderTexture(state.renderer, state.render_texture, null, &state.dest_rect);
 
         if (INTERNAL) {
             debug.drawDebugOverlay(state);
             debug.drawDebugUI(state);
         }
     }
-    _ = c.SDL_RenderPresent(state.renderer);
+    _ = c_sdl.SDL_RenderPresent(state.renderer);
 }
 
 fn drawWorld(state: *State) void {
@@ -862,18 +864,18 @@ fn drawGameUI(state: *State) void {
     }
 }
 
-fn drawTextureAt(state: *State, texture: *c.SDL_Texture, position: Vector2, scale: Vector2, tint: Color) void {
-    const texture_rect = c.SDL_FRect{
+fn drawTextureAt(state: *State, texture: *c_sdl.SDL_Texture, position: Vector2, scale: Vector2, tint: Color) void {
+    const texture_rect = c_sdl.SDL_FRect{
         .x = @round(position[X]),
         .y = @round(position[Y]),
         .w = @as(f32, @floatFromInt(texture.w)) * scale[X],
         .h = @as(f32, @floatFromInt(texture.h)) * scale[Y],
     };
 
-    sdlPanic(c.SDL_SetTextureColorMod(texture, tint[R], tint[G], tint[B]), "Failed to set texture color mod.");
-    sdlPanic(c.SDL_SetTextureAlphaMod(texture, tint[A]), "Failed to set texture alpha mod.");
+    sdlPanic(c_sdl.SDL_SetTextureColorMod(texture, tint[R], tint[G], tint[B]), "Failed to set texture color mod.");
+    sdlPanic(c_sdl.SDL_SetTextureAlphaMod(texture, tint[A]), "Failed to set texture alpha mod.");
 
-    _ = c.SDL_RenderTexture(state.renderer, texture, null, &texture_rect);
+    _ = c_sdl.SDL_RenderTexture(state.renderer, texture, null, &texture_rect);
 }
 
 fn loadAssets(state: *State) void {
@@ -922,52 +924,54 @@ fn unloadAssets(state: *State) void {
     state.assets.title_cleared.?.deinit(state.allocator);
     state.assets.title_death.?.deinit(state.allocator);
     state.assets.title_game_over.?.deinit(state.allocator);
+
+    std.log.info("Assets unloaded.", .{});
 }
 
-fn loadSprite(path: []const u8, renderer: *c.SDL_Renderer, allocator: std.mem.Allocator) ?SpriteAsset {
+fn loadSprite(path: []const u8, renderer: *c_sdl.SDL_Renderer, allocator: std.mem.Allocator) ?SpriteAsset {
     var result: ?SpriteAsset = null;
 
     if (aseprite.loadDocument(path, allocator) catch undefined) |doc| {
-        var textures: ArrayList(*c.SDL_Texture) = .empty;
+        var textures: ArrayList(*c_sdl.SDL_Texture) = .empty;
 
         for (doc.frames) |frame| {
             const surface = sdlPanicIfNull(
-                c.SDL_CreateSurface(
+                c_sdl.SDL_CreateSurface(
                     doc.header.width,
                     doc.header.height,
-                    c.SDL_PIXELFORMAT_RGBA32,
+                    c_sdl.SDL_PIXELFORMAT_RGBA32,
                 ),
                 "Failed to create a surface to blit sprite data into",
             );
-            defer c.SDL_DestroySurface(surface);
+            defer c_sdl.SDL_DestroySurface(surface);
 
             for (frame.cel_chunks) |cel_chunk| {
-                var dest_rect = c.SDL_Rect{
+                var dest_rect = c_sdl.SDL_Rect{
                     .x = cel_chunk.x,
                     .y = cel_chunk.y,
                     .w = cel_chunk.data.compressedImage.width,
                     .h = cel_chunk.data.compressedImage.height,
                 };
                 const cel_surface = sdlPanicIfNull(
-                    c.SDL_CreateSurfaceFrom(
+                    c_sdl.SDL_CreateSurfaceFrom(
                         cel_chunk.data.compressedImage.width,
                         cel_chunk.data.compressedImage.height,
-                        c.SDL_PIXELFORMAT_RGBA32,
+                        c_sdl.SDL_PIXELFORMAT_RGBA32,
                         @ptrCast(@constCast(cel_chunk.data.compressedImage.pixels)),
                         cel_chunk.data.compressedImage.width * @sizeOf(u32),
                     ),
                     "Failed to create surface from data",
                 );
-                defer c.SDL_DestroySurface(cel_surface);
+                defer c_sdl.SDL_DestroySurface(cel_surface);
 
                 sdlPanic(
-                    c.SDL_BlitSurface(cel_surface, null, surface, &dest_rect),
+                    c_sdl.SDL_BlitSurface(cel_surface, null, surface, &dest_rect),
                     "Failed to blit cel surface into sprite surface",
                 );
             }
 
             const texture = sdlPanicIfNull(
-                c.SDL_CreateTextureFromSurface(renderer, surface),
+                c_sdl.SDL_CreateTextureFromSurface(renderer, surface),
                 "Failed to create texture from surface",
             );
             textures.append(allocator, texture.?) catch undefined;
