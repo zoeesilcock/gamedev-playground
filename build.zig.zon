@@ -16,10 +16,6 @@
             .url = "git+https://github.com/dearimgui/dear_bindings.git?ref=DearBindings_v0.16_ImGui_v1.92.1-docking#089a24e9d9dd9b9ab950566a56f4c778e74fd70e",
             .hash = "12204facbdecf41077398715569720a443707ef97051f30790e1e4c4046528a0b6dc",
         },
-        .tracy = .{
-            .url = "git+https://github.com/Games-by-Mason/tracy_zig#0cad4646be2791982f692a7a47716ec92b62eb2e",
-            .hash = "tracy-0.0.0-R7l8BdlCAQBFp6uysnan3Alaxap65HBF1mzGdabdKe8z",
-        },
     },
     .paths = .{
         "build.zig",

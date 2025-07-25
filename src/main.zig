@@ -8,9 +8,6 @@ const c = if (DEBUG) @cImport({
     @cInclude("SDL3/SDL_main.h");
 }) else @import("game.zig").c;
 
-const tracy = @import("tracy");
-pub const tracy_impl = @import("tracy_impl");
-
 const DEBUG = @import("builtin").mode == std.builtin.OptimizeMode.Debug;
 const PLATFORM = @import("builtin").os.tag;
 
@@ -91,13 +88,8 @@ pub fn main() !void {
             break;
         }
 
-        const tickZone = tracy.Zone.begin(.{ .name = "tick", .src = @src() });
         gameTick(state);
-        tickZone.end();
-
-        const drawZone = tracy.Zone.begin(.{ .name = "draw", .src = @src() });
         gameDraw(state);
-        drawZone.end();
 
         frame_elapsed_time = c.SDL_GetTicks() - frame_start_time;
 
@@ -106,8 +98,6 @@ pub fn main() !void {
                 c.SDL_Delay(@intFromFloat(TARGET_FRAME_TIME - @as(f32, @floatFromInt(frame_elapsed_time))));
             }
         }
-
-        tracy.frameMark("main");
     }
 
     defer gameDeinit();

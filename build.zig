@@ -5,7 +5,6 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const lib_only = b.option(bool, "lib_only", "only build the shared library") orelse false;
     const internal = b.option(bool, "internal", "include debug interface") orelse true;
-    const tracy_enabled = b.option(bool, "tracy", "includ Tracy support") orelse internal;
     const log_allocations = b.option(bool, "log_allocations", "log all allocations") orelse false;
 
     const build_options = b.addOptions();
@@ -15,11 +14,11 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
 
     if (!lib_only) {
-        buildExecutable(b, build_options, target, optimize, test_step, internal, tracy_enabled);
+        buildExecutable(b, build_options, target, optimize, test_step, internal);
     }
 
-    buildGameLib(b, build_options, target, optimize, test_step, internal, tracy_enabled);
-    checkGameLibStep(b, build_options, target, optimize, internal, tracy_enabled);
+    buildGameLib(b, build_options, target, optimize, test_step, internal);
+    checkGameLibStep(b, build_options, target, optimize, internal);
 
     generateImGuiBindingsStep(b, target, optimize);
 }
@@ -31,7 +30,6 @@ fn buildExecutable(
     optimize: std.builtin.OptimizeMode,
     test_step: *std.Build.Step,
     internal: bool,
-    tracy_enabled: bool,
 ) void {
     const module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -49,7 +47,6 @@ fn buildExecutable(
     } else {
         linkGameLibraries(b, exe, target, optimize, internal);
     }
-    linkTracy(b, exe, target, optimize, tracy_enabled);
 
     b.installArtifact(exe);
 
@@ -73,9 +70,8 @@ fn buildGameLib(
     optimize: std.builtin.OptimizeMode,
     test_step: *std.Build.Step,
     internal: bool,
-    tracy_enabled: bool,
 ) void {
-    const lib = createGameLib(b, build_options, target, optimize, internal, tracy_enabled);
+    const lib = createGameLib(b, build_options, target, optimize, internal);
 
     if (optimize == .Debug) {
         b.installArtifact(lib);
@@ -92,9 +88,8 @@ fn checkGameLibStep(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     internal: bool,
-    tracy_enabled: bool,
 ) void {
-    const lib = createGameLib(b, build_options, target, optimize, internal, tracy_enabled);
+    const lib = createGameLib(b, build_options, target, optimize, internal);
 
     const check = b.step("check", "Check if lib compiles");
     check.dependOn(&lib.step);
@@ -106,7 +101,6 @@ fn createGameLib(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     internal: bool,
-    tracy_enabled: bool,
 ) *std.Build.Step.Compile {
     const module = b.createModule(.{
         .root_source_file = b.path("src/game.zig"),
@@ -120,7 +114,6 @@ fn createGameLib(
     });
 
     linkGameLibraries(b, lib, target, optimize, internal);
-    linkTracy(b, lib, target, optimize, tracy_enabled);
 
     return lib;
 }
@@ -158,26 +151,6 @@ fn linkGameLibraries(
                 obj.linkLibrary(imgui_lib);
             }
         }
-    }
-}
-
-fn linkTracy(
-    b: *std.Build,
-    obj: *std.Build.Step.Compile,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    tracy_enabled: bool,
-) void {
-    const tracy = b.dependency("tracy", .{
-        .target = target,
-        .optimize = optimize,
-    });
-
-    obj.root_module.addImport("tracy", tracy.module("tracy"));
-    if (tracy_enabled) {
-        obj.root_module.addImport("tracy_impl", tracy.module("tracy_impl_enabled"));
-    } else {
-        obj.root_module.addImport("tracy_impl", tracy.module("tracy_impl_disabled"));
     }
 }
 
