@@ -5,8 +5,8 @@
     .fingerprint = 0x4d0121353119f6fd,
     .dependencies = .{
         .sdl = .{
-            .url = "git+https://github.com/castholm/SDL.git#v0.2.4+3.2.16",
-            .hash = "1220f6f7200826a1cb73af6135be085b4abe02782d2821684fdd9b77355187e6b15c",
+            .url = "git+https://github.com/castholm/SDL.git#v0.2.5+3.2.18",
+            .hash = "1220ca3b04ae6dc839fc2896e1f5da839208b2257f8e72dd9290cceaefbdc19d5b7b",
         },
         .imgui = .{
             .url = "git+https://github.com/ocornut/imgui.git?ref=v1.92.1-docking#44aa9a4b3a6f27d09a4eb5770d095cbd376dfc4b",
