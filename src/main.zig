@@ -1,19 +1,19 @@
 const std = @import("std");
 
-const c = if (DEBUG) @cImport({
+const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
     @cInclude("SDL3/SDL.h");
     @cInclude("SDL3/SDL_revision.h");
     @cDefine("SDL_MAIN_HANDLED", {});
     @cInclude("SDL3/SDL_main.h");
-}) else @import("game.zig").c;
+});
 
 const DEBUG = @import("builtin").mode == std.builtin.OptimizeMode.Debug;
 const PLATFORM = @import("builtin").os.tag;
 
-const LIB_OUTPUT_DIR = if (PLATFORM == .windows) "zig-out/bin/" else "zig-out/lib/";
-const LIB_PATH = if (PLATFORM == .windows) "zig-out/bin/playground.dll" else "zig-out/lib/libplayground.dylib";
-const LIB_PATH_RUNTIME = if (PLATFORM == .windows) "zig-out/bin/playground_temp.dll" else LIB_PATH;
+const LIB_DIRECTORY = if (PLATFORM == .windows) "zig-out/bin/" else "zig-out/lib/";
+const LIB_NAME = if (PLATFORM == .windows) "playground.dll" else "libplayground.dylib";
+const LIB_NAME_RUNTIME = if (PLATFORM == .windows and DEBUG) "playground_temp.dll" else LIB_NAME;
 
 const WINDOW_WIDTH = if (DEBUG) 800 else 1600;
 const WINDOW_HEIGHT = if (DEBUG) 600 else 1200;
@@ -66,7 +66,10 @@ pub fn main() !void {
         _ = c.SDL_SetWindowAlwaysOnTop(window, true);
     }
 
-    loadDll() catch @panic("Failed to load the game lib.");
+    loadDll() catch |err| {
+        std.log.err("Failed to load the game DLL.", .{});
+        return err;
+    };
 
     const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT, window.?, renderer.?);
 
@@ -133,7 +136,7 @@ fn checkForChanges(state: GameStatePtr, allocator: std.mem.Allocator) void {
 
 fn dllHasChanged() bool {
     var result = false;
-    const stat = std.fs.cwd().statFile(LIB_PATH) catch return false;
+    const stat = std.fs.cwd().statFile(LIB_DIRECTORY ++ LIB_NAME) catch return false;
     if (stat.mtime > dyn_lib_last_modified) {
         dyn_lib_last_modified = stat.mtime;
         result = true;
@@ -178,19 +181,23 @@ fn unloadDll() !void {
 }
 
 fn loadDll() !void {
-    if (DEBUG) {
-        if (opt_dyn_lib != null) return error.AlreadyLoaded;
+    if (opt_dyn_lib != null) return error.AlreadyLoaded;
 
-        if (PLATFORM == .windows) {
-            var output = try std.fs.cwd().openDir(LIB_OUTPUT_DIR, .{});
-            try output.copyFile("playground.dll", output, "playground_temp.dll", .{});
-        }
+    if (DEBUG and PLATFORM == .windows) {
+        var output = try std.fs.cwd().openDir(LIB_DIRECTORY, .{});
+        try output.copyFile(LIB_NAME, output, LIB_NAME_RUNTIME, .{});
+    }
 
-        var dyn_lib = std.DynLib.open(LIB_PATH_RUNTIME) catch {
+    opt_dyn_lib = std.DynLib.open(LIB_DIRECTORY ++ LIB_NAME_RUNTIME) catch null;
+    if (opt_dyn_lib == null) {
+        std.log.info("Failed to load DLL from first location ({s}).", .{ LIB_DIRECTORY ++ LIB_NAME_RUNTIME });
+        opt_dyn_lib = std.DynLib.open(LIB_NAME_RUNTIME) catch {
+            std.log.err("Failed to load DLL from secondary location ({s}).", .{ LIB_NAME_RUNTIME });
             return error.OpenFail;
         };
+    }
 
-        opt_dyn_lib = dyn_lib;
+    if (opt_dyn_lib) |*dyn_lib| {
         gameInit = dyn_lib.lookup(@TypeOf(gameInit), "init") orelse return error.LookupFail;
         gameDeinit = dyn_lib.lookup(@TypeOf(gameDeinit), "deinit") orelse return error.LookupFail;
         gameWillReload = dyn_lib.lookup(@TypeOf(gameWillReload), "willReload") orelse return error.LookupFail;
@@ -198,15 +205,6 @@ fn loadDll() !void {
         gameProcessInput = dyn_lib.lookup(@TypeOf(gameProcessInput), "processInput") orelse return error.LookupFail;
         gameTick = dyn_lib.lookup(@TypeOf(gameTick), "tick") orelse return error.LookupFail;
         gameDraw = dyn_lib.lookup(@TypeOf(gameDraw), "draw") orelse return error.LookupFail;
-    } else {
-        const game = @import("game.zig");
-        gameInit = game.init;
-        gameDeinit = game.deinit;
-        gameWillReload = game.willReload;
-        gameReloaded = game.reloaded;
-        gameProcessInput = game.processInput;
-        gameTick = game.tick;
-        gameDraw = game.draw;
     }
 
     std.log.info("Game DLL loaded.", .{});
