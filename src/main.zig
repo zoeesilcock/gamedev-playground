@@ -43,15 +43,14 @@ pub fn main() !void {
     const allocator = debug_allocator.allocator();
 
     if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_EVENTS)) {
-        std.log.debug("SDL_Init failed", .{});
-        return;
+        @panic("SDL_Init failed.");
     }
 
     const window = c.SDL_CreateWindow("Playground", WINDOW_WIDTH, WINDOW_HEIGHT, 0);
     const renderer = c.SDL_CreateRenderer(window, null);
 
     if (window == null or renderer == null) {
-        std.log.debug("Failed to create window", .{});
+        @panic("Failed to create window.");
     }
 
     if (DEBUG) {
