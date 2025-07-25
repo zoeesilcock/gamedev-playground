@@ -99,7 +99,7 @@ pub fn main() !void {
         }
     }
 
-    defer gameDeinit();
+    gameDeinit();
 
     c.SDL_DestroyRenderer(renderer);
     c.SDL_DestroyWindow(window);
@@ -119,15 +119,11 @@ fn initChangeTimes(allocator: std.mem.Allocator) void {
 fn checkForChanges(state: GameStatePtr, allocator: std.mem.Allocator) void {
     const assetsChanged = assetsHaveChanged(allocator);
     if (dllHasChanged()) {
-        if (build_process != null) {
-            checkRecompileResult() catch {
-                @panic("Failed to recompile the game lib.");
-            };
-        }
-
         gameWillReload(state);
+
         unloadDll() catch unreachable;
         loadDll() catch @panic("Failed to load the game lib.");
+
         gameReloaded(state);
     } else if (assetsChanged) {
         gameWillReload(state);
@@ -213,30 +209,5 @@ fn loadDll() !void {
         gameDraw = game.draw;
     }
 
-    std.log.info("Game lib loaded.", .{});
-}
-
-fn recompileDll(allocator: std.mem.Allocator) !void {
-    const process_args = [_][]const u8{
-        "zig",
-        "build",
-        "-Dlib_only=true",
-    };
-
-    build_process = std.process.Child.init(&process_args, allocator);
-    try build_process.?.spawn();
-}
-
-fn checkRecompileResult() !void {
-    if (build_process) |*process| {
-        const term = try process.wait();
-        switch (term) {
-            .Exited => |exited| {
-                if (exited == 2) return error.RecompileFail;
-            },
-            else => return,
-        }
-
-        build_process = null;
-    }
+    std.log.info("Game DLL loaded.", .{});
 }
