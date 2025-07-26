@@ -1,43 +1,37 @@
 const std = @import("std");
 
-const Example = enum {
-    diamonds,
-    cube,
-};
-
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const lib_only = b.option(bool, "lib_only", "only build the shared library") orelse false;
+    const lib_base_name = b.option([]const u8, "lib_base_name", "name of the shared library") orelse "game";
     const internal = b.option(bool, "internal", "include debug interface") orelse true;
-    const log_allocations = b.option(bool, "log_allocations", "log all allocations") orelse false;
-    const example: Example = b.option(Example, "example", "which example to build") orelse .diamonds;
 
     const build_options = b.addOptions();
     build_options.addOption(bool, "internal", internal);
-    build_options.addOption(bool, "log_allocations", log_allocations);
-    build_options.addOption(Example, "example", example);
+    build_options.addOption([]const u8, "lib_base_name", lib_base_name);
 
     const test_step = b.step("test", "Run unit tests");
+    const exe = buildExecutable(b, b, build_options, target, optimize, test_step, internal);
+    b.installArtifact(exe);
 
-    if (!lib_only) {
-        buildExecutable(b, build_options, target, optimize, test_step, internal);
-    }
-
-    try buildGameLib(b, build_options, target, optimize, test_step, internal, example);
-    try checkGameLibStep(b, build_options, target, optimize, internal, example);
+    _ = b.addModule("imgui", .{
+        .root_source_file = b.path("src/imgui.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     generateImGuiBindingsStep(b, target, optimize);
 }
 
-fn buildExecutable(
+pub fn buildExecutable(
     b: *std.Build,
+    client_b: *std.Build,
     build_options: *std.Build.Step.Options,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     test_step: *std.Build.Step,
     internal: bool,
-) void {
+) *std.Build.Step.Compile {
     const module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -52,118 +46,22 @@ fn buildExecutable(
     if (optimize == .Debug) {
         linkExeOnlyLibraries(b, exe, target, optimize);
     } else {
-        linkGameLibraries(b, exe, target, optimize, internal);
+        linkGameLibraries(b, b, exe, target, optimize, internal);
     }
 
-    b.installArtifact(exe);
-
-    const run_step = b.step("run", "Run the app");
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
+    const run_step = client_b.step("run", "Run the app");
+    const run_cmd = client_b.addRunArtifact(exe);
+    run_cmd.step.dependOn(client_b.getInstallStep());
+    if (client_b.args) |args| {
         run_cmd.addArgs(args);
     }
     run_step.dependOn(&run_cmd.step);
 
-    const exe_tests = b.addTest(.{ .root_module = module });
-    const run_exe_tests = b.addRunArtifact(exe_tests);
+    const exe_tests = client_b.addTest(.{ .root_module = module });
+    const run_exe_tests = client_b.addRunArtifact(exe_tests);
     test_step.dependOn(&run_exe_tests.step);
-}
 
-fn buildGameLib(
-    b: *std.Build,
-    build_options: *std.Build.Step.Options,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    test_step: *std.Build.Step,
-    internal: bool,
-    example: Example,
-) !void {
-    const lib = try createGameLib(b, build_options, target, optimize, internal, example);
-
-    if (optimize == .Debug) {
-        b.installArtifact(lib);
-    }
-
-    const lib_tests = b.addTest(.{ .root_module = lib.root_module });
-    const run_lib_tests = b.addRunArtifact(lib_tests);
-    test_step.dependOn(&run_lib_tests.step);
-}
-
-fn checkGameLibStep(
-    b: *std.Build,
-    build_options: *std.Build.Step.Options,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    internal: bool,
-    example: Example,
-) !void {
-    const lib = try createGameLib(b, build_options, target, optimize, internal, example);
-
-    const check = b.step("check", "Check if lib compiles");
-    check.dependOn(&lib.step);
-}
-
-fn createGameLib(
-    b: *std.Build,
-    build_options: *std.Build.Step.Options,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    internal: bool,
-    example: Example,
-) !*std.Build.Step.Compile {
-    var buf: [64]u8 = undefined;
-    const example_name = @tagName(example);
-    const module = b.createModule(.{
-        .root_source_file = b.path(try std.fmt.bufPrint(&buf, "src/examples/{s}/root.zig", .{example_name})),
-        .target = target,
-        .optimize = optimize,
-    });
-    module.addOptions("build_options", build_options);
-
-    const aseprite_module = b.createModule(.{
-        .root_source_file = b.path("src/aseprite.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const imgui_module = b.createModule(.{
-        .root_source_file = b.path("src/imgui.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const logging_allocator_module = b.createModule(.{
-        .root_source_file = b.path("src/internal/logging_allocator.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const math_module = b.createModule(.{
-        .root_source_file = b.path("src/math.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const pool_module = b.createModule(.{
-        .root_source_file = b.path("src/pool.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    module.addImport("math", math_module);
-    module.addImport("imgui", imgui_module);
-    module.addImport("logging_allocator", logging_allocator_module);
-    if (example == .diamonds) {
-        module.addImport("aseprite", aseprite_module);
-        module.addImport("pool", pool_module);
-    }
-
-    const lib_name = try std.fmt.bufPrint(&buf, "playground-{s}", .{example_name});
-    const lib = b.addSharedLibrary(.{
-        .name = lib_name,
-        .root_module = module,
-    });
-
-    linkGameLibraries(b, lib, target, optimize, internal);
-
-    return lib;
+    return exe;
 }
 
 fn linkExeOnlyLibraries(
@@ -172,23 +70,28 @@ fn linkExeOnlyLibraries(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) void {
-    if (createSDLLib(b, target, optimize)) |sdl_lib| {
+    if (createSDLLib(b, b, target, optimize)) |sdl_lib| {
         obj.root_module.linkLibrary(sdl_lib);
     }
 }
 
-fn linkGameLibraries(
+pub fn linkGameLibraries(
     b: *std.Build,
+    client_b: *std.Build,
     obj: *std.Build.Step.Compile,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     internal: bool,
 ) void {
-    if (createSDLLib(b, target, optimize)) |sdl_lib| {
+    if (createSDLLib(b, client_b, target, optimize)) |sdl_lib| {
         obj.root_module.linkLibrary(sdl_lib);
 
-        obj.root_module.import_table.get("imgui").?.linkLibrary(sdl_lib);
-        obj.root_module.import_table.get("math").?.linkLibrary(sdl_lib);
+        if (obj.root_module.import_table.get("imgui")) |imgui_mod| {
+            imgui_mod.linkLibrary(sdl_lib);
+        }
+        if (obj.root_module.import_table.get("math")) |math_mod| {
+            math_mod.linkLibrary(sdl_lib);
+        }
     }
 
     if (internal) {
@@ -199,19 +102,27 @@ fn linkGameLibraries(
             obj.addIncludePath(b.path("src/dcimgui"));
             obj.addIncludePath(imgui_dep.path("."));
 
-            obj.root_module.import_table.get("imgui").?.addIncludePath(b.path("src/dcimgui"));
-            obj.root_module.import_table.get("imgui").?.addIncludePath(imgui_dep.path("."));
+            if (obj.root_module.import_table.get("imgui")) |imgui_mod| {
+                imgui_mod.addIncludePath(b.path("src/dcimgui"));
+                imgui_mod.addIncludePath(imgui_dep.path("."));
+            }
 
             // TODO: This is required to make the C imports of SDL in math compatible with debug, but why?
-            obj.root_module.import_table.get("math").?.addIncludePath(b.path("src/dcimgui"));
-            obj.root_module.import_table.get("math").?.addIncludePath(imgui_dep.path("."));
+            if (obj.root_module.import_table.get("math")) |math_mod| {
+                math_mod.addIncludePath(b.path("src/dcimgui"));
+                math_mod.addIncludePath(imgui_dep.path("."));
+            }
 
             if (createImGuiLib(b, target, optimize, imgui_dep)) |imgui_lib| {
                 obj.linkLibrary(imgui_lib);
-                obj.root_module.import_table.get("imgui").?.linkLibrary(imgui_lib);
+                if (obj.root_module.import_table.get("imgui")) |imgui_mod| {
+                    imgui_mod.linkLibrary(imgui_lib);
+                }
 
                 // TODO: This is required to make the C imports of SDL in math compatible with debug, but why?
-                obj.root_module.import_table.get("math").?.linkLibrary(imgui_lib);
+                if (obj.root_module.import_table.get("math")) |math_mod| {
+                    math_mod.linkLibrary(imgui_lib);
+                }
             }
         }
     }
@@ -219,6 +130,7 @@ fn linkGameLibraries(
 
 fn createSDLLib(
     b: *std.Build,
+    client_b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) ?*std.Build.Step.Compile {
@@ -229,7 +141,7 @@ fn createSDLLib(
         .optimize = optimize,
         .preferred_link_mode = .dynamic,
     })) |sdl_dep| {
-        b.installArtifact(sdl_dep.artifact("SDL3"));
+        client_b.installArtifact(sdl_dep.artifact("SDL3"));
         sdl_lib = sdl_dep.artifact("SDL3");
     }
 

@@ -1,0 +1,71 @@
+const std = @import("std");
+const runtime = @import("runtime");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+    const internal = b.option(bool, "internal", "include debug interface") orelse true;
+    const lib_only = b.option(bool, "lib_only", "only build the shared library") orelse false;
+    const lib_base_name = b.option([]const u8, "lib_base_name", "name of the shared library") orelse "diamonds";
+    const log_allocations = b.option(bool, "log_allocations", "log all allocations") orelse false;
+
+    const build_options = b.addOptions();
+    build_options.addOption(bool, "internal", internal);
+    build_options.addOption([]const u8, "lib_base_name", lib_base_name);
+    build_options.addOption(bool, "log_allocations", log_allocations);
+
+    const module = b.createModule(.{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const lib = b.addSharedLibrary(.{
+        .name = lib_base_name,
+        .root_module = module,
+    });
+
+    module.addOptions("build_options", build_options);
+
+    const runtime_dep = b.dependency("runtime", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const imgui_mod = runtime_dep.module("imgui");
+    module.addImport("imgui", imgui_mod);
+
+    const aseprite_module = b.createModule(.{
+        .root_source_file = b.path("../aseprite.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const logging_allocator_module = b.createModule(.{
+        .root_source_file = b.path("../logging_allocator.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const math_module = b.createModule(.{
+        .root_source_file = b.path("../math.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const pool_module = b.createModule(.{
+        .root_source_file = b.path("../pool.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    module.addImport("math", math_module);
+    module.addImport("logging_allocator", logging_allocator_module);
+    module.addImport("aseprite", aseprite_module);
+    module.addImport("pool", pool_module);
+
+    runtime.linkGameLibraries(runtime_dep.builder, b, lib, target, optimize, internal);
+    b.installArtifact(lib);
+
+    if (!lib_only) {
+        const test_step = b.step("test", "Run unit tests");
+        const exe = runtime.buildExecutable(runtime_dep.builder, b, build_options, target, optimize, test_step, internal);
+        b.installArtifact(exe);
+    }
+}

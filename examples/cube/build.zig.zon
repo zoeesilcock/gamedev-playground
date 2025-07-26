@@ -1,0 +1,16 @@
+.{
+    .name = .cube_example,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.14.1",
+    .fingerprint = 0x170c330bd4c57d43,
+    .dependencies = .{
+        .runtime = .{
+            .path = "../../",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
