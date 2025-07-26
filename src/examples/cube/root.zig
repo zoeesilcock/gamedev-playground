@@ -22,13 +22,14 @@ pub const State = struct {
     game_allocator: *DebugAllocator,
     allocator: std.mem.Allocator,
     debug_allocator: *DebugAllocator = undefined,
+
+    window: *c_sdl.SDL_Window,
+    device: *c_sdl.SDL_GPUDevice,
 };
 
-pub export fn init(window_width: u32, window_height: u32, window: *c_sdl.SDL_Window, renderer: *c_sdl.SDL_Renderer) *anyopaque {
+pub export fn init(window_width: u32, window_height: u32, window: *c_sdl.SDL_Window) *anyopaque {
     _ = window_width;
     _ = window_height;
-    _ = window;
-    _ = renderer;
 
     var backing_allocator = std.heap.page_allocator;
     var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
@@ -46,7 +47,18 @@ pub export fn init(window_width: u32, window_height: u32, window: *c_sdl.SDL_Win
     state.* = .{
         .allocator = allocator,
         .game_allocator = game_allocator,
+        .window = window,
+        .device = c_sdl.SDL_CreateGPUDevice(
+            c_sdl.SDL_GPU_SHADERFORMAT_SPIRV | c_sdl.SDL_GPU_SHADERFORMAT_DXIL | c_sdl.SDL_GPU_SHADERFORMAT_MSL,
+            true,
+            null,
+        ).?,
     };
+
+    const window_claimed = c_sdl.SDL_ClaimWindowForGPUDevice(state.device, state.window);
+    if (!window_claimed) {
+        @panic("Failed to claim window for GPU device.");
+    }
 
     if (INTERNAL) {
         state.debug_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize debug allocator."));
@@ -56,7 +68,11 @@ pub export fn init(window_width: u32, window_height: u32, window: *c_sdl.SDL_Win
     return state;
 }
 
-pub export fn deinit() void {
+pub export fn deinit(state_ptr: *anyopaque) void {
+    const state: *State = @ptrCast(@alignCast(state_ptr));
+
+    c_sdl.SDL_ReleaseWindowFromGPUDevice(state.device, state.window);
+    c_sdl.SDL_DestroyGPUDevice(state.device);
 }
 
 pub export fn willReload(state_ptr: *anyopaque) void {
@@ -69,7 +85,17 @@ pub export fn reloaded(state_ptr: *anyopaque) void {
 
 pub export fn processInput(state_ptr: *anyopaque) bool {
     _ = state_ptr;
-    return true;
+
+    var continue_running: bool = true;
+    var event: c_sdl.SDL_Event = undefined;
+    while (c_sdl.SDL_PollEvent(&event)) {
+        if (event.type == c_sdl.SDL_EVENT_QUIT or (event.type == c_sdl.SDL_EVENT_KEY_DOWN and event.key.key == c_sdl.SDLK_ESCAPE)) {
+            continue_running = false;
+            break;
+        }
+    }
+
+    return continue_running;
 }
 
 pub export fn tick(state_ptr: *anyopaque) void {

@@ -105,9 +105,8 @@ pub fn main() !void {
         }
     }
 
-    c.SDL_DestroyWindow(window);
-
-    c.SDL_Quit();
+    defer c.SDL_DestroyWindow(window);
+    defer c.SDL_Quit();
 
     if (DEBUG) {
         _ = debug_allocator.detectLeaks();
