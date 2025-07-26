@@ -1,12 +1,12 @@
 const std = @import("std");
+const sdl = @import("sdl").c;
 const game = @import("root.zig");
 const entities = @import("entities.zig");
 const pool = @import("pool");
 const math = @import("math");
 const imgui = @import("imgui");
 
-const c_sdl = game.c_sdl;
-const c_imgui = game.c_imgui;
+const c_imgui = imgui.c;
 const State = game.State;
 const Assets = game.Assets;
 const SpriteAsset = game.SpriteAsset;
@@ -132,7 +132,7 @@ pub const DebugState = struct {
             elapsed = current_frame - previous_frame;
         }
 
-        return @as(f32, @floatFromInt(elapsed)) / @as(f32, @floatFromInt(c_sdl.SDL_GetPerformanceFrequency()));
+        return @as(f32, @floatFromInt(elapsed)) / @as(f32, @floatFromInt(sdl.SDL_GetPerformanceFrequency()));
     }
 
     pub fn currentLevelName(self: *DebugState) []const u8 {
@@ -165,32 +165,32 @@ const FPSDisplayMode = enum {
     NumberAndGraph,
 };
 
-pub fn processInputEvent(state: *State, event: c_sdl.SDL_Event) void {
+pub fn processInputEvent(state: *State, event: sdl.SDL_Event) void {
     var input = &state.debug_state.input;
 
     // Keyboard.
-    if (event.key.key == c_sdl.SDLK_LALT) {
-        input.alt_key_down = event.type == c_sdl.SDL_EVENT_KEY_DOWN;
+    if (event.key.key == sdl.SDLK_LALT) {
+        input.alt_key_down = event.type == sdl.SDL_EVENT_KEY_DOWN;
     }
-    if (event.type == c_sdl.SDL_EVENT_KEY_DOWN) {
+    if (event.type == sdl.SDL_EVENT_KEY_DOWN) {
         switch (event.key.key) {
-            c_sdl.SDLK_F1 => {
+            sdl.SDLK_F1 => {
                 var mode: u32 = @intFromEnum(state.debug_state.fps_display_mode) + 1;
                 if (mode >= @typeInfo(FPSDisplayMode).@"enum".fields.len) {
                     mode = 0;
                 }
                 state.debug_state.fps_display_mode = @enumFromInt(mode);
             },
-            c_sdl.SDLK_F2 => {
+            sdl.SDLK_F2 => {
                 state.debug_state.memory_usage_display = !state.debug_state.memory_usage_display;
             },
-            c_sdl.SDLK_C => {
+            sdl.SDLK_C => {
                 state.debug_state.show_colliders = !state.debug_state.show_colliders;
             },
-            c_sdl.SDLK_G => {
+            sdl.SDLK_G => {
                 state.debug_state.show_state_inspector = !state.debug_state.show_state_inspector;
             },
-            c_sdl.SDLK_E => {
+            sdl.SDLK_E => {
                 state.debug_state.show_editor = !state.debug_state.show_editor;
                 state.debug_state.mode = if (state.debug_state.show_editor) .Edit else .Select;
 
@@ -199,10 +199,10 @@ pub fn processInputEvent(state: *State, event: c_sdl.SDL_Event) void {
                     state.paused = true;
                 }
             },
-            c_sdl.SDLK_S => {
+            sdl.SDLK_S => {
                 saveLevel(state, state.debug_state.currentLevelName()) catch unreachable;
             },
-            c_sdl.SDLK_L => {
+            sdl.SDLK_L => {
                 game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
             },
             else => {},
@@ -210,10 +210,10 @@ pub fn processInputEvent(state: *State, event: c_sdl.SDL_Event) void {
     }
 
     // Mouse.
-    if (event.type == c_sdl.SDL_EVENT_MOUSE_MOTION) {
+    if (event.type == sdl.SDL_EVENT_MOUSE_MOTION) {
         input.mouse_position = Vector2{ event.motion.x - state.dest_rect.x, event.motion.y };
-    } else if (event.type == c_sdl.SDL_EVENT_MOUSE_BUTTON_DOWN or event.type == c_sdl.SDL_EVENT_MOUSE_BUTTON_UP) {
-        const is_down = event.type == c_sdl.SDL_EVENT_MOUSE_BUTTON_DOWN;
+    } else if (event.type == sdl.SDL_EVENT_MOUSE_BUTTON_DOWN or event.type == sdl.SDL_EVENT_MOUSE_BUTTON_UP) {
+        const is_down = event.type == sdl.SDL_EVENT_MOUSE_BUTTON_DOWN;
 
         switch (event.button.button) {
             1 => {
@@ -361,7 +361,7 @@ pub fn calculateFPS(state: *State) void {
     if (state.debug_state.current_frame_index >= MAX_FRAME_TIME_COUNT) {
         state.debug_state.current_frame_index = 0;
     }
-    state.debug_state.frame_times[state.debug_state.current_frame_index] = c_sdl.SDL_GetPerformanceCounter();
+    state.debug_state.frame_times[state.debug_state.current_frame_index] = sdl.SDL_GetPerformanceCounter();
 
     var average: f32 = 0;
     for (0..MAX_FRAME_TIME_COUNT) |i| {
@@ -878,13 +878,13 @@ pub fn drawDebugOverlay(state: *State) void {
                 mouse_size / scale,
             },
         };
-        _ = c_sdl.SDL_SetRenderDrawColor(state.renderer, 255, 255, 0, 255);
-        _ = c_sdl.SDL_RenderFillRect(state.renderer, &mouse_rect.scaled(scale).toSDL());
+        _ = sdl.SDL_SetRenderDrawColor(state.renderer, 255, 255, 0, 255);
+        _ = sdl.SDL_RenderFillRect(state.renderer, &mouse_rect.scaled(scale).toSDL());
     }
 }
 
 fn drawDebugCollider(
-    renderer: *c_sdl.SDL_Renderer,
+    renderer: *sdl.SDL_Renderer,
     entity: *Entity,
     color: Color,
     scale: f32,
@@ -910,23 +910,23 @@ fn drawDebugCollider(
 
             switch (collider.shape) {
                 .Square => {
-                    _ = c_sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-                    _ = c_sdl.SDL_RenderRect(renderer, &collider_rect.scaled(scale).toSDL());
+                    _ = sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
+                    _ = sdl.SDL_RenderRect(renderer, &collider_rect.scaled(scale).toSDL());
                 },
                 .Circle => {
-                    _ = c_sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
+                    _ = sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
                     const scale2: Vector2 = @splat(scale);
                     drawDebugCircle(renderer, center * scale2, collider.radius * scale);
                 },
             }
 
-            _ = c_sdl.SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
-            _ = c_sdl.SDL_RenderFillRect(renderer, &center_rect.scaled(scale).toSDL());
+            _ = sdl.SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
+            _ = sdl.SDL_RenderFillRect(renderer, &center_rect.scaled(scale).toSDL());
         }
     }
 }
 
-fn drawDebugCircle(renderer: *c_sdl.SDL_Renderer, center: Vector2, radius: f32) void {
+fn drawDebugCircle(renderer: *sdl.SDL_Renderer, center: Vector2, radius: f32) void {
     const diameter: f32 = radius * 2;
     var x: f32 = (radius - 1);
     var y: f32 = 0;
@@ -935,14 +935,14 @@ fn drawDebugCircle(renderer: *c_sdl.SDL_Renderer, center: Vector2, radius: f32) 
     var err: f32 = (dx - diameter);
 
     while (x >= y) {
-        _ = c_sdl.SDL_RenderPoint(renderer, center[X] + x, center[Y] - y);
-        _ = c_sdl.SDL_RenderPoint(renderer, center[X] + x, center[Y] + y);
-        _ = c_sdl.SDL_RenderPoint(renderer, center[X] - x, center[Y] - y);
-        _ = c_sdl.SDL_RenderPoint(renderer, center[X] - x, center[Y] + y);
-        _ = c_sdl.SDL_RenderPoint(renderer, center[X] + y, center[Y] - x);
-        _ = c_sdl.SDL_RenderPoint(renderer, center[X] + y, center[Y] + x);
-        _ = c_sdl.SDL_RenderPoint(renderer, center[X] - y, center[Y] - x);
-        _ = c_sdl.SDL_RenderPoint(renderer, center[X] - y, center[Y] + x);
+        _ = sdl.SDL_RenderPoint(renderer, center[X] + x, center[Y] - y);
+        _ = sdl.SDL_RenderPoint(renderer, center[X] + x, center[Y] + y);
+        _ = sdl.SDL_RenderPoint(renderer, center[X] - x, center[Y] - y);
+        _ = sdl.SDL_RenderPoint(renderer, center[X] - x, center[Y] + y);
+        _ = sdl.SDL_RenderPoint(renderer, center[X] + y, center[Y] - x);
+        _ = sdl.SDL_RenderPoint(renderer, center[X] + y, center[Y] + x);
+        _ = sdl.SDL_RenderPoint(renderer, center[X] - y, center[Y] - x);
+        _ = sdl.SDL_RenderPoint(renderer, center[X] - y, center[Y] + x);
 
         if (err <= 0) {
             y += 1;
@@ -960,7 +960,7 @@ fn drawDebugCircle(renderer: *c_sdl.SDL_Renderer, center: Vector2, radius: f32) 
 
 fn drawEntityHighlight(
     state: *State,
-    renderer: *c_sdl.SDL_Renderer,
+    renderer: *sdl.SDL_Renderer,
     assets: *Assets,
     entity_id: ?EntityId,
     color: Color,
@@ -998,8 +998,8 @@ fn drawEntityHighlight(
                 entity_rect.position = title_position + offset;
             }
 
-            _ = c_sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-            _ = c_sdl.SDL_RenderRect(renderer, &entity_rect.scaled(scale).toSDL());
+            _ = sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
+            _ = sdl.SDL_RenderRect(renderer, &entity_rect.scaled(scale).toSDL());
         }
     }
 }

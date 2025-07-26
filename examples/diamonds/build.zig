@@ -34,31 +34,35 @@ pub fn build(b: *std.Build) void {
     const imgui_mod = runtime_dep.module("imgui");
     module.addImport("imgui", imgui_mod);
 
-    const aseprite_module = b.createModule(.{
+    const sdl_mod = runtime_dep.module("sdl");
+    module.addImport("sdl", sdl_mod);
+
+    const aseprite_mod = b.createModule(.{
         .root_source_file = b.path("../aseprite.zig"),
         .target = target,
         .optimize = optimize,
     });
-    const logging_allocator_module = b.createModule(.{
+    const logging_allocator_mod = b.createModule(.{
         .root_source_file = b.path("../logging_allocator.zig"),
         .target = target,
         .optimize = optimize,
     });
-    const math_module = b.createModule(.{
+    const math_mod = b.createModule(.{
         .root_source_file = b.path("../math.zig"),
         .target = target,
         .optimize = optimize,
     });
-    const pool_module = b.createModule(.{
+    const pool_mod = b.createModule(.{
         .root_source_file = b.path("../pool.zig"),
         .target = target,
         .optimize = optimize,
     });
+    math_mod.addImport("sdl", sdl_mod);
 
-    module.addImport("math", math_module);
-    module.addImport("logging_allocator", logging_allocator_module);
-    module.addImport("aseprite", aseprite_module);
-    module.addImport("pool", pool_module);
+    module.addImport("math", math_mod);
+    module.addImport("logging_allocator", logging_allocator_mod);
+    module.addImport("aseprite", aseprite_mod);
+    module.addImport("pool", pool_mod);
 
     runtime.linkGameLibraries(runtime_dep.builder, b, lib, target, optimize, internal);
     b.installArtifact(lib);

@@ -1,12 +1,5 @@
 const std = @import("std");
-
-const c = @cImport({
-    @cDefine("SDL_DISABLE_OLD_NAMES", {});
-    @cInclude("SDL3/SDL.h");
-    @cInclude("SDL3/SDL_revision.h");
-    @cDefine("SDL_MAIN_HANDLED", {});
-    @cInclude("SDL3/SDL_main.h");
-});
+const sdl = @import("sdl").c;
 
 const DEBUG = @import("builtin").mode == std.builtin.OptimizeMode.Debug;
 const PLATFORM = @import("builtin").os.tag;
@@ -31,7 +24,7 @@ var dyn_lib_last_modified: i128 = 0;
 var src_last_modified: i128 = 0;
 var assets_last_modified: i128 = 0;
 
-var gameInit: *const fn (u32, u32, *c.SDL_Window) callconv(.c) GameStatePtr = undefined;
+var gameInit: *const fn (u32, u32, *sdl.SDL_Window) callconv(.c) GameStatePtr = undefined;
 var gameDeinit: *const fn (GameStatePtr) callconv(.c) void = undefined;
 var gameWillReload: *const fn (GameStatePtr) callconv(.c) void = undefined;
 var gameReloaded: *const fn (GameStatePtr) callconv(.c) void = undefined;
@@ -43,26 +36,26 @@ pub fn main() !void {
     var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
     const allocator = debug_allocator.allocator();
 
-    if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_EVENTS)) {
+    if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO | sdl.SDL_INIT_EVENTS)) {
         @panic("SDL_Init failed.");
     }
 
-    const window = c.SDL_CreateWindow("Playground", WINDOW_WIDTH, WINDOW_HEIGHT, 0);
+    const window = sdl.SDL_CreateWindow("Playground", WINDOW_WIDTH, WINDOW_HEIGHT, 0);
     if (window == null) {
         @panic("Failed to create window.");
     }
 
     if (DEBUG) {
         var num_displays: i32 = 0;
-        const displays = c.SDL_GetDisplays(&num_displays);
+        const displays = sdl.SDL_GetDisplays(&num_displays);
         if (num_displays > 0) {
-            const display_mode = c.SDL_GetCurrentDisplayMode(displays[0]);
+            const display_mode = sdl.SDL_GetCurrentDisplayMode(displays[0]);
             const window_offset_x: c_int = WINDOW_DECORATIONS_WIDTH;
             const window_offset_y: c_int = WINDOW_DECORATIONS_HEIGHT;
 
-            _ = c.SDL_SetWindowPosition(window, display_mode[0].w - WINDOW_WIDTH - window_offset_x, window_offset_y);
+            _ = sdl.SDL_SetWindowPosition(window, display_mode[0].w - WINDOW_WIDTH - window_offset_x, window_offset_y);
         }
-        _ = c.SDL_SetWindowAlwaysOnTop(window, true);
+        _ = sdl.SDL_SetWindowAlwaysOnTop(window, true);
     }
 
     loadDll() catch |err| {
@@ -80,7 +73,7 @@ pub fn main() !void {
     var frame_start_time: u64 = 0;
     var frame_elapsed_time: u64 = 0;
     while (true) {
-        frame_start_time = c.SDL_GetTicks();
+        frame_start_time = sdl.SDL_GetTicks();
 
         if (DEBUG) {
             checkForChanges(state, allocator);
@@ -93,17 +86,17 @@ pub fn main() !void {
         gameTick(state);
         gameDraw(state);
 
-        frame_elapsed_time = c.SDL_GetTicks() - frame_start_time;
+        frame_elapsed_time = sdl.SDL_GetTicks() - frame_start_time;
 
         if (!DEBUG) {
             if (frame_elapsed_time < TARGET_FRAME_TIME) {
-                c.SDL_Delay(@intFromFloat(TARGET_FRAME_TIME - @as(f32, @floatFromInt(frame_elapsed_time))));
+                sdl.SDL_Delay(@intFromFloat(TARGET_FRAME_TIME - @as(f32, @floatFromInt(frame_elapsed_time))));
             }
         }
     }
 
-    defer c.SDL_DestroyWindow(window);
-    defer c.SDL_Quit();
+    defer sdl.SDL_DestroyWindow(window);
+    defer sdl.SDL_Quit();
 
     if (DEBUG) {
         _ = debug_allocator.detectLeaks();

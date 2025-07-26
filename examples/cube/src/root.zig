@@ -1,13 +1,6 @@
 const std = @import("std");
+const sdl = @import("sdl").c;
 const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
-
-pub const c_sdl = @cImport({
-    @cDefine("SDL_DISABLE_OLD_NAMES", {});
-    @cInclude("SDL3/SDL.h");
-    @cInclude("SDL3/SDL_revision.h");
-    @cDefine("SDL_MAIN_HANDLED", {});
-    @cInclude("SDL3/SDL_main.h");
-});
 
 const INTERNAL: bool = @import("build_options").internal;
 const LOG_ALLOCATIONS: bool = @import("build_options").log_allocations;
@@ -23,11 +16,11 @@ pub const State = struct {
     allocator: std.mem.Allocator,
     debug_allocator: *DebugAllocator = undefined,
 
-    window: *c_sdl.SDL_Window,
-    device: *c_sdl.SDL_GPUDevice,
+    window: *sdl.SDL_Window,
+    device: *sdl.SDL_GPUDevice,
 };
 
-pub export fn init(window_width: u32, window_height: u32, window: *c_sdl.SDL_Window) *anyopaque {
+pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) *anyopaque {
     _ = window_width;
     _ = window_height;
 
@@ -48,14 +41,14 @@ pub export fn init(window_width: u32, window_height: u32, window: *c_sdl.SDL_Win
         .allocator = allocator,
         .game_allocator = game_allocator,
         .window = window,
-        .device = c_sdl.SDL_CreateGPUDevice(
-            c_sdl.SDL_GPU_SHADERFORMAT_SPIRV | c_sdl.SDL_GPU_SHADERFORMAT_DXIL | c_sdl.SDL_GPU_SHADERFORMAT_MSL,
+        .device = sdl.SDL_CreateGPUDevice(
+            sdl.SDL_GPU_SHADERFORMAT_SPIRV | sdl.SDL_GPU_SHADERFORMAT_DXIL | sdl.SDL_GPU_SHADERFORMAT_MSL,
             true,
             null,
         ).?,
     };
 
-    const window_claimed = c_sdl.SDL_ClaimWindowForGPUDevice(state.device, state.window);
+    const window_claimed = sdl.SDL_ClaimWindowForGPUDevice(state.device, state.window);
     if (!window_claimed) {
         @panic("Failed to claim window for GPU device.");
     }
@@ -71,8 +64,8 @@ pub export fn init(window_width: u32, window_height: u32, window: *c_sdl.SDL_Win
 pub export fn deinit(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    c_sdl.SDL_ReleaseWindowFromGPUDevice(state.device, state.window);
-    c_sdl.SDL_DestroyGPUDevice(state.device);
+    sdl.SDL_ReleaseWindowFromGPUDevice(state.device, state.window);
+    sdl.SDL_DestroyGPUDevice(state.device);
 }
 
 pub export fn willReload(state_ptr: *anyopaque) void {
@@ -87,9 +80,9 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
     _ = state_ptr;
 
     var continue_running: bool = true;
-    var event: c_sdl.SDL_Event = undefined;
-    while (c_sdl.SDL_PollEvent(&event)) {
-        if (event.type == c_sdl.SDL_EVENT_QUIT or (event.type == c_sdl.SDL_EVENT_KEY_DOWN and event.key.key == c_sdl.SDLK_ESCAPE)) {
+    var event: sdl.SDL_Event = undefined;
+    while (sdl.SDL_PollEvent(&event)) {
+        if (event.type == sdl.SDL_EVENT_QUIT or (event.type == sdl.SDL_EVENT_KEY_DOWN and event.key.key == sdl.SDLK_ESCAPE)) {
             continue_running = false;
             break;
         }

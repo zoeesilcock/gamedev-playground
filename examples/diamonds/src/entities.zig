@@ -1,10 +1,9 @@
 const std = @import("std");
+const sdl = @import("sdl").c;
 const game = @import("root.zig");
 const math = @import("math");
 const aseprite = @import("aseprite");
 const pool = @import("pool");
-
-const c_sdl = game.c_sdl;
 
 const Color = math.Color;
 const Vector2 = math.Vector2;
@@ -372,8 +371,8 @@ pub const SpriteComponent = struct {
         }
     }
 
-    pub fn getTexture(self: *SpriteComponent, assets: *game.Assets) ?*c_sdl.SDL_Texture {
-        var result: ?*c_sdl.SDL_Texture = null;
+    pub fn getTexture(self: *SpriteComponent, assets: *game.Assets) ?*sdl.SDL_Texture {
+        var result: ?*sdl.SDL_Texture = null;
 
         if (assets.getSpriteAsset(self)) |sprite_asset| {
             if (self.frame_index < sprite_asset.frames.len) {
@@ -421,7 +420,7 @@ pub const SpriteComponent = struct {
     pub fn containsPoint(
         self: *const SpriteComponent,
         point: Vector2,
-        dest_rect: c_sdl.SDL_FRect,
+        dest_rect: sdl.SDL_FRect,
         world_scale: f32,
         assets: *game.Assets,
     ) bool {
@@ -494,7 +493,7 @@ pub const TitleComponent = struct {
 
     pub fn getPosition(
         self: *const TitleComponent,
-        dest_rect: c_sdl.SDL_FRect,
+        dest_rect: sdl.SDL_FRect,
         world_scale: f32,
         assets: *game.Assets,
     ) Vector2 {

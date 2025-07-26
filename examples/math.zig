@@ -1,10 +1,4 @@
-const c_sdl = @cImport({
-    @cDefine("SDL_DISABLE_OLD_NAMES", {});
-    @cInclude("SDL3/SDL.h");
-    @cInclude("SDL3/SDL_revision.h");
-    @cDefine("SDL_MAIN_HANDLED", {});
-    @cInclude("SDL3/SDL_main.h");
-});
+const sdl = @import("sdl").c;
 
 pub const Vector2 = @Vector(2, f32);
 pub const Color3 = @Vector(3, u8);
@@ -30,8 +24,8 @@ pub const Rect = struct {
         };
     }
 
-    pub fn toSDL(self: *const Rect) c_sdl.SDL_FRect {
-        return c_sdl.SDL_FRect{
+    pub fn toSDL(self: *const Rect) sdl.SDL_FRect {
+        return sdl.SDL_FRect{
             .x = self.position[X],
             .y = self.position[Y],
             .w = self.size[X],

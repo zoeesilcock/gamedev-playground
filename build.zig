@@ -14,12 +14,6 @@ pub fn build(b: *std.Build) !void {
     const exe = buildExecutable(b, b, build_options, target, optimize, test_step, internal);
     b.installArtifact(exe);
 
-    _ = b.addModule("imgui", .{
-        .root_source_file = b.path("src/imgui.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
     generateImGuiBindingsStep(b, target, optimize);
 }
 
@@ -42,6 +36,19 @@ pub fn buildExecutable(
         .name = "gamedev-playground",
         .root_module = module,
     });
+
+    _ = b.addModule("imgui", .{
+        .root_source_file = b.path("src/imgui.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const sdl_mod = b.addModule("sdl", .{
+        .root_source_file = b.path("src/sdl.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("sdl", sdl_mod);
 
     if (optimize == .Debug) {
         linkExeOnlyLibraries(b, exe, target, optimize);
@@ -72,6 +79,10 @@ fn linkExeOnlyLibraries(
 ) void {
     if (createSDLLib(b, b, target, optimize)) |sdl_lib| {
         obj.root_module.linkLibrary(sdl_lib);
+
+        if (obj.root_module.import_table.get("sdl")) |sdl_mod| {
+            sdl_mod.linkLibrary(sdl_lib);
+        }
     }
 }
 
@@ -84,13 +95,12 @@ pub fn linkGameLibraries(
     internal: bool,
 ) void {
     if (createSDLLib(b, client_b, target, optimize)) |sdl_lib| {
-        obj.root_module.linkLibrary(sdl_lib);
+        if (obj.root_module.import_table.get("sdl")) |sdl_mod| {
+            sdl_mod.linkLibrary(sdl_lib);
 
-        if (obj.root_module.import_table.get("imgui")) |imgui_mod| {
-            imgui_mod.linkLibrary(sdl_lib);
-        }
-        if (obj.root_module.import_table.get("math")) |math_mod| {
-            math_mod.linkLibrary(sdl_lib);
+            if (obj.root_module.import_table.get("imgui")) |imgui_mod| {
+                imgui_mod.addImport("sdl", sdl_mod);
+            }
         }
     }
 
@@ -99,29 +109,11 @@ pub fn linkGameLibraries(
             .target = target,
             .optimize = optimize,
         })) |imgui_dep| {
-            obj.addIncludePath(b.path("src/dcimgui"));
-            obj.addIncludePath(imgui_dep.path("."));
-
-            if (obj.root_module.import_table.get("imgui")) |imgui_mod| {
-                imgui_mod.addIncludePath(b.path("src/dcimgui"));
-                imgui_mod.addIncludePath(imgui_dep.path("."));
-            }
-
-            // TODO: This is required to make the C imports of SDL in math compatible with debug, but why?
-            if (obj.root_module.import_table.get("math")) |math_mod| {
-                math_mod.addIncludePath(b.path("src/dcimgui"));
-                math_mod.addIncludePath(imgui_dep.path("."));
-            }
-
             if (createImGuiLib(b, target, optimize, imgui_dep)) |imgui_lib| {
-                obj.linkLibrary(imgui_lib);
                 if (obj.root_module.import_table.get("imgui")) |imgui_mod| {
+                    imgui_mod.addIncludePath(b.path("src/dcimgui"));
+                    imgui_mod.addIncludePath(imgui_dep.path("."));
                     imgui_mod.linkLibrary(imgui_lib);
-                }
-
-                // TODO: This is required to make the C imports of SDL in math compatible with debug, but why?
-                if (obj.root_module.import_table.get("math")) |math_mod| {
-                    math_mod.linkLibrary(imgui_lib);
                 }
             }
         }
