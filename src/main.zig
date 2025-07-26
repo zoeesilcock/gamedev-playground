@@ -34,8 +34,8 @@ var dyn_lib_last_modified: i128 = 0;
 var src_last_modified: i128 = 0;
 var assets_last_modified: i128 = 0;
 
-var gameInit: *const fn (u32, u32, *c.SDL_Window, *c.SDL_Renderer) callconv(.c) GameStatePtr = undefined;
-var gameDeinit: *const fn () callconv(.c) void = undefined;
+var gameInit: *const fn (u32, u32, *c.SDL_Window) callconv(.c) GameStatePtr = undefined;
+var gameDeinit: *const fn (GameStatePtr) callconv(.c) void = undefined;
 var gameWillReload: *const fn (GameStatePtr) callconv(.c) void = undefined;
 var gameReloaded: *const fn (GameStatePtr) callconv(.c) void = undefined;
 var gameProcessInput: *const fn (GameStatePtr) callconv(.c) bool = undefined;
@@ -51,9 +51,7 @@ pub fn main() !void {
     }
 
     const window = c.SDL_CreateWindow("Playground", WINDOW_WIDTH, WINDOW_HEIGHT, 0);
-    const renderer = c.SDL_CreateRenderer(window, null);
-
-    if (window == null or renderer == null) {
+    if (window == null) {
         @panic("Failed to create window.");
     }
 
@@ -75,8 +73,8 @@ pub fn main() !void {
         return err;
     };
 
-    const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT, window.?, renderer.?);
-    defer gameDeinit();
+    const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT, window.?);
+    defer gameDeinit(state);
 
     if (DEBUG) {
         initChangeTimes(allocator);
@@ -107,7 +105,6 @@ pub fn main() !void {
         }
     }
 
-    c.SDL_DestroyRenderer(renderer);
     c.SDL_DestroyWindow(window);
 
     c.SDL_Quit();

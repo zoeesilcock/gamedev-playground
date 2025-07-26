@@ -417,7 +417,7 @@ fn sdlPanic(result: bool, message: []const u8) void {
     }
 }
 
-pub export fn init(window_width: u32, window_height: u32, window: *c_sdl.SDL_Window, renderer: *c_sdl.SDL_Renderer) *anyopaque {
+pub export fn init(window_width: u32, window_height: u32, window: *c_sdl.SDL_Window) *anyopaque {
     var backing_allocator = std.heap.page_allocator;
     var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
     game_allocator.* = .init;
@@ -436,7 +436,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *c_sdl.SDL_Win
         .game_allocator = game_allocator,
 
         .window = window,
-        .renderer = renderer,
+        .renderer = sdlPanicIfNull(c_sdl.SDL_CreateRenderer(window, null), "Failed to create renderer.").?,
 
         .window_width = window_width,
         .window_height = window_height,
@@ -500,7 +500,8 @@ pub export fn init(window_width: u32, window_height: u32, window: *c_sdl.SDL_Win
 }
 
 pub fn restart(state: *State) void {
-    deinit();
+    deinit(state);
+
     state.* = @as(
         *State,
         @ptrCast(
@@ -509,17 +510,20 @@ pub fn restart(state: *State) void {
                     state.window_width,
                     state.window_height,
                     state.window,
-                    state.renderer,
                 ),
             ),
         ),
     ).*;
 }
 
-pub export fn deinit() void {
+pub export fn deinit(state_ptr: *anyopaque) void {
+    const state: *State = @ptrCast(@alignCast(state_ptr));
+
     if (INTERNAL) {
         imgui.deinit();
     }
+
+    c_sdl.SDL_DestroyRenderer(state.renderer);
 }
 
 pub fn setupRenderTexture(state: *State) void {
