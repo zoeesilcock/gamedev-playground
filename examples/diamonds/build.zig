@@ -24,6 +24,13 @@ pub fn build(b: *std.Build) void {
         .root_module = module,
     });
 
+    const lib_check = b.addSharedLibrary(.{
+        .name = lib_base_name,
+        .root_module = module,
+    });
+    const check = b.step("check", "Check if it compiles");
+    check.dependOn(&lib_check.step);
+
     module.addOptions("build_options", build_options);
 
     const runtime_dep = b.dependency("runtime", .{
