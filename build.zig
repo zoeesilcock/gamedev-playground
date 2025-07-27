@@ -36,17 +36,22 @@ pub fn buildExecutable(
         .root_module = module,
     });
 
-    _ = b.addModule("imgui", .{
-        .root_source_file = b.path("src/imgui.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    const sdl_mod = b.addModule("sdl", .{
+    var sdl_mod = b.addModule("sdl", .{
         .root_source_file = b.path("src/sdl.zig"),
         .target = target,
         .optimize = optimize,
     });
+
+    const imgui_mod = b.addModule("imgui", .{
+        .root_source_file = b.path("src/imgui.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "sdl", .module = sdl_mod },
+        },
+    });
+    sdl_mod.addIncludePath(getSDLIncludePath(b, target, optimize));
+    imgui_mod.addIncludePath(getSDLIncludePath(b, target, optimize));
     exe.root_module.addImport("sdl", sdl_mod);
 
     linkExeLibraries(b, exe, target, optimize);
@@ -72,31 +77,19 @@ fn linkExeLibraries(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) void {
-    if (createSDLLib(b, b, target, optimize)) |sdl_lib| {
+    if (getSDL(b, target, optimize)) |sdl_lib| {
         obj.root_module.linkLibrary(sdl_lib);
-
-        if (obj.root_module.import_table.get("sdl")) |sdl_mod| {
-            sdl_mod.linkLibrary(sdl_lib);
-        }
+        b.installArtifact(sdl_lib);
     }
 }
 
-pub fn linkGameLibraries(
+pub fn linkImgui(
     b: *std.Build,
-    client_b: *std.Build,
     obj: *std.Build.Step.Compile,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     internal: bool,
 ) void {
-    if (createSDLLib(b, client_b, target, optimize)) |_| {
-        if (obj.root_module.import_table.get("sdl")) |sdl_mod| {
-            if (obj.root_module.import_table.get("imgui")) |imgui_mod| {
-                imgui_mod.addImport("sdl", sdl_mod);
-            }
-        }
-    }
-
     if (internal) {
         if (b.lazyDependency("imgui", .{
             .target = target,
@@ -113,36 +106,38 @@ pub fn linkGameLibraries(
     }
 }
 
-pub fn linkSDL(
+pub fn getSDL(
     b: *std.Build,
-    client_b: *std.Build,
-    obj: *std.Build.Step.Compile,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-) void {
-    if (createSDLLib(b, client_b, target, optimize)) |sdl_lib| {
-        obj.root_module.linkLibrary(sdl_lib);
-    }
-}
-
-fn createSDLLib(
-    b: *std.Build,
-    client_b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) ?*std.Build.Step.Compile {
-    var sdl_lib: ?*std.Build.Step.Compile = null;
+    var result: ?*std.Build.Step.Compile = null;
+    if (b.lazyDependency("sdl", .{
+        .target = target,
+        .optimize = optimize,
+        .preferred_link_mode = .dynamic,
+    })) |sdl_dep| {
+        result = sdl_dep.artifact("SDL3");
+    }
+    return result;
+}
+
+pub fn getSDLIncludePath(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) std.Build.LazyPath {
+    var result: std.Build.LazyPath = undefined;
 
     if (b.lazyDependency("sdl", .{
         .target = target,
         .optimize = optimize,
         .preferred_link_mode = .dynamic,
     })) |sdl_dep| {
-        client_b.installArtifact(sdl_dep.artifact("SDL3"));
-        sdl_lib = sdl_dep.artifact("SDL3");
+        result = sdl_dep.path("include");
     }
 
-    return sdl_lib;
+    return result;
 }
 
 fn createImGuiLib(

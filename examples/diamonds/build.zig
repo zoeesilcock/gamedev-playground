@@ -30,13 +30,13 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    if (runtime.getSDL(runtime_dep.builder, target, optimize)) |sdl_lib| {
+        module.linkLibrary(sdl_lib);
+        b.installArtifact(sdl_lib);
+    }
 
     const imgui_mod = runtime_dep.module("imgui");
-    module.addImport("imgui", imgui_mod);
-
     const sdl_mod = runtime_dep.module("sdl");
-    module.addImport("sdl", sdl_mod);
-
     const aseprite_mod = b.createModule(.{
         .root_source_file = b.path("../aseprite.zig"),
         .target = target,
@@ -51,20 +51,25 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("../math.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{
+            .{ .name = "sdl", .module = sdl_mod },
+        },
     });
     const pool_mod = b.createModule(.{
         .root_source_file = b.path("../pool.zig"),
         .target = target,
         .optimize = optimize,
     });
-    math_mod.addImport("sdl", sdl_mod);
 
+    module.addImport("sdl", sdl_mod);
+    module.addImport("imgui", imgui_mod);
     module.addImport("math", math_mod);
     module.addImport("logging_allocator", logging_allocator_mod);
     module.addImport("aseprite", aseprite_mod);
     module.addImport("pool", pool_mod);
 
-    runtime.linkGameLibraries(runtime_dep.builder, b, lib, target, optimize, internal);
+    runtime.linkImgui(runtime_dep.builder, lib, target, optimize, internal);
+
     b.installArtifact(lib);
 
     if (!lib_only) {
