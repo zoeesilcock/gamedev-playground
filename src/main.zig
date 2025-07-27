@@ -64,7 +64,6 @@ pub fn main() !void {
     };
 
     const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT, window.?);
-    defer gameDeinit(state);
 
     if (DEBUG) {
         initChangeTimes(allocator);
@@ -95,8 +94,10 @@ pub fn main() !void {
         }
     }
 
-    defer sdl.SDL_DestroyWindow(window);
-    defer sdl.SDL_Quit();
+    gameDeinit(state);
+
+    sdl.SDL_DestroyWindow(window);
+    sdl.SDL_Quit();
 
     if (DEBUG) {
         _ = debug_allocator.detectLeaks();
