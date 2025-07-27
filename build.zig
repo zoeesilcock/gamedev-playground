@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) !void {
     build_options.addOption([]const u8, "lib_base_name", lib_base_name);
 
     const test_step = b.step("test", "Run unit tests");
-    const exe = buildExecutable(b, b, build_options, target, optimize, test_step, internal);
+    const exe = buildExecutable(b, b, build_options, target, optimize, test_step);
     b.installArtifact(exe);
 
     generateImGuiBindingsStep(b, target, optimize);
@@ -24,7 +24,6 @@ pub fn buildExecutable(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     test_step: *std.Build.Step,
-    internal: bool,
 ) *std.Build.Step.Compile {
     const module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -50,11 +49,7 @@ pub fn buildExecutable(
     });
     exe.root_module.addImport("sdl", sdl_mod);
 
-    if (optimize == .Debug) {
-        linkExeOnlyLibraries(b, exe, target, optimize);
-    } else {
-        linkGameLibraries(b, b, exe, target, optimize, internal);
-    }
+    linkExeLibraries(b, exe, target, optimize);
 
     const run_step = client_b.step("run", "Run the app");
     const run_cmd = client_b.addRunArtifact(exe);
@@ -71,7 +66,7 @@ pub fn buildExecutable(
     return exe;
 }
 
-fn linkExeOnlyLibraries(
+fn linkExeLibraries(
     b: *std.Build,
     obj: *std.Build.Step.Compile,
     target: std.Build.ResolvedTarget,
@@ -94,10 +89,8 @@ pub fn linkGameLibraries(
     optimize: std.builtin.OptimizeMode,
     internal: bool,
 ) void {
-    if (createSDLLib(b, client_b, target, optimize)) |sdl_lib| {
+    if (createSDLLib(b, client_b, target, optimize)) |_| {
         if (obj.root_module.import_table.get("sdl")) |sdl_mod| {
-            sdl_mod.linkLibrary(sdl_lib);
-
             if (obj.root_module.import_table.get("imgui")) |imgui_mod| {
                 imgui_mod.addImport("sdl", sdl_mod);
             }
