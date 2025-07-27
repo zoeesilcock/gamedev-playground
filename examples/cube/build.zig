@@ -44,15 +44,42 @@ pub fn build(b: *std.Build) void {
 
     const shadercross_dep = b.dependency("shadercross", .{});
     const spirvheaders_dep = b.dependency("spirvheaders", .{});
+    const spirvcross_dep = b.dependency("spirvcross", .{});
+
+    const spirvcross = b.addStaticLibrary(.{
+        .name = "SPIRV-Cross",
+        .target = target,
+        .optimize = optimize,
+    });
+    spirvcross.linkLibC();
+    spirvcross.linkLibCpp();
+    spirvcross.addCSourceFiles(.{
+        .files = &.{
+            "spirv_cross.cpp",
+            "spirv_cross_c.cpp",
+            "spirv_parser.cpp",
+            "spirv_cross_parsed_ir.cpp",
+            "spirv_cfg.cpp",
+            "spirv_glsl.cpp",
+            "spirv_msl.cpp",
+            "spirv_hlsl.cpp",
+        },
+        .flags = &.{"-std=c++11"},
+        .root = spirvcross_dep.path("."),
+    });
+    spirvcross.root_module.addCMacro("SPVC_EXPORT_SYMBOLS", "1");
+    spirvcross.root_module.addCMacro("SPIRV_CROSS_C_API_GLSL", "1");
+    spirvcross.root_module.addCMacro("SPIRV_CROSS_C_API_HLSL", "1");
+    spirvcross.root_module.addCMacro("SPIRV_CROSS_C_API_MSL", "1");
+    spirvcross.installHeader(spirvcross_dep.path("spirv_cross_c.h"), "spirv_cross_c.h");
+
     const shadercross = b.addStaticLibrary(.{
         .name = "SDL_shadercross",
         .target = target,
         .optimize = optimize,
     });
-    const spirvcross_dep = b.dependency("spirvcross", .{});
-
     shadercross.linkLibC();
-    shadercross.addIncludePath(spirvcross_dep.path(""));
+    shadercross.linkLibrary(spirvcross);
     shadercross.addIncludePath(spirvheaders_dep.path("include/spirv/1.2/"));
     shadercross.addIncludePath(shadercross_dep.path("include"));
     shadercross.addIncludePath(runtime.getSDLIncludePath(runtime_dep.builder, target, optimize));
@@ -62,8 +89,9 @@ pub fn build(b: *std.Build) void {
             "-std=c99",
             "-Werror",
         },
-        });
+    });
     shadercross.installHeadersDirectory(shadercross_dep.path("include"), "", .{});
+
     module.linkLibrary(shadercross);
     b.installArtifact(shadercross);
 
