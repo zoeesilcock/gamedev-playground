@@ -7,6 +7,18 @@
         .runtime = .{
             .path = "../../",
         },
+        .shadercross = .{
+            .url = "git+https://github.com/libsdl-org/SDL_shadercross#392d12afc1ef084c5cd656307180027399b7a54e",
+            .hash = "1220b2498f6bb795498f703e386974674e413d9f4f812e4fb75ce6898c386364ec7a",
+        },
+        .spirvcross = .{
+            .url = "git+https://github.com/KhronosGroup/SPIRV-Cross#5b46644d93f10ca7eaed1164e4c41aca4072df36",
+            .hash = "1220fbf3b9a407855441b2fc9bd3b7e63e9e98becd3f3d6d492c8576d7844ddf5c47",
+        },
+        .spirvheaders = .{
+            .url = "git+https://github.com/KhronosGroup/SPIRV-Headers#de1807b7cfa8e722979d5ab7b7445b258dbc1836",
+            .hash = "1220e89abc883ad455c3dfcf27c70888bb3fbb63b3582f7f68b6eec2509e82ff085a",
+        },
     },
     .paths = .{
         "build.zig",

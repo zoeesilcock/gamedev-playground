@@ -31,6 +31,30 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const shadercross_dep = b.dependency("shadercross", .{});
+    const spirvheaders_dep = b.dependency("spirvheaders", .{});
+    const shadercross = b.addStaticLibrary(.{
+        .name = "SDL_shadercross",
+        .target = target,
+        .optimize = optimize,
+    });
+    const spirvcross_dep = b.dependency("spirvcross", .{});
+
+    shadercross.linkLibC();
+    runtime.linkSDL(runtime_dep.builder, b, shadercross, target, optimize);
+    shadercross.addIncludePath(spirvcross_dep.path(""));
+    shadercross.addIncludePath(spirvheaders_dep.path("include/spirv/1.2/"));
+    shadercross.addIncludePath(shadercross_dep.path("include"));
+    shadercross.addCSourceFile(.{
+        .file = shadercross_dep.path("src/SDL_shadercross.c"),
+        .flags = &.{
+            "-std=c99",
+            "-Werror",
+        },
+        });
+    shadercross.installHeadersDirectory(shadercross_dep.path("include"), "", .{});
+    b.installArtifact(shadercross);
+
     const imgui_mod = runtime_dep.module("imgui");
     module.addImport("imgui", imgui_mod);
 

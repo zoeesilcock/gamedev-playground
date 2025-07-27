@@ -113,6 +113,18 @@ pub fn linkGameLibraries(
     }
 }
 
+pub fn linkSDL(
+    b: *std.Build,
+    client_b: *std.Build,
+    obj: *std.Build.Step.Compile,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) void {
+    if (createSDLLib(b, client_b, target, optimize)) |sdl_lib| {
+        obj.root_module.linkLibrary(sdl_lib);
+    }
+}
+
 fn createSDLLib(
     b: *std.Build,
     client_b: *std.Build,
