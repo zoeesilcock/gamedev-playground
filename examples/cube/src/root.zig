@@ -20,6 +20,17 @@ pub const State = struct {
     device: *sdl.SDL_GPUDevice,
     fill_pipeline: *sdl.SDL_GPUGraphicsPipeline = undefined,
     line_pipeline: *sdl.SDL_GPUGraphicsPipeline = undefined,
+    vertex_buffer: *sdl.SDL_GPUBuffer = undefined,
+};
+
+const PositionColorVertex = struct {
+    x: f32,
+    y: f32,
+    z: f32,
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8,
 };
 
 pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) *anyopaque {
@@ -56,7 +67,9 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     }
 
     if (INTERNAL) {
-        state.debug_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize debug allocator."));
+        state.debug_allocator = backing_allocator.create(DebugAllocator) catch {
+            @panic("Failed to initialize debug allocator.");
+        };
         state.debug_allocator.* = .init;
     }
 
@@ -72,33 +85,112 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     }
     defer sdl.SDL_ReleaseGPUShader(state.device, fragment_shader);
 
-    const color_target_descriptions: []const sdl.SDL_GPUColorTargetDescription = &.{
+    const color_target_descriptions: []const sdl.SDL_GPUColorTargetDescription = &.{.{
+        .format = sdl.SDL_GetGPUSwapchainTextureFormat(state.device, state.window),
+    }};
+    const vertex_buffer_descriptions: []const sdl.SDL_GPUVertexBufferDescription = &.{
         .{
-            .format = sdl.SDL_GetGPUSwapchainTextureFormat(state.device, state.window),
-        }
+            .slot = 0,
+            .input_rate = sdl.SDL_GPU_VERTEXINPUTRATE_VERTEX,
+            .instance_step_rate = 0,
+            .pitch = @sizeOf(PositionColorVertex),
+        },
+    };
+    const vertex_attributes: []const sdl.SDL_GPUVertexAttribute = &.{
+        .{
+            .buffer_slot = 0,
+            .format = sdl.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+            .location = 0,
+            .offset = 0,
+        },
+        .{
+            .buffer_slot = 0,
+            .format = sdl.SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,
+            .location = 1,
+            .offset = @sizeOf(f32) * 3,
+        },
     };
     var pipeline_create_info: sdl.SDL_GPUGraphicsPipelineCreateInfo = .{
-		.target_info = .{
-			.num_color_targets = 1,
+        .target_info = .{
+            .num_color_targets = 1,
             .color_target_descriptions = color_target_descriptions.ptr,
-		},
-		.primitive_type = sdl.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
-		.vertex_shader = vertex_shader,
-		.fragment_shader = fragment_shader,
-	};
+        },
+        .vertex_input_state = .{
+            .num_vertex_buffers = 1,
+            .vertex_buffer_descriptions = vertex_buffer_descriptions.ptr,
+            .num_vertex_attributes = 2,
+            .vertex_attributes = vertex_attributes.ptr,
+        },
+        .primitive_type = sdl.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+        .vertex_shader = vertex_shader,
+        .fragment_shader = fragment_shader,
+    };
 
-	pipeline_create_info.rasterizer_state.fill_mode = sdl.SDL_GPU_FILLMODE_FILL;
-	if (sdl.SDL_CreateGPUGraphicsPipeline(state.device, &pipeline_create_info)) |fill_pipeline| {
+    pipeline_create_info.rasterizer_state.fill_mode = sdl.SDL_GPU_FILLMODE_FILL;
+    if (sdl.SDL_CreateGPUGraphicsPipeline(state.device, &pipeline_create_info)) |fill_pipeline| {
         state.fill_pipeline = fill_pipeline;
     } else {
         @panic("Failed to create fill pipeline.");
     }
 
-	pipeline_create_info.rasterizer_state.fill_mode = sdl.SDL_GPU_FILLMODE_LINE;
-	if (sdl.SDL_CreateGPUGraphicsPipeline(state.device, &pipeline_create_info)) |line_pipeline| {
+    pipeline_create_info.rasterizer_state.fill_mode = sdl.SDL_GPU_FILLMODE_LINE;
+    if (sdl.SDL_CreateGPUGraphicsPipeline(state.device, &pipeline_create_info)) |line_pipeline| {
         state.line_pipeline = line_pipeline;
     } else {
         @panic("Failed to create line pipeline.");
+    }
+
+    var buffer_create_info: sdl.SDL_GPUBufferCreateInfo = .{
+        .usage = sdl.SDL_GPU_BUFFERUSAGE_VERTEX,
+        .size = @sizeOf(PositionColorVertex) * 3,
+    };
+    if (sdl.SDL_CreateGPUBuffer(state.device, &buffer_create_info)) |buffer| {
+        state.vertex_buffer = buffer;
+    } else {
+        @panic("Failed to create vertex buffer.");
+    }
+
+    var transfer_buffer_create_info: sdl.SDL_GPUTransferBufferCreateInfo = .{
+        .usage = sdl.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = @sizeOf(PositionColorVertex) * 3,
+    };
+    const opt_transfer_buffer: ?*sdl.SDL_GPUTransferBuffer = sdl.SDL_CreateGPUTransferBuffer(
+        state.device,
+        &transfer_buffer_create_info,
+    );
+    if (opt_transfer_buffer) |transfer_buffer| {
+        if (sdl.SDL_MapGPUTransferBuffer(state.device, transfer_buffer, false)) |data| {
+            var transfer_data: [*]PositionColorVertex = @ptrCast(@alignCast(data));
+            transfer_data[0] = .{ .x = -1, .y = -1, .z = 0, .r = 255, .g = 0, .b = 0, .a = 255 };
+            transfer_data[1] = .{ .x = 1, .y = -1, .z = 0, .r = 0, .g = 255, .b = 0, .a = 255 };
+            transfer_data[2] = .{ .x = 0, .y = 1, .z = 0, .r = 0, .g = 0, .b = 255, .a = 255 };
+
+            sdl.SDL_UnmapGPUTransferBuffer(state.device, transfer_buffer);
+
+            const upload_command_buffer: ?*sdl.SDL_GPUCommandBuffer = sdl.SDL_AcquireGPUCommandBuffer(state.device);
+            const copy_pass: ?*sdl.SDL_GPUCopyPass = sdl.SDL_BeginGPUCopyPass(upload_command_buffer);
+            sdl.SDL_UploadToGPUBuffer(
+                copy_pass,
+                &.{
+                    .transfer_buffer = transfer_buffer,
+                    .offset = 0,
+                },
+                &.{
+                    .buffer = state.vertex_buffer,
+                    .offset = 0,
+                    .size = @sizeOf(PositionColorVertex) * 3,
+                },
+                false,
+            );
+
+            sdl.SDL_EndGPUCopyPass(copy_pass);
+            _ = sdl.SDL_SubmitGPUCommandBuffer(upload_command_buffer);
+            sdl.SDL_ReleaseGPUTransferBuffer(state.device, transfer_buffer);
+        } else {
+            @panic("Failed to map transfer buffer to GPU.");
+        }
+    } else {
+        @panic("Failed to create transfer buffer.");
     }
 
     return state;
@@ -106,6 +198,11 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
 
 pub export fn deinit(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
+
+    sdl.SDL_ReleaseGPUGraphicsPipeline(state.device, state.fill_pipeline);
+    sdl.SDL_ReleaseGPUGraphicsPipeline(state.device, state.line_pipeline);
+
+    sdl.SDL_ReleaseGPUBuffer(state.device, state.vertex_buffer);
 
     sdl.SDL_ReleaseWindowFromGPUDevice(state.device, state.window);
     sdl.SDL_DestroyGPUDevice(state.device);
@@ -135,17 +232,20 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
 }
 
 pub export fn tick(state_ptr: *anyopaque) void {
+    _ = state_ptr;
+}
+
+pub export fn draw(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-	const cmdbuf: ?*sdl.SDL_GPUCommandBuffer = sdl.SDL_AcquireGPUCommandBuffer(state.device);
-    if (cmdbuf == null) {
-        std.log.err("Failed to acquire GPU commmand buffer: {s}", .{ sdl.SDL_GetError() });
-
+    const command_buffer: ?*sdl.SDL_GPUCommandBuffer = sdl.SDL_AcquireGPUCommandBuffer(state.device);
+    if (command_buffer == null) {
+        std.log.err("Failed to acquire GPU commmand buffer: {s}", .{sdl.SDL_GetError()});
     }
 
     var opt_swapchain_texture: ?*sdl.SDL_GPUTexture = null;
-    if (!sdl.SDL_WaitAndAcquireGPUSwapchainTexture(cmdbuf, state.window, &opt_swapchain_texture, null, null)) {
-        std.log.err("Failed to acquire GPU swapchain texture: {s}", .{ sdl.SDL_GetError() });
+    if (!sdl.SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, state.window, &opt_swapchain_texture, null, null)) {
+        std.log.err("Failed to acquire GPU swapchain texture: {s}", .{sdl.SDL_GetError()});
     }
 
     if (opt_swapchain_texture) |swapchain_texture| {
@@ -155,18 +255,15 @@ pub export fn tick(state_ptr: *anyopaque) void {
             .load_op = sdl.SDL_GPU_LOADOP_CLEAR,
             .store_op = sdl.SDL_GPU_STOREOP_STORE,
         };
-        const render_pass: ?*sdl.SDL_GPURenderPass = sdl.SDL_BeginGPURenderPass(cmdbuf, &color_target_info, 1, null);
+        const render_pass: ?*sdl.SDL_GPURenderPass = sdl.SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1, null);
         sdl.SDL_BindGPUGraphicsPipeline(render_pass, state.fill_pipeline);
+        sdl.SDL_BindGPUVertexBuffers(render_pass, 0, &.{ .buffer = state.vertex_buffer, .offset = 0 }, 1);
         sdl.SDL_DrawGPUPrimitives(render_pass, 3, 1, 0, 0);
         sdl.SDL_EndGPURenderPass(render_pass);
     }
-	if (!sdl.SDL_SubmitGPUCommandBuffer(cmdbuf)) {
-        std.log.err("Failed to submit GPU command buffer: {s}", .{ sdl.SDL_GetError() });
+    if (!sdl.SDL_SubmitGPUCommandBuffer(command_buffer)) {
+        std.log.err("Failed to submit GPU command buffer: {s}", .{sdl.SDL_GetError()});
     }
-}
-
-pub export fn draw(state_ptr: *anyopaque) void {
-    _ = state_ptr;
 }
 
 fn loadShader(
@@ -188,16 +285,16 @@ fn loadShader(
 
     const backend_formats: sdl.SDL_GPUShaderFormat = sdl.SDL_GetGPUShaderFormats(state.device);
     if ((backend_formats & sdl.SDL_GPU_SHADERFORMAT_SPIRV) != 0) {
-        std.log.info("Loading {s} shader in SPIRV format.", .{ name });
+        std.log.info("Loading {s} shader in SPIRV format.", .{name});
         format = sdl.SDL_GPU_SHADERFORMAT_SPIRV;
         extension = ".spv";
     } else if ((backend_formats & sdl.SDL_GPU_SHADERFORMAT_MSL) != 0) {
-        std.log.info("Loading {s} shader in MSL format.", .{ name });
+        std.log.info("Loading {s} shader in MSL format.", .{name});
         format = sdl.SDL_GPU_SHADERFORMAT_MSL;
         entrypoint = "main0";
         extension = ".msl";
     } else if ((backend_formats & sdl.SDL_GPU_SHADERFORMAT_DXIL) != 0) {
-        std.log.info("Loading {s} shader in DXIL format.", .{ name });
+        std.log.info("Loading {s} shader in DXIL format.", .{name});
         format = sdl.SDL_GPU_SHADERFORMAT_DXIL;
         extension = ".dxil";
     } else {
@@ -222,7 +319,7 @@ fn loadShader(
         };
         shader = sdl.SDL_CreateGPUShader(state.device, &shader_info);
     } else {
-        std.log.info("Failed to load shader file: {s}", .{ file_name });
+        std.log.info("Failed to load shader file: {s}", .{file_name});
     }
 
     return shader;
