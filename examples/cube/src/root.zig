@@ -58,6 +58,15 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         state.debug_allocator.* = .init;
     }
 
+    const vertex_shader = loadShader(state, "cube.vert", 0, 0, 0, 0);
+    if (vertex_shader == null) {
+        @panic("Failed to load vertex shader");
+    }
+    const fragment_shader = loadShader(state, "solid_color.frag", 0, 0, 0, 0);
+    if (fragment_shader == null) {
+        @panic("Failed to load fragment shader");
+    }
+
     return state;
 }
 
@@ -97,4 +106,63 @@ pub export fn tick(state_ptr: *anyopaque) void {
 
 pub export fn draw(state_ptr: *anyopaque) void {
     _ = state_ptr;
+}
+
+fn loadShader(
+    state: *State,
+    name: []const u8,
+    sampler_count: u32,
+    uniform_buffer_count: u32,
+    storage_buffer_count: u32,
+    storage_texture_count: u32,
+) ?*sdl.SDL_GPUShader {
+    var shader: ?*sdl.SDL_GPUShader = null;
+    var entrypoint: []const u8 = "main";
+    var extension: []const u8 = "";
+    var format: sdl.SDL_GPUShaderFormat = sdl.SDL_GPU_SHADERFORMAT_INVALID;
+    var stage: sdl.SDL_GPUShaderStage = sdl.SDL_GPU_SHADERSTAGE_VERTEX;
+    if (std.mem.indexOf(u8, name, ".frag") != null) {
+        stage = sdl.SDL_GPU_SHADERSTAGE_FRAGMENT;
+    }
+
+    const backend_formats: sdl.SDL_GPUShaderFormat = sdl.SDL_GetGPUShaderFormats(state.device);
+    if ((backend_formats & sdl.SDL_GPU_SHADERFORMAT_SPIRV) != 0) {
+        std.log.info("Loading {s} shader in SPIRV format.", .{ name });
+        format = sdl.SDL_GPU_SHADERFORMAT_SPIRV;
+        extension = ".spv";
+    } else if ((backend_formats & sdl.SDL_GPU_SHADERFORMAT_MSL) != 0) {
+        std.log.info("Loading {s} shader in MSL format.", .{ name });
+        format = sdl.SDL_GPU_SHADERFORMAT_MSL;
+        entrypoint = "main0";
+        extension = ".msl";
+    } else if ((backend_formats & sdl.SDL_GPU_SHADERFORMAT_DXIL) != 0) {
+        std.log.info("Loading {s} shader in DXIL format.", .{ name });
+        format = sdl.SDL_GPU_SHADERFORMAT_DXIL;
+        extension = ".dxil";
+    } else {
+        std.log.info("Unrecognized shader format: {d}", .{format});
+        @panic("Unrecognized shader format");
+    }
+
+    var buf: [128]u8 = undefined;
+    const file_name: []u8 = std.fmt.bufPrintZ(&buf, "assets/shaders/{s}{s}", .{ name, extension }) catch "";
+    var code_size: usize = 0;
+    if (sdl.SDL_LoadFile(file_name.ptr, &code_size)) |code| {
+        const shader_info: sdl.SDL_GPUShaderCreateInfo = .{
+            .code = @ptrCast(code),
+            .code_size = code_size,
+            .entrypoint = entrypoint.ptr,
+            .format = format,
+            .stage = stage,
+            .num_samplers = sampler_count,
+            .num_uniform_buffers = uniform_buffer_count,
+            .num_storage_buffers = storage_buffer_count,
+            .num_storage_textures = storage_texture_count,
+        };
+        shader = sdl.SDL_CreateGPUShader(state.device, &shader_info);
+    } else {
+        std.log.info("Failed to load shader file: {s}", .{ file_name });
+    }
+
+    return shader;
 }
