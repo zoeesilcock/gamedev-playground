@@ -1,7 +1,7 @@
 const std = @import("std");
 const runtime = @import("runtime");
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const internal = b.option(bool, "internal", "include debug interface") orelse true;
@@ -72,6 +72,30 @@ pub fn build(b: *std.Build) void {
     runtime.linkImgui(runtime_dep.builder, lib, target, optimize, internal);
 
     b.installArtifact(lib);
+
+    const compile_shaders_step = b.step("compile_shaders", "Compile shaders. (requires a working shadercross installation on the path)");
+    const shader_output_formats: []const []const u8 = &.{
+        "spv",
+        "msl",
+        "dxil",
+    };
+    const shaders: []const []const u8 = &.{
+        "cube.vert",
+        "solid_color.frag",
+    };
+    for (shaders) |shader| {
+        for (shader_output_formats) |shader_output_format| {
+            var input_buf: [128]u8 = undefined;
+            var output_buf: [128]u8 = undefined;
+            const compile_shader = b.addSystemCommand(&.{
+                "shadercross",
+                try std.fmt.bufPrint(&input_buf, "src/shaders/{s}.hlsl", .{ shader }),
+                "-o",
+                try std.fmt.bufPrint(&output_buf, "assets/shaders/{s}.{s}", .{ shader, shader_output_format }),
+            });
+            compile_shaders_step.dependOn(&compile_shader.step);
+        }
+    }
 
     if (!lib_only) {
         const test_step = b.step("test", "Run unit tests");
