@@ -150,48 +150,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         @panic("Failed to create vertex buffer.");
     }
 
-    var transfer_buffer_create_info: sdl.SDL_GPUTransferBufferCreateInfo = .{
-        .usage = sdl.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = @sizeOf(PositionColorVertex) * 3,
-    };
-    const opt_transfer_buffer: ?*sdl.SDL_GPUTransferBuffer = sdl.SDL_CreateGPUTransferBuffer(
-        state.device,
-        &transfer_buffer_create_info,
-    );
-    if (opt_transfer_buffer) |transfer_buffer| {
-        if (sdl.SDL_MapGPUTransferBuffer(state.device, transfer_buffer, false)) |data| {
-            var transfer_data: [*]PositionColorVertex = @ptrCast(@alignCast(data));
-            transfer_data[0] = .{ .x = -1, .y = -1, .z = 0, .r = 255, .g = 0, .b = 0, .a = 255 };
-            transfer_data[1] = .{ .x = 1, .y = -1, .z = 0, .r = 0, .g = 255, .b = 0, .a = 255 };
-            transfer_data[2] = .{ .x = 0, .y = 1, .z = 0, .r = 0, .g = 0, .b = 255, .a = 255 };
-
-            sdl.SDL_UnmapGPUTransferBuffer(state.device, transfer_buffer);
-
-            const upload_command_buffer: ?*sdl.SDL_GPUCommandBuffer = sdl.SDL_AcquireGPUCommandBuffer(state.device);
-            const copy_pass: ?*sdl.SDL_GPUCopyPass = sdl.SDL_BeginGPUCopyPass(upload_command_buffer);
-            sdl.SDL_UploadToGPUBuffer(
-                copy_pass,
-                &.{
-                    .transfer_buffer = transfer_buffer,
-                    .offset = 0,
-                },
-                &.{
-                    .buffer = state.vertex_buffer,
-                    .offset = 0,
-                    .size = @sizeOf(PositionColorVertex) * 3,
-                },
-                false,
-            );
-
-            sdl.SDL_EndGPUCopyPass(copy_pass);
-            _ = sdl.SDL_SubmitGPUCommandBuffer(upload_command_buffer);
-            sdl.SDL_ReleaseGPUTransferBuffer(state.device, transfer_buffer);
-        } else {
-            @panic("Failed to map transfer buffer to GPU.");
-        }
-    } else {
-        @panic("Failed to create transfer buffer.");
-    }
+    submitVertexData(state);
 
     return state;
 }
@@ -213,7 +172,8 @@ pub export fn willReload(state_ptr: *anyopaque) void {
 }
 
 pub export fn reloaded(state_ptr: *anyopaque) void {
-    _ = state_ptr;
+    const state: *State = @ptrCast(@alignCast(state_ptr));
+    submitVertexData(state);
 }
 
 pub export fn processInput(state_ptr: *anyopaque) bool {
@@ -258,12 +218,62 @@ pub export fn draw(state_ptr: *anyopaque) void {
         const render_pass: ?*sdl.SDL_GPURenderPass = sdl.SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1, null);
         sdl.SDL_BindGPUGraphicsPipeline(render_pass, state.fill_pipeline);
         sdl.SDL_BindGPUVertexBuffers(render_pass, 0, &.{ .buffer = state.vertex_buffer, .offset = 0 }, 1);
-        sdl.SDL_DrawGPUPrimitives(render_pass, 3, 1, 0, 0);
+        sdl.SDL_DrawGPUPrimitives(render_pass, 6, 1, 0, 0);
         sdl.SDL_EndGPURenderPass(render_pass);
     }
     if (!sdl.SDL_SubmitGPUCommandBuffer(command_buffer)) {
         std.log.err("Failed to submit GPU command buffer: {s}", .{sdl.SDL_GetError()});
     }
+}
+
+fn submitVertexData(state: *State) void {
+    var transfer_buffer_create_info: sdl.SDL_GPUTransferBufferCreateInfo = .{
+        .usage = sdl.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = @sizeOf(PositionColorVertex) * 3,
+    };
+    const opt_transfer_buffer: ?*sdl.SDL_GPUTransferBuffer = sdl.SDL_CreateGPUTransferBuffer(
+        state.device,
+        &transfer_buffer_create_info,
+    );
+    if (opt_transfer_buffer) |transfer_buffer| {
+        if (sdl.SDL_MapGPUTransferBuffer(state.device, transfer_buffer, false)) |data| {
+            var transfer_data: [*]PositionColorVertex = @ptrCast(@alignCast(data));
+            transfer_data[0] = .{ .x = -1, .y = -1, .z = 0, .r = 255, .g = 0, .b = 0, .a = 255 };
+            transfer_data[1] = .{ .x = 1, .y = -1, .z = 0, .r = 0, .g = 255, .b = 0, .a = 255 };
+            transfer_data[2] = .{ .x = 1, .y = 1, .z = 0, .r = 0, .g = 0, .b = 255, .a = 255 };
+
+            transfer_data[3] = .{ .x = -1, .y = -1, .z = 0, .r = 255, .g = 0, .b = 0, .a = 255 };
+            transfer_data[4] = .{ .x = -1, .y = 1, .z = 0, .r = 0, .g = 255, .b = 0, .a = 255 };
+            transfer_data[5] = .{ .x = 1, .y = 1, .z = 0, .r = 0, .g = 0, .b = 255, .a = 255 };
+
+            sdl.SDL_UnmapGPUTransferBuffer(state.device, transfer_buffer);
+
+            const upload_command_buffer: ?*sdl.SDL_GPUCommandBuffer = sdl.SDL_AcquireGPUCommandBuffer(state.device);
+            const copy_pass: ?*sdl.SDL_GPUCopyPass = sdl.SDL_BeginGPUCopyPass(upload_command_buffer);
+            sdl.SDL_UploadToGPUBuffer(
+                copy_pass,
+                &.{
+                    .transfer_buffer = transfer_buffer,
+                    .offset = 0,
+                },
+                &.{
+                    .buffer = state.vertex_buffer,
+                    .offset = 0,
+                    .size = @sizeOf(PositionColorVertex) * 6,
+                },
+                false,
+            );
+
+            sdl.SDL_EndGPUCopyPass(copy_pass);
+            _ = sdl.SDL_SubmitGPUCommandBuffer(upload_command_buffer);
+            sdl.SDL_ReleaseGPUTransferBuffer(state.device, transfer_buffer);
+        } else {
+            @panic("Failed to map transfer buffer to GPU.");
+        }
+    } else {
+        @panic("Failed to create transfer buffer.");
+    }
+
 }
 
 fn loadShader(
