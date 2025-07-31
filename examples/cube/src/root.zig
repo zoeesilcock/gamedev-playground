@@ -30,6 +30,7 @@ pub const State = struct {
     line_pipeline: *sdl.SDL_GPUGraphicsPipeline = undefined,
     vertex_buffer: *sdl.SDL_GPUBuffer = undefined,
     index_buffer: *sdl.SDL_GPUBuffer = undefined,
+    depth_stencil_texture: *sdl.SDL_GPUTexture = undefined,
 
     camera: Camera,
 };
@@ -180,6 +181,43 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     }
     defer sdl.SDL_ReleaseGPUShader(state.device, fragment_shader);
 
+    var depth_stencil_format: sdl.SDL_GPUTextureFormat = undefined;
+    if (sdl.SDL_GPUTextureSupportsFormat(
+        state.device,
+        sdl.SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,
+        sdl.SDL_GPU_TEXTURETYPE_2D,
+        sdl.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+    )) {
+        depth_stencil_format = sdl.SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
+    } else if (sdl.SDL_GPUTextureSupportsFormat(
+        state.device,
+        sdl.SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,
+        sdl.SDL_GPU_TEXTURETYPE_2D,
+        sdl.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+    )) {
+        depth_stencil_format = sdl.SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
+    } else {
+        @panic("Failed to find a supported stencil format");
+    }
+
+    if (sdl.SDL_CreateGPUTexture(
+        state.device,
+        &.{
+            .type = sdl.SDL_GPU_TEXTURETYPE_2D,
+            .width = window_width,
+            .height = window_height,
+            .layer_count_or_depth = 1,
+            .num_levels = 1,
+            .sample_count = sdl.SDL_GPU_SAMPLECOUNT_1,
+            .format = depth_stencil_format,
+            .usage = sdl.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+        },
+    )) |texture| {
+        state.depth_stencil_texture = texture;
+    } else {
+        @panic("Failed to create depth stencil texure");
+    }
+
     const color_target_descriptions: []const sdl.SDL_GPUColorTargetDescription = &.{.{
         .format = sdl.SDL_GetGPUSwapchainTextureFormat(state.device, state.window),
     }};
@@ -209,12 +247,21 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         .target_info = .{
             .num_color_targets = 1,
             .color_target_descriptions = color_target_descriptions.ptr,
+            .has_depth_stencil_target = true,
+            .depth_stencil_format = depth_stencil_format,
         },
         .vertex_input_state = .{
             .num_vertex_buffers = 1,
             .vertex_buffer_descriptions = vertex_buffer_descriptions.ptr,
             .num_vertex_attributes = 2,
             .vertex_attributes = vertex_attributes.ptr,
+        },
+        .depth_stencil_state = .{
+            .enable_depth_test = true,
+            .enable_depth_write = true,
+            .enable_stencil_test = false,
+            .compare_op = sdl.SDL_GPU_COMPAREOP_LESS,
+            .write_mask = 0xFF,
         },
         .primitive_type = sdl.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
         .vertex_shader = vertex_shader,
@@ -264,6 +311,8 @@ pub export fn deinit(state_ptr: *anyopaque) void {
 
     sdl.SDL_ReleaseGPUGraphicsPipeline(state.device, state.fill_pipeline);
     sdl.SDL_ReleaseGPUGraphicsPipeline(state.device, state.line_pipeline);
+
+    sdl.SDL_ReleaseGPUTexture(state.device, state.depth_stencil_texture);
 
     sdl.SDL_ReleaseGPUBuffer(state.device, state.vertex_buffer);
     sdl.SDL_ReleaseGPUBuffer(state.device, state.index_buffer);
@@ -321,7 +370,24 @@ pub export fn draw(state_ptr: *anyopaque) void {
             .load_op = sdl.SDL_GPU_LOADOP_CLEAR,
             .store_op = sdl.SDL_GPU_STOREOP_STORE,
         };
-        const render_pass: ?*sdl.SDL_GPURenderPass = sdl.SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1, null);
+
+        var depth_stencil_target_info: sdl.SDL_GPUDepthStencilTargetInfo = .{
+            .texture = state.depth_stencil_texture,
+            .cycle = true,
+            .clear_depth = 1,
+            .clear_stencil = 0,
+            .load_op = sdl.SDL_GPU_LOADOP_CLEAR,
+            .store_op = sdl.SDL_GPU_STOREOP_STORE,
+            .stencil_load_op = sdl.SDL_GPU_LOADOP_CLEAR,
+            .stencil_store_op = sdl.SDL_GPU_STOREOP_STORE,
+        };
+
+        const render_pass: ?*sdl.SDL_GPURenderPass = sdl.SDL_BeginGPURenderPass(
+            command_buffer,
+            &color_target_info,
+            1,
+            &depth_stencil_target_info,
+        );
         sdl.SDL_BindGPUGraphicsPipeline(render_pass, state.fill_pipeline);
         sdl.SDL_BindGPUVertexBuffers(render_pass, 0, &.{ .buffer = state.vertex_buffer, .offset = 0 }, 1);
         sdl.SDL_BindGPUIndexBuffer(render_pass, &.{ .buffer = state.index_buffer, .offset = 0 }, sdl.SDL_GPU_INDEXELEMENTSIZE_16BIT);
