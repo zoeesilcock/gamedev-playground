@@ -57,23 +57,23 @@ const Camera = struct {
     pub fn calculateMVPMatrix(self: *Camera) Matrix4x4 {
         const position = self.position;
         const one_over_fov: f32 = 1 / sdl.SDL_tanf(self.fov * 0.5);
-        const proj: Matrix4x4 = .new(
-            one_over_fov / self.aspect_ratio, 0, 0, 0,
-            0, one_over_fov, 0, 0,
-            0, 0, self.far_plane / (self.near_plane - self.far_plane), -1,
-            0, 0, (self.near_plane * self.far_plane) / (self.near_plane - self.far_plane), 0
-        );
+        const proj: Matrix4x4 = .new(.{
+            one_over_fov / self.aspect_ratio, 0,            0,                                                                       0,
+            0,                                one_over_fov, 0,                                                                       0,
+            0,                                0,            self.far_plane / (self.near_plane - self.far_plane),                     -1,
+            0,                                0,            (self.near_plane * self.far_plane) / (self.near_plane - self.far_plane), 0,
+        });
 
         const target_to_position = position - self.target;
         const vector_a: Vector3 = math.normalizeV3(target_to_position);
         const vector_b: Vector3 = math.normalizeV3(math.crossV3(self.up, vector_a));
         const vector_c: Vector3 = math.crossV3(vector_a, vector_b);
-        const view: Matrix4x4 = .new(
-            vector_b[X], vector_c[X], vector_a[X], 0,
-            vector_b[Y], vector_c[Y], vector_a[Y], 0,
-            vector_b[Z], vector_c[Z], vector_a[Z], 0,
+        const view: Matrix4x4 = .new(.{
+            vector_b[X],                     vector_c[X],                     vector_a[X],                     0,
+            vector_b[Y],                     vector_c[Y],                     vector_a[Y],                     0,
+            vector_b[Z],                     vector_c[Z],                     vector_a[Z],                     0,
             -math.dotV3(vector_b, position), -math.dotV3(vector_c, position), -math.dotV3(vector_a, position), 1,
-        );
+        });
 
         return view.multiply(proj);
     }

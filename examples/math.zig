@@ -58,62 +58,26 @@ pub fn dotV3(a: Vector3, b: Vector3) f32 {
 pub const Matrix4x4 = extern struct {
     values: [16]f32,
 
-    pub fn new(
-        row1col1: f32,
-        row1col2: f32,
-        row1col3: f32,
-        row1col4: f32,
-        row2col1: f32,
-        row2col2: f32,
-        row2col3: f32,
-        row2col4: f32,
-        row3col1: f32,
-        row3col2: f32,
-        row3col3: f32,
-        row3col4: f32,
-        row4col1: f32,
-        row4col2: f32,
-        row4col3: f32,
-        row4col4: f32,
-    ) Matrix4x4 {
-        return .{
-            .values = .{
-                row1col1,
-                row1col2,
-                row1col3,
-                row1col4,
-                row2col1,
-                row2col2,
-                row2col3,
-                row2col4,
-                row3col1,
-                row3col2,
-                row3col3,
-                row3col4,
-                row4col1,
-                row4col2,
-                row4col3,
-                row4col4,
-            }
-        };
+    pub fn new(in: [16]f32) Matrix4x4 {
+        return .{ .values = in };
     }
 
     pub fn zero() Matrix4x4 {
-        return .new(
+        return .new(.{
             0, 0, 0, 0,
             0, 0, 0, 0,
             0, 0, 0, 0,
-            0, 0, 0, 0
-        );
+            0, 0, 0, 0,
+        });
     }
 
     pub fn identity() Matrix4x4 {
-        return .new(
+        return .new(.{
             1, 0, 0, 0,
             0, 1, 0, 0,
             0, 0, 1, 0,
             0, 0, 0, 1,
-        );
+        });
     }
 
     pub fn multiply(a: Matrix4x4, b: Matrix4x4) Matrix4x4 {
@@ -155,4 +119,3 @@ pub const Matrix4x4 = extern struct {
         );
     }
 };
-
