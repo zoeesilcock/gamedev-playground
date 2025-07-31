@@ -29,6 +29,7 @@ pub const State = struct {
     fill_pipeline: *sdl.SDL_GPUGraphicsPipeline = undefined,
     line_pipeline: *sdl.SDL_GPUGraphicsPipeline = undefined,
     vertex_buffer: *sdl.SDL_GPUBuffer = undefined,
+    index_buffer: *sdl.SDL_GPUBuffer = undefined,
 
     camera: Camera,
 };
@@ -44,7 +45,7 @@ const Camera = struct {
 
     pub fn init(aspect_ratio: f32) Camera {
         return .{
-            .position = .{ 0, 0, 5 },
+            .position = .{ 5, 5, 5 },
             .target = .{ 0, 0, 0 },
             .up = .{ 0, 1, 0 },
             .fov = 75 * sdl.SDL_PI_F / 180,
@@ -87,6 +88,46 @@ const PositionColorVertex = struct {
     g: u8,
     b: u8,
     a: u8,
+};
+
+const VERTICES: []const PositionColorVertex = &.{
+    .{ .x = -1, .y = -1, .z = -1, .r = 255, .g = 0, .b = 0, .a = 255 },
+    .{ .x = 1, .y = -1, .z = -1, .r = 255, .g = 0, .b = 0, .a = 255 },
+    .{ .x = 1, .y = 1, .z = -1, .r = 255, .g = 0, .b = 0, .a = 255 },
+    .{ .x = -1, .y = 1, .z = -1, .r = 255, .g = 0, .b = 0, .a = 255 },
+
+    .{ .x = -1, .y = -1, .z = 1, .r = 0, .g = 255, .b = 0, .a = 255 },
+    .{ .x = 1, .y = -1, .z = 1, .r = 0, .g = 255, .b = 0, .a = 255 },
+    .{ .x = 1, .y = 1, .z = 1, .r = 0, .g = 255, .b = 0, .a = 255 },
+    .{ .x = -1, .y = 1, .z = 1, .r = 0, .g = 255, .b = 0, .a = 255 },
+
+    .{ .x = -1, .y = -1, .z = -1, .r = 0, .g = 255, .b = 0, .a = 255 },
+    .{ .x = -1, .y = 1, .z = -1, .r = 0, .g = 255, .b = 0, .a = 255 },
+    .{ .x = -1, .y = 1, .z = 1, .r = 0, .g = 255, .b = 0, .a = 255 },
+    .{ .x = -1, .y = -1, .z = 1, .r = 0, .g = 255, .b = 0, .a = 255 },
+
+    .{ .x = 1, .y = -1, .z = -1, .r = 0, .g = 0, .b = 255, .a = 255 },
+    .{ .x = 1, .y = 1, .z = -1, .r = 0, .g = 0, .b = 255, .a = 255 },
+    .{ .x = 1, .y = 1, .z = 1, .r = 0, .g = 0, .b = 255, .a = 255 },
+    .{ .x = 1, .y = -1, .z = 1, .r = 0, .g = 0, .b = 255, .a = 255 },
+
+    .{ .x = -1, .y = -1, .z = -1, .r = 127, .g = 127, .b = 0, .a = 255 },
+    .{ .x = -1, .y = -1, .z = 1, .r = 127, .g = 127, .b = 0, .a = 255 },
+    .{ .x = 1, .y = -1, .z = 1, .r = 127, .g = 127, .b = 0, .a = 255 },
+    .{ .x = 1, .y = -1, .z = -1, .r = 127, .g = 127, .b = 0, .a = 255 },
+
+    .{ .x = -1, .y = 1, .z = -1, .r = 0, .g = 127, .b = 127, .a = 255 },
+    .{ .x = -1, .y = 1, .z = 1, .r = 0, .g = 127, .b = 127, .a = 255 },
+    .{ .x = 1, .y = 1, .z = 1, .r = 0, .g = 127, .b = 127, .a = 255 },
+    .{ .x = 1, .y = 1, .z = -1, .r = 0, .g = 127, .b = 127, .a = 255 },
+};
+const INDICES: []const u16 = &.{
+    0,  1,  2,  0,  2,  3,
+    6,  5,  4,  7,  6,  4,
+    8,  9,  10, 8,  10, 11,
+    14, 13, 12, 15, 14, 12,
+    16, 17, 18, 16, 18, 19,
+    22, 21, 20, 23, 22, 20,
 };
 
 pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) *anyopaque {
@@ -196,12 +237,21 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
 
     var buffer_create_info: sdl.SDL_GPUBufferCreateInfo = .{
         .usage = sdl.SDL_GPU_BUFFERUSAGE_VERTEX,
-        .size = @sizeOf(PositionColorVertex) * 6,
+        .size = VERTICES.len * @sizeOf(PositionColorVertex),
     };
     if (sdl.SDL_CreateGPUBuffer(state.device, &buffer_create_info)) |buffer| {
         state.vertex_buffer = buffer;
     } else {
         @panic("Failed to create vertex buffer.");
+    }
+    buffer_create_info = .{
+        .usage = sdl.SDL_GPU_BUFFERUSAGE_INDEX,
+        .size = INDICES.len * @sizeOf(u16),
+    };
+    if (sdl.SDL_CreateGPUBuffer(state.device, &buffer_create_info)) |buffer| {
+        state.index_buffer = buffer;
+    } else {
+        @panic("Failed to create index buffer.");
     }
 
     submitVertexData(state);
@@ -216,6 +266,7 @@ pub export fn deinit(state_ptr: *anyopaque) void {
     sdl.SDL_ReleaseGPUGraphicsPipeline(state.device, state.line_pipeline);
 
     sdl.SDL_ReleaseGPUBuffer(state.device, state.vertex_buffer);
+    sdl.SDL_ReleaseGPUBuffer(state.device, state.index_buffer);
 
     sdl.SDL_ReleaseWindowFromGPUDevice(state.device, state.window);
     sdl.SDL_DestroyGPUDevice(state.device);
@@ -273,8 +324,9 @@ pub export fn draw(state_ptr: *anyopaque) void {
         const render_pass: ?*sdl.SDL_GPURenderPass = sdl.SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1, null);
         sdl.SDL_BindGPUGraphicsPipeline(render_pass, state.fill_pipeline);
         sdl.SDL_BindGPUVertexBuffers(render_pass, 0, &.{ .buffer = state.vertex_buffer, .offset = 0 }, 1);
+        sdl.SDL_BindGPUIndexBuffer(render_pass, &.{ .buffer = state.index_buffer, .offset = 0 }, sdl.SDL_GPU_INDEXELEMENTSIZE_16BIT);
         sdl.SDL_PushGPUVertexUniformData(command_buffer, 0, &mvp, @sizeOf(Matrix4x4));
-        sdl.SDL_DrawGPUPrimitives(render_pass, 6, 1, 0, 0);
+        sdl.SDL_DrawGPUIndexedPrimitives(render_pass, INDICES.len, 1, 0, 0, 0);
         sdl.SDL_EndGPURenderPass(render_pass);
     }
     if (!sdl.SDL_SubmitGPUCommandBuffer(command_buffer)) {
@@ -285,22 +337,20 @@ pub export fn draw(state_ptr: *anyopaque) void {
 fn submitVertexData(state: *State) void {
     var transfer_buffer_create_info: sdl.SDL_GPUTransferBufferCreateInfo = .{
         .usage = sdl.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = @sizeOf(PositionColorVertex) * 6,
+        .size = @sizeOf(PositionColorVertex) * VERTICES.len + @sizeOf(u16) * INDICES.len,
     };
     const opt_transfer_buffer: ?*sdl.SDL_GPUTransferBuffer = sdl.SDL_CreateGPUTransferBuffer(
         state.device,
         &transfer_buffer_create_info,
     );
+
     if (opt_transfer_buffer) |transfer_buffer| {
         if (sdl.SDL_MapGPUTransferBuffer(state.device, transfer_buffer, false)) |data| {
             var transfer_data: [*]PositionColorVertex = @ptrCast(@alignCast(data));
-            transfer_data[0] = .{ .x = -1, .y = -1, .z = 0, .r = 255, .g = 0, .b = 0, .a = 255 };
-            transfer_data[1] = .{ .x = 1, .y = -1, .z = 0, .r = 0, .g = 255, .b = 0, .a = 255 };
-            transfer_data[2] = .{ .x = 1, .y = 1, .z = 0, .r = 0, .g = 0, .b = 255, .a = 255 };
+            @memcpy(transfer_data[0..VERTICES.len], VERTICES);
 
-            transfer_data[3] = .{ .x = -1, .y = -1, .z = 0, .r = 255, .g = 0, .b = 0, .a = 255 };
-            transfer_data[4] = .{ .x = -1, .y = 1, .z = 0, .r = 0, .g = 255, .b = 0, .a = 255 };
-            transfer_data[5] = .{ .x = 1, .y = 1, .z = 0, .r = 0, .g = 0, .b = 255, .a = 255 };
+            var transfer_data2: [*]u16 = @ptrCast(@alignCast(transfer_data + VERTICES.len));
+            @memcpy(transfer_data2[0..INDICES.len], INDICES);
 
             sdl.SDL_UnmapGPUTransferBuffer(state.device, transfer_buffer);
 
@@ -315,7 +365,20 @@ fn submitVertexData(state: *State) void {
                 &.{
                     .buffer = state.vertex_buffer,
                     .offset = 0,
-                    .size = @sizeOf(PositionColorVertex) * 6,
+                    .size = VERTICES.len * @sizeOf(PositionColorVertex),
+                },
+                false,
+            );
+            sdl.SDL_UploadToGPUBuffer(
+                copy_pass,
+                &.{
+                    .transfer_buffer = transfer_buffer,
+                    .offset = VERTICES.len * @sizeOf(PositionColorVertex),
+                },
+                &.{
+                    .buffer = state.index_buffer,
+                    .offset = 0,
+                    .size = INDICES.len * @sizeOf(u16),
                 },
                 false,
             );
@@ -329,7 +392,6 @@ fn submitVertexData(state: *State) void {
     } else {
         @panic("Failed to create transfer buffer.");
     }
-
 }
 
 fn loadShader(
