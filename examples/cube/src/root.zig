@@ -1,9 +1,17 @@
 const std = @import("std");
 const sdl = @import("sdl").c;
+const math = @import("math");
 const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
 
 const INTERNAL: bool = @import("build_options").internal;
 const LOG_ALLOCATIONS: bool = @import("build_options").log_allocations;
+
+const Vector2 = math.Vector2;
+const Vector3 = math.Vector3;
+const Matrix4x4 = math.Matrix4x4;
+const X = math.X;
+const Y = math.Y;
+const Z = math.Z;
 
 const DebugAllocator = std.heap.DebugAllocator(.{
     .enable_memory_limit = true,
@@ -21,6 +29,54 @@ pub const State = struct {
     fill_pipeline: *sdl.SDL_GPUGraphicsPipeline = undefined,
     line_pipeline: *sdl.SDL_GPUGraphicsPipeline = undefined,
     vertex_buffer: *sdl.SDL_GPUBuffer = undefined,
+
+    camera: Camera,
+};
+
+const Camera = struct {
+    position: Vector3,
+    target: Vector3,
+    up: Vector3,
+    fov: f32,
+    aspect_ratio: f32,
+    near_plane: f32,
+    far_plane: f32,
+
+    pub fn init(aspect_ratio: f32) Camera {
+        return .{
+            .position = .{ 0, 0, 5 },
+            .target = .{ 0, 0, 0 },
+            .up = .{ 0, 1, 0 },
+            .fov = 75 * sdl.SDL_PI_F / 180,
+            .aspect_ratio = aspect_ratio,
+            .near_plane = 0.01,
+            .far_plane = 100,
+        };
+    }
+
+    pub fn calculateMVPMatrix(self: *Camera) Matrix4x4 {
+        const position = self.position;
+        const one_over_fov: f32 = 1 / sdl.SDL_tanf(self.fov * 0.5);
+        const proj: Matrix4x4 = .new(
+            one_over_fov / self.aspect_ratio, 0, 0, 0,
+            0, one_over_fov, 0, 0,
+            0, 0, self.far_plane / (self.near_plane - self.far_plane), -1,
+            0, 0, (self.near_plane * self.far_plane) / (self.near_plane - self.far_plane), 0
+        );
+
+        const target_to_position = position - self.target;
+        const vector_a: Vector3 = math.normalizeV3(target_to_position);
+        const vector_b: Vector3 = math.normalizeV3(math.crossV3(self.up, vector_a));
+        const vector_c: Vector3 = math.crossV3(vector_a, vector_b);
+        const view: Matrix4x4 = .new(
+            vector_b[X], vector_c[X], vector_a[X], 0,
+            vector_b[Y], vector_c[Y], vector_a[Y], 0,
+            vector_b[Z], vector_c[Z], vector_a[Z], 0,
+            -math.dotV3(vector_b, position), -math.dotV3(vector_c, position), -math.dotV3(vector_a, position), 1,
+        );
+
+        return view.multiply(proj);
+    }
 };
 
 const PositionColorVertex = struct {
@@ -34,9 +90,6 @@ const PositionColorVertex = struct {
 };
 
 pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) *anyopaque {
-    _ = window_width;
-    _ = window_height;
-
     var backing_allocator = std.heap.page_allocator;
     var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
     game_allocator.* = .init;
@@ -59,6 +112,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
             true,
             null,
         ).?,
+        .camera = Camera.init(@as(f32, @floatFromInt(window_width)) / @as(f32, @floatFromInt(window_height))),
     };
 
     const window_claimed = sdl.SDL_ClaimWindowForGPUDevice(state.device, state.window);
@@ -73,7 +127,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         state.debug_allocator.* = .init;
     }
 
-    const vertex_shader = loadShader(state, "cube.vert", 0, 0, 0, 0);
+    const vertex_shader = loadShader(state, "cube.vert", 0, 1, 0, 0);
     if (vertex_shader == null) {
         @panic("Failed to load vertex shader");
     }
@@ -142,7 +196,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
 
     var buffer_create_info: sdl.SDL_GPUBufferCreateInfo = .{
         .usage = sdl.SDL_GPU_BUFFERUSAGE_VERTEX,
-        .size = @sizeOf(PositionColorVertex) * 3,
+        .size = @sizeOf(PositionColorVertex) * 6,
     };
     if (sdl.SDL_CreateGPUBuffer(state.device, &buffer_create_info)) |buffer| {
         state.vertex_buffer = buffer;
@@ -209,6 +263,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
     }
 
     if (opt_swapchain_texture) |swapchain_texture| {
+        var mvp = state.camera.calculateMVPMatrix();
         var color_target_info: sdl.SDL_GPUColorTargetInfo = .{
             .texture = swapchain_texture,
             .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
@@ -218,6 +273,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
         const render_pass: ?*sdl.SDL_GPURenderPass = sdl.SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1, null);
         sdl.SDL_BindGPUGraphicsPipeline(render_pass, state.fill_pipeline);
         sdl.SDL_BindGPUVertexBuffers(render_pass, 0, &.{ .buffer = state.vertex_buffer, .offset = 0 }, 1);
+        sdl.SDL_PushGPUVertexUniformData(command_buffer, 0, &mvp, @sizeOf(Matrix4x4));
         sdl.SDL_DrawGPUPrimitives(render_pass, 6, 1, 0, 0);
         sdl.SDL_EndGPURenderPass(render_pass);
     }
@@ -229,7 +285,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
 fn submitVertexData(state: *State) void {
     var transfer_buffer_create_info: sdl.SDL_GPUTransferBufferCreateInfo = .{
         .usage = sdl.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = @sizeOf(PositionColorVertex) * 3,
+        .size = @sizeOf(PositionColorVertex) * 6,
     };
     const opt_transfer_buffer: ?*sdl.SDL_GPUTransferBuffer = sdl.SDL_CreateGPUTransferBuffer(
         state.device,
