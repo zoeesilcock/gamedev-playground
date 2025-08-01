@@ -76,26 +76,26 @@ const Camera = struct {
         const ad: f32 = a * d;
         const bd: f32 = b * d;
         return .new(.{
-            c * e, -c * f, d, 0,
-            bd * e + a * f, -bd * f + a * e, -b * c, 0,
-            -ad * e + b * f, ad * f + b * e, a * c, 0,
-            0, 0, 0, 1
+            c * e,           -c * f,          d,      0,
+            bd * e + a * f,  -bd * f + a * e, -b * c, 0,
+            -ad * e + b * f, ad * f + b * e,  a * c,  0,
+            0,               0,               0,      1,
         });
     }
 
     pub fn calculateMVPMatrix(self: *Camera, entity: Entity) Matrix4x4 {
         const translation: Matrix4x4 = .new(.{
-            1, 0, 0, 0,
-            0, 1, 0, 0,
-            0, 0, 1, 0,
+            1,                  0,                  0,                  0,
+            0,                  1,                  0,                  0,
+            0,                  0,                  1,                  0,
             entity.position[X], entity.position[Y], entity.position[Z], 1,
         });
         const rotation: Matrix4x4 = calculateRotationMatrix(entity.rotation);
         const scale: Matrix4x4 = .new(.{
-            entity.scale[X], 0, 0, 0,
-            0, entity.scale[Y], 0, 0,
-            0, 0, entity.scale[Z], 0,
-            0, 0, 0, 1,
+            entity.scale[X], 0,               0,               0,
+            0,               entity.scale[Y], 0,               0,
+            0,               0,               entity.scale[Z], 0,
+            0,               0,               0,               1,
         });
         const model: Matrix4x4 = translation.multiply(rotation).multiply(scale);
 
