@@ -13,6 +13,9 @@ const X = math.X;
 const Y = math.Y;
 const Z = math.Z;
 
+// TODO: Remove once Zig has finished migrating to unmanaged-style containers.
+const ArrayList = std.ArrayListUnmanaged;
+
 const DebugAllocator = std.heap.DebugAllocator(.{
     .enable_memory_limit = true,
     .retain_metadata = INTERNAL,
@@ -33,6 +36,13 @@ pub const State = struct {
     depth_stencil_texture: *sdl.SDL_GPUTexture = undefined,
 
     camera: Camera,
+    entities: ArrayList(Entity),
+};
+
+const Entity = struct {
+    position: Vector3 = .{ 0, 0, 0 },
+    scale: Vector3 = .{ 1, 1, 1 },
+    rotation: Vector3 = .{ 0, 0, 0 },
 };
 
 const Camera = struct {
@@ -56,7 +66,39 @@ const Camera = struct {
         };
     }
 
-    pub fn calculateMVPMatrix(self: *Camera) Matrix4x4 {
+    fn calculateRotationMatrix(rotation: Vector3) Matrix4x4 {
+        const a: f32 = @cos(rotation[X]);
+        const b: f32 = @sin(rotation[X]);
+        const c: f32 = @cos(rotation[Y]);
+        const d: f32 = @sin(rotation[Y]);
+        const e: f32 = @cos(rotation[Z]);
+        const f: f32 = @sin(rotation[Z]);
+        const ad: f32 = a * d;
+        const bd: f32 = b * d;
+        return .new(.{
+            c * e, -c * f, d, 0,
+            bd * e + a * f, -bd * f + a * e, -b * c, 0,
+            -ad * e + b * f, ad * f + b * e, a * c, 0,
+            0, 0, 0, 1
+        });
+    }
+
+    pub fn calculateMVPMatrix(self: *Camera, entity: Entity) Matrix4x4 {
+        const translation: Matrix4x4 = .new(.{
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            entity.position[X], entity.position[Y], entity.position[Z], 1,
+        });
+        const rotation: Matrix4x4 = calculateRotationMatrix(entity.rotation);
+        const scale: Matrix4x4 = .new(.{
+            entity.scale[X], 0, 0, 0,
+            0, entity.scale[Y], 0, 0,
+            0, 0, entity.scale[Z], 0,
+            0, 0, 0, 1,
+        });
+        const model: Matrix4x4 = translation.multiply(rotation).multiply(scale);
+
         const position = self.position;
         const one_over_fov: f32 = 1 / sdl.SDL_tanf(self.fov * 0.5);
         const proj: Matrix4x4 = .new(.{
@@ -77,7 +119,7 @@ const Camera = struct {
             -math.dotV3(vector_b, position), -math.dotV3(vector_c, position), -math.dotV3(vector_a, position), 1,
         });
 
-        return view.multiply(proj);
+        return model.multiply(view).multiply(proj);
     }
 };
 
@@ -155,7 +197,11 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
             null,
         ).?,
         .camera = Camera.init(@as(f32, @floatFromInt(window_width)) / @as(f32, @floatFromInt(window_height))),
+        .entities = .empty,
     };
+
+    const new_entity = state.entities.addOne(state.allocator) catch @panic("Failed to add entity");
+    new_entity.* = .{};
 
     const window_claimed = sdl.SDL_ClaimWindowForGPUDevice(state.device, state.window);
     if (!window_claimed) {
@@ -346,7 +392,12 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
 }
 
 pub export fn tick(state_ptr: *anyopaque) void {
-    _ = state_ptr;
+    const state: *State = @ptrCast(@alignCast(state_ptr));
+    const test_entity = &state.entities.items[0];
+    test_entity.rotation[Y] += 0.01;
+    if (test_entity.rotation[Y] > 360) {
+        test_entity.rotation[Y] -= 360;
+    }
 }
 
 pub export fn draw(state_ptr: *anyopaque) void {
@@ -363,7 +414,6 @@ pub export fn draw(state_ptr: *anyopaque) void {
     }
 
     if (opt_swapchain_texture) |swapchain_texture| {
-        var mvp = state.camera.calculateMVPMatrix();
         var color_target_info: sdl.SDL_GPUColorTargetInfo = .{
             .texture = swapchain_texture,
             .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
@@ -391,8 +441,13 @@ pub export fn draw(state_ptr: *anyopaque) void {
         sdl.SDL_BindGPUGraphicsPipeline(render_pass, state.fill_pipeline);
         sdl.SDL_BindGPUVertexBuffers(render_pass, 0, &.{ .buffer = state.vertex_buffer, .offset = 0 }, 1);
         sdl.SDL_BindGPUIndexBuffer(render_pass, &.{ .buffer = state.index_buffer, .offset = 0 }, sdl.SDL_GPU_INDEXELEMENTSIZE_16BIT);
-        sdl.SDL_PushGPUVertexUniformData(command_buffer, 0, &mvp, @sizeOf(Matrix4x4));
-        sdl.SDL_DrawGPUIndexedPrimitives(render_pass, INDICES.len, 1, 0, 0, 0);
+
+        for (state.entities.items) |entity| {
+            var mvp = state.camera.calculateMVPMatrix(entity);
+            sdl.SDL_PushGPUVertexUniformData(command_buffer, 0, &mvp, @sizeOf(Matrix4x4));
+            sdl.SDL_DrawGPUIndexedPrimitives(render_pass, INDICES.len, 1, 0, 0, 0);
+        }
+
         sdl.SDL_EndGPURenderPass(render_pass);
     }
     if (!sdl.SDL_SubmitGPUCommandBuffer(command_buffer)) {
