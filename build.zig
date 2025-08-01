@@ -183,6 +183,7 @@ fn createImGuiLib(
             imgui_dep.path("imgui_tables.cpp"),
             imgui_dep.path("imgui_widgets.cpp"),
             imgui_dep.path("backends/imgui_impl_sdlrenderer3.cpp"),
+            imgui_dep.path("backends/imgui_impl_sdlgpu3.cpp"),
             imgui_dep.path("backends/imgui_impl_sdl3.cpp"),
         };
 

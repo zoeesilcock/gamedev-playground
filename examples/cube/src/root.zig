@@ -1,5 +1,6 @@
 const std = @import("std");
 const sdl = @import("sdl").c;
+const imgui = @import("imgui");
 const math = @import("math");
 const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
 
@@ -34,6 +35,9 @@ pub const State = struct {
     vertex_buffer: *sdl.SDL_GPUBuffer = undefined,
     index_buffer: *sdl.SDL_GPUBuffer = undefined,
     depth_stencil_texture: *sdl.SDL_GPUTexture = undefined,
+
+    window_width: u32,
+    window_height: u32,
 
     camera: Camera,
     entities: ArrayList(Entity),
@@ -191,6 +195,8 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         .allocator = allocator,
         .game_allocator = game_allocator,
         .window = window,
+        .window_width = window_width,
+        .window_height = window_height,
         .device = sdl.SDL_CreateGPUDevice(
             sdl.SDL_GPU_SHADERFORMAT_SPIRV | sdl.SDL_GPU_SHADERFORMAT_DXIL | sdl.SDL_GPU_SHADERFORMAT_MSL,
             true,
@@ -200,6 +206,13 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         .entities = .empty,
     };
 
+    if (INTERNAL) {
+        state.debug_allocator = backing_allocator.create(DebugAllocator) catch {
+            @panic("Failed to initialize debug allocator.");
+        };
+        state.debug_allocator.* = .init;
+    }
+
     const new_entity = state.entities.addOne(state.allocator) catch @panic("Failed to add entity");
     new_entity.* = .{};
 
@@ -208,12 +221,12 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         @panic("Failed to claim window for GPU device.");
     }
 
-    if (INTERNAL) {
-        state.debug_allocator = backing_allocator.create(DebugAllocator) catch {
-            @panic("Failed to initialize debug allocator.");
-        };
-        state.debug_allocator.* = .init;
-    }
+    _ = sdl.SDL_SetGPUSwapchainParameters(
+        state.device,
+        state.window,
+        sdl.SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+        sdl.SDL_GPU_PRESENTMODE_MAILBOX,
+    );
 
     const vertex_shader = loadShader(state, "cube.vert", 0, 1, 0, 0);
     if (vertex_shader == null) {
@@ -349,11 +362,19 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
 
     submitVertexData(state);
 
+    if (INTERNAL) {
+        imgui.initGPU(state.window, state.device, @floatFromInt(window_width), @floatFromInt(window_height));
+    }
+
     return state;
 }
 
 pub export fn deinit(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
+
+    if (INTERNAL) {
+        imgui.deinit();
+    }
 
     sdl.SDL_ReleaseGPUGraphicsPipeline(state.device, state.fill_pipeline);
     sdl.SDL_ReleaseGPUGraphicsPipeline(state.device, state.line_pipeline);
@@ -369,11 +390,19 @@ pub export fn deinit(state_ptr: *anyopaque) void {
 
 pub export fn willReload(state_ptr: *anyopaque) void {
     _ = state_ptr;
+
+    if (INTERNAL) {
+        imgui.deinit();
+    }
 }
 
 pub export fn reloaded(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
     submitVertexData(state);
+
+    if (INTERNAL) {
+        imgui.initGPU(state.window, state.device, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
+    }
 }
 
 pub export fn processInput(state_ptr: *anyopaque) bool {
@@ -449,7 +478,16 @@ pub export fn draw(state_ptr: *anyopaque) void {
         }
 
         sdl.SDL_EndGPURenderPass(render_pass);
+
+        if (INTERNAL) {
+            imgui.newFrame();
+
+            // Imgui code goes here.
+
+            imgui.renderGPU(command_buffer, swapchain_texture);
+        }
     }
+
     if (!sdl.SDL_SubmitGPUCommandBuffer(command_buffer)) {
         std.log.err("Failed to submit GPU command buffer: {s}", .{sdl.SDL_GetError()});
     }
