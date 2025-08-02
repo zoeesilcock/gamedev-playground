@@ -39,6 +39,7 @@ pub extern fn ImGui_ImplSDLGPU3_RenderDrawData(draw_data: ?*c.ImDrawData, comman
 var im_context: ?*c.ImGuiContext = null;
 var backend: Backend = .Renderer;
 pub fn init(window: *sdl.SDL_Window, renderer: *sdl.SDL_Renderer, width: f32, height: f32) void {
+    backend = .Renderer;
     im_context = c.ImGui_CreateContext(null);
     c.ImGui_SetCurrentContext(im_context);
     {
@@ -55,6 +56,7 @@ pub fn init(window: *sdl.SDL_Window, renderer: *sdl.SDL_Renderer, width: f32, he
 }
 
 pub fn initGPU(window: *sdl.SDL_Window, device: *sdl.SDL_GPUDevice, width: f32, height: f32) void {
+    backend = .GPU;
     im_context = c.ImGui_CreateContext(null);
     c.ImGui_SetCurrentContext(im_context);
     {

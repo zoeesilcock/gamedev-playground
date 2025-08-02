@@ -1,6 +1,7 @@
 const std = @import("std");
 const sdl = @import("sdl").c;
 const imgui = @import("imgui");
+const internal = @import("internal");
 const math = @import("math");
 const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
 
@@ -13,6 +14,7 @@ const Matrix4x4 = math.Matrix4x4;
 const X = math.X;
 const Y = math.Y;
 const Z = math.Z;
+const FPSState = internal.FPSState;
 
 // TODO: Remove once Zig has finished migrating to unmanaged-style containers.
 const ArrayList = std.ArrayListUnmanaged;
@@ -27,6 +29,8 @@ pub const State = struct {
     game_allocator: *DebugAllocator,
     allocator: std.mem.Allocator,
     debug_allocator: *DebugAllocator = undefined,
+
+    fps_state: ?*FPSState = null,
 
     window: *sdl.SDL_Window,
     device: *sdl.SDL_GPUDevice,
@@ -211,6 +215,10 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
             @panic("Failed to initialize debug allocator.");
         };
         state.debug_allocator.* = .init;
+
+        state.fps_state =
+            state.debug_allocator.allocator().create(FPSState) catch @panic("Failed to allocate FPS state");
+        state.fps_state.?.init(sdl.SDL_GetPerformanceFrequency());
     }
 
     const new_entity = state.entities.addOne(state.allocator) catch @panic("Failed to add entity");
@@ -220,13 +228,6 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     if (!window_claimed) {
         @panic("Failed to claim window for GPU device.");
     }
-
-    _ = sdl.SDL_SetGPUSwapchainParameters(
-        state.device,
-        state.window,
-        sdl.SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
-        sdl.SDL_GPU_PRESENTMODE_MAILBOX,
-    );
 
     const vertex_shader = loadShader(state, "cube.vert", 0, 1, 0, 0);
     if (vertex_shader == null) {
@@ -406,7 +407,7 @@ pub export fn reloaded(state_ptr: *anyopaque) void {
 }
 
 pub export fn processInput(state_ptr: *anyopaque) bool {
-    _ = state_ptr;
+    const state: *State = @ptrCast(@alignCast(state_ptr));
 
     var continue_running: bool = true;
     var event: sdl.SDL_Event = undefined;
@@ -415,6 +416,15 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
             continue_running = false;
             break;
         }
+
+        if (event.type == sdl.SDL_EVENT_KEY_DOWN) {
+            switch (event.key.key) {
+                sdl.SDLK_F1 => {
+                    state.fps_state.?.toggleMode();
+                },
+                else => {},
+            }
+        }
     }
 
     return continue_running;
@@ -422,6 +432,11 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
 
 pub export fn tick(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
+
+    if (INTERNAL) {
+        state.fps_state.?.addFrameTime(sdl.SDL_GetPerformanceCounter());
+    }
+
     const test_entity = &state.entities.items[0];
     test_entity.rotation[Y] += 0.01;
     if (test_entity.rotation[Y] > 360) {
@@ -481,9 +496,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
 
         if (INTERNAL) {
             imgui.newFrame();
-
-            // Imgui code goes here.
-
+            state.fps_state.?.draw();
             imgui.renderGPU(command_buffer, swapchain_texture);
         }
     }
