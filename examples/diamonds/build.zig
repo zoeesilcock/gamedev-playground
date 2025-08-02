@@ -42,8 +42,9 @@ pub fn build(b: *std.Build) void {
         b.installArtifact(sdl_lib);
     }
 
-    const imgui_mod = runtime_dep.module("imgui");
     const sdl_mod = runtime_dep.module("sdl");
+    const imgui_mod = runtime_dep.module("imgui");
+    const internal_mod = runtime_dep.module("internal");
     const aseprite_mod = b.createModule(.{
         .root_source_file = b.path("../aseprite.zig"),
         .target = target,
@@ -70,6 +71,7 @@ pub fn build(b: *std.Build) void {
 
     module.addImport("sdl", sdl_mod);
     module.addImport("imgui", imgui_mod);
+    module.addImport("internal", internal_mod);
     module.addImport("math", math_mod);
     module.addImport("logging_allocator", logging_allocator_mod);
     module.addImport("aseprite", aseprite_mod);

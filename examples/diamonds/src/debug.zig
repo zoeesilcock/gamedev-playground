@@ -60,11 +60,6 @@ pub const DebugState = struct {
     show_colliders: bool,
     collisions: ArrayList(DebugCollision),
 
-    current_frame_index: u32,
-    frame_times: [MAX_FRAME_TIME_COUNT]u64,
-    fps_average: f32,
-    fps_display_mode: FPSDisplayMode,
-
     memory_usage: [MAX_MEMORY_USAGE_COUNT]u64,
     memory_usage_current_index: u32,
     memory_usage_last_collected_at: u64,
@@ -88,11 +83,6 @@ pub const DebugState = struct {
             .show_colliders = false,
             .collisions = .empty,
 
-            .current_frame_index = 0,
-            .frame_times = [1]u64{0} ** MAX_FRAME_TIME_COUNT,
-            .fps_average = 0,
-            .fps_display_mode = .Number,
-
             .memory_usage = [1]u64{0} ** MAX_MEMORY_USAGE_COUNT,
             .memory_usage_current_index = 0,
             .memory_usage_last_collected_at = 0,
@@ -112,27 +102,6 @@ pub const DebugState = struct {
             .collision = collision.*,
             .time_added = time,
         }) catch unreachable;
-    }
-
-    pub fn getPreviousFrameIndex(frame_index: u32) u32 {
-        var previous_frame_index: u32 = frame_index -% 1;
-        if (previous_frame_index > MAX_FRAME_TIME_COUNT) {
-            previous_frame_index = MAX_FRAME_TIME_COUNT - 1;
-        }
-        return previous_frame_index;
-    }
-
-    pub fn getFrameTime(self: *DebugState, frame_index: u32) f32 {
-        var elapsed: u64 = 0;
-        const previous_frame_index = getPreviousFrameIndex(frame_index);
-
-        const current_frame = self.frame_times[frame_index];
-        const previous_frame = self.frame_times[previous_frame_index];
-        if (current_frame > 0 and previous_frame > 0 and current_frame > previous_frame) {
-            elapsed = current_frame - previous_frame;
-        }
-
-        return @as(f32, @floatFromInt(elapsed)) / @as(f32, @floatFromInt(sdl.SDL_GetPerformanceFrequency()));
     }
 
     pub fn currentLevelName(self: *DebugState) []const u8 {
@@ -175,11 +144,7 @@ pub fn processInputEvent(state: *State, event: sdl.SDL_Event) void {
     if (event.type == sdl.SDL_EVENT_KEY_DOWN) {
         switch (event.key.key) {
             sdl.SDLK_F1 => {
-                var mode: u32 = @intFromEnum(state.debug_state.fps_display_mode) + 1;
-                if (mode >= @typeInfo(FPSDisplayMode).@"enum".fields.len) {
-                    mode = 0;
-                }
-                state.debug_state.fps_display_mode = @enumFromInt(mode);
+                state.fps_state.?.toggleMode();
             },
             sdl.SDLK_F2 => {
                 state.debug_state.memory_usage_display = !state.debug_state.memory_usage_display;
@@ -385,50 +350,7 @@ pub fn recordMemoryUsage(state: *State) void {
 pub fn drawDebugUI(state: *State) void {
     imgui.newFrame();
 
-    if (state.debug_state.fps_display_mode != .None) {
-        c_imgui.ImGui_SetNextWindowPosEx(c_imgui.ImVec2{ .x = 5, .y = 5 }, 0, c_imgui.ImVec2{ .x = 0, .y = 0 });
-        c_imgui.ImGui_SetNextWindowSize(c_imgui.ImVec2{ .x = 300, .y = 160 }, 0);
-
-        _ = c_imgui.ImGui_Begin(
-            "FPS",
-            null,
-            c_imgui.ImGuiWindowFlags_NoMove |
-                c_imgui.ImGuiWindowFlags_NoResize |
-                c_imgui.ImGuiWindowFlags_NoBackground |
-                c_imgui.ImGuiWindowFlags_NoTitleBar |
-                c_imgui.ImGuiWindowFlags_NoMouseInputs,
-        );
-
-        c_imgui.ImGui_TextColored(
-            c_imgui.ImVec4{ .x = 0, .y = 1, .z = 0, .w = 1 },
-            "FPS: %.0f",
-            state.debug_state.fps_average,
-        );
-
-        if (state.debug_state.fps_display_mode == .NumberAndGraph) {
-            var timings: [MAX_FRAME_TIME_COUNT]f32 = [1]f32{0} ** MAX_FRAME_TIME_COUNT;
-            var max_value: f32 = 0;
-            for (0..MAX_FRAME_TIME_COUNT) |i| {
-                timings[i] = state.debug_state.getFrameTime(@intCast(i));
-                if (timings[i] > max_value) {
-                    max_value = timings[i];
-                }
-            }
-            c_imgui.ImGui_PlotHistogramEx(
-                "##FPS_Graph",
-                &timings,
-                timings.len,
-                0,
-                "",
-                0,
-                max_value,
-                c_imgui.ImVec2{ .x = 300, .y = 100 },
-                @sizeOf(f32),
-            );
-        }
-
-        c_imgui.ImGui_End();
-    }
+    state.fps_state.?.draw();
 
     if (state.debug_state.memory_usage_display) {
         _ = c_imgui.ImGui_Begin(

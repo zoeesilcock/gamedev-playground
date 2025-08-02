@@ -42,7 +42,7 @@ pub fn buildExecutable(
         .optimize = optimize,
     });
 
-    const imgui_mod = b.addModule("imgui", .{
+    var imgui_mod = b.addModule("imgui", .{
         .root_source_file = b.path("src/imgui.zig"),
         .target = target,
         .optimize = optimize,
@@ -50,8 +50,19 @@ pub fn buildExecutable(
             .{ .name = "sdl", .module = sdl_mod },
         },
     });
+
+    const internal_mod = b.addModule("internal", .{
+        .root_source_file = b.path("src/internal.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "imgui", .module = imgui_mod },
+        },
+    });
+
     sdl_mod.addIncludePath(getSDLIncludePath(b, target, optimize));
     imgui_mod.addIncludePath(getSDLIncludePath(b, target, optimize));
+    internal_mod.addIncludePath(getSDLIncludePath(b, target, optimize));
     exe.root_module.addImport("sdl", sdl_mod);
 
     linkExeLibraries(b, exe, target, optimize);

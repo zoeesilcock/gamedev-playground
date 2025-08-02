@@ -1,5 +1,6 @@
 const std = @import("std");
 const sdl = @import("sdl").c;
+const internal = @import("internal");
 const aseprite = @import("aseprite");
 const entities = @import("entities.zig");
 const math = @import("math");
@@ -26,6 +27,7 @@ const TitleType = entities.TitleType;
 const TweenComponent = entities.TweenComponent;
 const TweenedValue = entities.TweenedValue;
 const Pool = pool.Pool;
+const FPSState = internal.FPSState;
 
 const Vector2 = math.Vector2;
 const X = math.X;
@@ -69,6 +71,7 @@ pub const State = struct {
 
     debug_allocator: *DebugAllocator = undefined,
     debug_state: *debug.DebugState = undefined,
+    fps_state: ?*FPSState = null,
 
     window: *sdl.SDL_Window,
     renderer: *sdl.SDL_Renderer,
@@ -470,6 +473,10 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         state.debug_allocator.* = .init;
         state.debug_state = state.debug_allocator.allocator().create(debug.DebugState) catch @panic("Out of memory");
         state.debug_state.init() catch @panic("Failed to init DebugState");
+
+        state.fps_state =
+            state.debug_allocator.allocator().create(FPSState) catch @panic("Failed to allocate FPS state");
+        state.fps_state.?.init(sdl.SDL_GetPerformanceFrequency());
     }
 
     loadAssets(state);
@@ -644,7 +651,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
     state.time = sdl.SDL_GetTicks();
 
     if (INTERNAL) {
-        debug.calculateFPS(state);
+        state.fps_state.?.addFrameTime(sdl.SDL_GetPerformanceCounter());
         debug.recordMemoryUsage(state);
     }
 
