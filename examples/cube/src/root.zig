@@ -105,7 +105,7 @@ const Camera = struct {
             0,               0,               entity.scale[Z], 0,
             0,               0,               0,               1,
         });
-        const model: Matrix4x4 = translation.multiply(rotation).multiply(scale);
+        const model: Matrix4x4 = translation.multiply(scale).multiply(rotation);
 
         const position = self.position;
         const one_over_fov: f32 = 1 / sdl.SDL_tanf(self.fov * 0.5);
