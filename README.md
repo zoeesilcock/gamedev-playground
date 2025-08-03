@@ -2,8 +2,16 @@
 
 Playground for exploring ways of making game development a more pleasurable experience.
 
-![Playground screenshot](/screenshot.png)
 
+## Examples
+
+### [Diamonds](examples/diamonds/README.md)
+This example is inspired by the classic game [Diamonds](https://en.wikipedia.org/wiki/Diamonds_\(video_game\)). The objective is to clear the screen of colored blocks without hitting spiky blocks. It uses the SDL3 Renderer API to render 2D sprites based on Aseprite files.
+![Playground screenshot](examples/diamonds/screenshot.png)
+
+### [Cube](examples/cube/README.md)
+This example uses the SDL3 GPU API to render a cube.
+![Playground screenshot](examples/cube/screenshot.png)
 
 
 ## Hot reloading
@@ -15,7 +23,7 @@ zig build -Dlib_only --watch
 ```
 
 
-## Build
+## Development
 The project is built using the zig build system, use `zig build -h` for a list of options or look at the `build.zig` file for more details.
 
 ### Dear ImgGui
@@ -26,32 +34,13 @@ zig build generate_imgui_bindings
 ```
 
 
-## Examples
-The project contains a simple game inspired by the classic game [Diamonds](https://en.wikipedia.org/wiki/Diamonds_\(video_game\)). The objective is to clear the screen of colored blocks without hitting spiky blocks. The game isn't the main focus of the project, it's used to explore the process of building a simple game.
+## Usage
+This project is morphing into a simple runtime for building games and applications using SDL and Zig. It is still in active development and doesn't expose options that are required to customize the resulting executable yet. See the examples for exact details on how to integrate it into your own projects.
 
-### Controls
-* Left arrow: Move the ball to the left.
-* Right arrow: Move the ball to the right.
-* P: Toggle pause.
-* F: Toggle fullscreen.
+### Build
+Building the runtime executable in a different project works by importing the dependency in the `build.zig` file and using the `buildExecutable` function to create the runtime executable which can then be installed using `installArtifact`.
 
-
-## Editor
-This approach aims to do as much of the editing directly in-game and offload to external editors for more complicated tasks.
-
-Hovering over entities with the mouse will highlight them.
-
-Clicking on them will bring up the inspector which shows all components and their fields and allows editing them.
-
-Double clicking on an entity will open it's sprite in Aseprite. This works particularly well together with hot reloading since you can double click a sprite, edit it, save it, and instantly see the result in-game.
-
-### Controls
-* C: Toggle collider outlines.
-* F1: Cycle between FPS display modes (none, number, or number and graph).
-* F2: Toggle the memory usage graph.
-* G: Toggle game state inspector.
-* E: Toggle level editor.
-* S: Save level.
-* L: Load level.
-* Alt/Option + click: Grabs the color and/or type of the clicked element like an eye dropper tool.
-
+### Modules
+* sdl - exposes the SDL C API.
+* imgui - exposes the ImGui C API and backend integrations for the SDL3 Renderer and SDL3 GPU APIs.
+* internal - exposes tools used to generate editors and tools for internal builds.
