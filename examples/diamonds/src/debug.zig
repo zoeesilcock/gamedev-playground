@@ -1,5 +1,6 @@
 const std = @import("std");
 const sdl = @import("sdl").c;
+const internal = @import("internal");
 const game = @import("root.zig");
 const entities = @import("entities.zig");
 const pool = @import("pool");
@@ -441,9 +442,9 @@ pub fn drawDebugUI(state: *State) void {
             return;
         }
 
-        inputEnum("Mode", &state.debug_state.mode);
-        inputEnum("Type", &state.debug_state.current_block_type);
-        inputEnum("Color", &state.debug_state.current_block_color);
+        internal.inputEnum("Mode", &state.debug_state.mode);
+        internal.inputEnum("Type", &state.debug_state.current_block_type);
+        internal.inputEnum("Color", &state.debug_state.current_block_color);
 
         c_imgui.ImGui_End();
     }
@@ -459,7 +460,7 @@ pub fn drawDebugUI(state: *State) void {
         _ = c_imgui.ImGui_Begin("Inspector", null, c_imgui.ImGuiWindowFlags_NoFocusOnAppearing);
         defer c_imgui.ImGui_End();
 
-        inspectEntity(selected_entity);
+        internal.inspectStruct(selected_entity, &.{ "entity", "is_in_use" }, true, &inputCustomTypes);
     }
 
     if (state.debug_state.show_state_inspector) {
@@ -473,93 +474,39 @@ pub fn drawDebugUI(state: *State) void {
         _ = c_imgui.ImGui_Begin("Game state", null, c_imgui.ImGuiWindowFlags_NoFocusOnAppearing);
         defer c_imgui.ImGui_End();
 
-        inspectState(state);
+        internal.inspectStruct(state, &.{"entity"}, false, &inputCustomTypes);
     }
 
     imgui.render(state.renderer);
 }
 
-fn inspectEntity(entity: *Entity) void {
-    inspectStruct(entity, &.{ "entity", "is_in_use" }, true);
-}
-
-fn inspectState(state: *State) void {
-    inspectStruct(state, &.{"entity"}, false);
-}
-
-fn inspectStruct(struct_ptr: anytype, ignored_fields: []const []const u8, expand_sections: bool) void {
-    const struct_info = @typeInfo(@TypeOf(struct_ptr.*));
-    switch (struct_info) {
-        .@"struct" => {
-            inline for (struct_info.@"struct".fields) |struct_field| {
-                var skip_field = false;
-                for (ignored_fields) |ignored| {
-                    if (std.mem.eql(u8, ignored, struct_field.name)) {
-                        skip_field = true;
-                        break;
-                    }
-                }
-
-                if (!skip_field) {
-                    const field_ptr = &@field(struct_ptr, struct_field.name);
-                    const field_ptr_info = @typeInfo(@TypeOf(field_ptr.*));
-                    switch (field_ptr_info) {
-                        .pointer => |p| {
-                            if (p.is_const) {
-                                displayConst(struct_field, field_ptr);
-                            } else {
-                                inputStruct(struct_field, field_ptr, ignored_fields, expand_sections);
-                            }
-                        },
-                        else => {
-                            inputStruct(struct_field, field_ptr, ignored_fields, expand_sections);
-                        },
-                    }
-                }
-            }
-        },
-        else => {},
-    }
-}
-
-fn displayConst(
+fn inputCustomTypes(
     struct_field: std.builtin.Type.StructField,
     field_ptr: anytype,
-) void {
-    switch (@TypeOf(field_ptr.*)) {
-        []const u8 => {
-            c_imgui.ImGui_LabelText(struct_field.name, field_ptr.ptr);
-        },
-        else => {
-            c_imgui.ImGui_LabelText(struct_field.name, "unknown const");
-        },
-    }
-}
+) bool {
+    var handled: bool = true;
 
-fn inputStruct(
-    struct_field: std.builtin.Type.StructField,
-    field_ptr: anytype,
-    ignored_fields: []const []const u8,
-    expand_sections: bool,
-) void {
     switch (@TypeOf(field_ptr.*)) {
-        bool => {
-            inputBool(struct_field.name, field_ptr);
-        },
-        f32 => {
-            inputF32(struct_field.name, field_ptr);
-        },
-        u32 => {
-            inputU32(struct_field.name, field_ptr);
-        },
-        i32 => {
-            inputI32(struct_field.name, field_ptr);
-        },
-        u64 => {
-            inputU64(struct_field.name, field_ptr);
-        },
         Vector2 => {
-            inputVector2(struct_field.name, field_ptr);
+            c_imgui.ImGui_PushIDPtr(field_ptr);
+            defer c_imgui.ImGui_PopID();
+
+            _ = c_imgui.ImGui_InputFloat2Ex(struct_field.name, @ptrCast(field_ptr), "%.2f", 0);
+        },
+        Color => {
+            c_imgui.ImGui_PushIDPtr(field_ptr);
+            defer c_imgui.ImGui_PopID();
+
+            _ = c_imgui.ImGui_InputScalarNEx(
+                struct_field.name,
+                c_imgui.ImGuiDataType_U8,
+                @ptrCast(field_ptr),
+                4,
+                null,
+                null,
+                null,
+                0,
+            );
         },
         EntityId => {
             const entity_id: *EntityId = @ptrCast(field_ptr);
@@ -584,152 +531,10 @@ fn inputStruct(
                 }
             }
         },
-        else => {
-            const field_info = @typeInfo(@TypeOf(field_ptr.*));
-            switch (field_info) {
-                .optional => |o| {
-                    const child_info = @typeInfo(o.child);
-                    switch (child_info) {
-                        .pointer => |p| {
-                            if (p.size == .one) {
-                                if (field_ptr.*) |inner| {
-                                    inputStructSection(inner, struct_field.name, ignored_fields, expand_sections);
-                                } else {
-                                    inputNull(struct_field.name);
-                                }
-                            }
-                        },
-                        else => {
-                            if (field_ptr.*) |inner| {
-                                var mutable_inner = inner;
-                                inputStructSection(&mutable_inner, struct_field.name, ignored_fields, expand_sections);
-                            } else {
-                                inputNull(struct_field.name);
-                            }
-                        },
-                    }
-                },
-                .pointer => |p| {
-                    const inner_info = @typeInfo(p.child);
-                    if (p.size == .one) {
-                        switch (inner_info) {
-                            .@"struct" => {
-                                inputStructSection(field_ptr.*, struct_field.name, ignored_fields, expand_sections);
-                            },
-                            else => {},
-                        }
-                    }
-                },
-                .@"enum" => {
-                    inputEnum(struct_field.name, field_ptr);
-                },
-                .@"struct" => {
-                    inputStructSection(field_ptr, struct_field.name, ignored_fields, expand_sections);
-                },
-                else => {},
-            }
-        },
-    }
-}
-
-fn inputStructSection(
-    target: anytype,
-    heading: ?[*:0]const u8,
-    ignored_fields: []const []const u8,
-    expand_sections: bool,
-) void {
-    c_imgui.ImGui_PushIDPtr(@ptrCast(heading));
-    defer c_imgui.ImGui_PopID();
-
-    const section_flags =
-        if (expand_sections) c_imgui.ImGuiTreeNodeFlags_DefaultOpen else c_imgui.ImGuiTreeNodeFlags_None;
-    if (c_imgui.ImGui_CollapsingHeaderBoolPtr(heading, null, section_flags)) {
-        c_imgui.ImGui_Indent();
-        switch (@typeInfo(@TypeOf(target))) {
-            .pointer => |ptr_info| {
-                if (@typeInfo(ptr_info.child) != .@"opaque" and ptr_info.size == .one) {
-                    inspectStruct(target, ignored_fields, expand_sections);
-                }
-            },
-            else => {
-                inspectStruct(target, ignored_fields, expand_sections);
-            },
-        }
-        c_imgui.ImGui_Unindent();
-    }
-}
-
-fn inputNull(comptime heading: [:0]const u8) void {
-    c_imgui.ImGui_PushIDPtr(@ptrCast(heading));
-    defer c_imgui.ImGui_PopID();
-
-    c_imgui.ImGui_LabelText(heading, "null");
-}
-
-fn inputBool(heading: ?[*:0]const u8, value: *bool) void {
-    c_imgui.ImGui_PushIDPtr(value);
-    defer c_imgui.ImGui_PopID();
-
-    _ = c_imgui.ImGui_Checkbox(heading, value);
-}
-
-fn inputF32(heading: ?[*:0]const u8, value: *f32) void {
-    c_imgui.ImGui_PushIDPtr(value);
-    defer c_imgui.ImGui_PopID();
-
-    _ = c_imgui.ImGui_InputFloatEx(heading, value, 0.1, 1, "%.2f", 0);
-}
-
-fn inputU32(heading: ?[*:0]const u8, value: *u32) void {
-    c_imgui.ImGui_PushIDPtr(value);
-    defer c_imgui.ImGui_PopID();
-
-    _ = c_imgui.ImGui_InputScalarEx(heading, c_imgui.ImGuiDataType_U32, @ptrCast(value), null, null, null, 0);
-}
-
-fn inputI32(heading: ?[*:0]const u8, value: *u32) void {
-    c_imgui.ImGui_PushIDPtr(value);
-    defer c_imgui.ImGui_PopID();
-
-    _ = c_imgui.ImGui_InputScalarEx(heading, c_imgui.ImGuiDataType_I32, @ptrCast(value), null, null, null, 0);
-}
-
-fn inputU64(heading: ?[*:0]const u8, value: *u64) void {
-    c_imgui.ImGui_PushIDPtr(value);
-    defer c_imgui.ImGui_PopID();
-
-    _ = c_imgui.ImGui_InputScalarEx(heading, c_imgui.ImGuiDataType_U64, @ptrCast(value), null, null, null, 0);
-}
-
-fn inputVector2(heading: ?[*:0]const u8, value: *Vector2) void {
-    c_imgui.ImGui_PushIDPtr(value);
-    defer c_imgui.ImGui_PopID();
-
-    _ = c_imgui.ImGui_InputFloat2Ex(heading, @ptrCast(value), "%.2f", 0);
-}
-
-fn inputColorU8(heading: ?[*:0]const u8, value: *Color) void {
-    c_imgui.ImGui_PushIDPtr(value);
-    defer c_imgui.ImGui_PopID();
-
-    _ = c_imgui.ImGui_InputScalarNEx(heading, c_imgui.ImGuiDataType_U8, @ptrCast(value), 4, null, null, null, 0);
-}
-
-fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
-    const field_info = @typeInfo(@TypeOf(value.*));
-    const count: u32 = field_info.@"enum".fields.len;
-    var items: [count][*:0]const u8 = [1][*:0]const u8{undefined} ** count;
-    inline for (field_info.@"enum".fields, 0..) |enum_field, i| {
-        items[i] = enum_field.name;
+        else => handled = false,
     }
 
-    c_imgui.ImGui_PushIDPtr(value);
-    defer c_imgui.ImGui_PopID();
-
-    var current_item: i32 = @intFromEnum(value.*);
-    if (c_imgui.ImGui_ComboCharEx(heading, &current_item, &items, count, 0)) {
-        value.* = @enumFromInt(current_item);
-    }
+    return handled;
 }
 
 pub fn drawDebugOverlay(state: *State) void {
