@@ -7,7 +7,6 @@ const pool = @import("pool");
 const math = @import("math");
 const imgui = @import("imgui");
 
-const c_imgui = imgui.c;
 const State = game.State;
 const Assets = game.Assets;
 const SpriteAsset = game.SpriteAsset;
@@ -354,15 +353,15 @@ pub fn drawDebugUI(state: *State) void {
     state.fps_state.?.draw();
 
     if (state.debug_state.memory_usage_display) {
-        _ = c_imgui.ImGui_Begin(
+        _ = imgui.c.ImGui_Begin(
             "MemoryUsage",
             null,
-            c_imgui.ImGuiWindowFlags_NoFocusOnAppearing |
-                c_imgui.ImGuiWindowFlags_NoNavFocus |
-                c_imgui.ImGuiWindowFlags_NoNavInputs,
+            imgui.c.ImGuiWindowFlags_NoFocusOnAppearing |
+                imgui.c.ImGuiWindowFlags_NoNavFocus |
+                imgui.c.ImGuiWindowFlags_NoNavInputs,
         );
 
-        _ = c_imgui.ImGui_Text(
+        _ = imgui.c.ImGui_Text(
             "Bytes: %d",
             state.debug_state.memory_usage[state.debug_state.memory_usage_current_index],
         );
@@ -381,7 +380,7 @@ pub fn drawDebugUI(state: *State) void {
         }
         var buf: [100]u8 = undefined;
         const min_text = std.fmt.bufPrintZ(&buf, "min: {d}", .{min_value}) catch "";
-        c_imgui.ImGui_PlotHistogramEx(
+        imgui.c.ImGui_PlotHistogramEx(
             "##MemoryUsageGraph",
             &memory_usage,
             memory_usage.len,
@@ -389,28 +388,28 @@ pub fn drawDebugUI(state: *State) void {
             min_text.ptr,
             min_value,
             max_value,
-            c_imgui.ImVec2{ .x = 300, .y = 100 },
+            imgui.c.ImVec2{ .x = 300, .y = 100 },
             @sizeOf(f32),
         );
 
-        c_imgui.ImGui_End();
+        imgui.c.ImGui_End();
     }
 
     if (state.debug_state.show_editor) {
-        const button_size: c_imgui.ImVec2 = c_imgui.ImVec2{ .x = 140, .y = 20 };
-        const half_button_size: c_imgui.ImVec2 = c_imgui.ImVec2{ .x = 65, .y = 20 };
+        const button_size: imgui.c.ImVec2 = imgui.c.ImVec2{ .x = 140, .y = 20 };
+        const half_button_size: imgui.c.ImVec2 = imgui.c.ImVec2{ .x = 65, .y = 20 };
 
-        c_imgui.ImGui_SetNextWindowSize(c_imgui.ImVec2{ .x = 160, .y = 200 }, 0);
+        imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 160, .y = 200 }, 0);
 
-        _ = c_imgui.ImGui_Begin(
+        _ = imgui.c.ImGui_Begin(
             "Editor",
             null,
-            c_imgui.ImGuiWindowFlags_NoFocusOnAppearing |
-                c_imgui.ImGuiWindowFlags_NoNavFocus |
-                c_imgui.ImGuiWindowFlags_NoNavInputs,
+            imgui.c.ImGuiWindowFlags_NoFocusOnAppearing |
+                imgui.c.ImGuiWindowFlags_NoNavFocus |
+                imgui.c.ImGuiWindowFlags_NoNavInputs,
         );
 
-        _ = c_imgui.ImGui_InputTextEx(
+        _ = imgui.c.ImGui_InputTextEx(
             "Name",
             @ptrCast(&state.debug_state.current_level_name),
             state.debug_state.current_level_name.len,
@@ -419,15 +418,15 @@ pub fn drawDebugUI(state: *State) void {
             null,
         );
 
-        if (c_imgui.ImGui_ButtonEx("Load", half_button_size)) {
+        if (imgui.c.ImGui_ButtonEx("Load", half_button_size)) {
             game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
         }
-        c_imgui.ImGui_SameLineEx(0, 10);
-        if (c_imgui.ImGui_ButtonEx("Save", half_button_size)) {
+        imgui.c.ImGui_SameLineEx(0, 10);
+        if (imgui.c.ImGui_ButtonEx("Save", half_button_size)) {
             saveLevel(state, state.debug_state.currentLevelName()) catch unreachable;
         }
 
-        if (c_imgui.ImGui_ButtonEx("Test level", button_size)) {
+        if (imgui.c.ImGui_ButtonEx("Test level", button_size)) {
             state.debug_state.show_editor = false;
             state.debug_state.testing_level = true;
             state.paused = false;
@@ -435,8 +434,8 @@ pub fn drawDebugUI(state: *State) void {
             game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
         }
 
-        if (c_imgui.ImGui_ButtonEx("Restart", button_size)) {
-            c_imgui.ImGui_End();
+        if (imgui.c.ImGui_ButtonEx("Restart", button_size)) {
+            imgui.c.ImGui_End();
 
             game.restart(state);
             return;
@@ -446,33 +445,33 @@ pub fn drawDebugUI(state: *State) void {
         internal.inputEnum("Type", &state.debug_state.current_block_type);
         internal.inputEnum("Color", &state.debug_state.current_block_color);
 
-        c_imgui.ImGui_End();
+        imgui.c.ImGui_End();
     }
 
     if (state.getEntity(state.debug_state.selected_entity_id)) |selected_entity| {
-        c_imgui.ImGui_SetNextWindowPosEx(
-            c_imgui.ImVec2{ .x = 30, .y = 30 },
-            c_imgui.ImGuiCond_FirstUseEver,
-            c_imgui.ImVec2{ .x = 0, .y = 0 },
+        imgui.c.ImGui_SetNextWindowPosEx(
+            imgui.c.ImVec2{ .x = 30, .y = 30 },
+            imgui.c.ImGuiCond_FirstUseEver,
+            imgui.c.ImVec2{ .x = 0, .y = 0 },
         );
-        c_imgui.ImGui_SetNextWindowSize(c_imgui.ImVec2{ .x = 300, .y = 540 }, c_imgui.ImGuiCond_FirstUseEver);
+        imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 300, .y = 540 }, imgui.c.ImGuiCond_FirstUseEver);
 
-        _ = c_imgui.ImGui_Begin("Inspector", null, c_imgui.ImGuiWindowFlags_NoFocusOnAppearing);
-        defer c_imgui.ImGui_End();
+        _ = imgui.c.ImGui_Begin("Inspector", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
+        defer imgui.c.ImGui_End();
 
         internal.inspectStruct(selected_entity, &.{ "entity", "is_in_use" }, true, &inputCustomTypes);
     }
 
     if (state.debug_state.show_state_inspector) {
-        c_imgui.ImGui_SetNextWindowPosEx(
-            c_imgui.ImVec2{ .x = 350, .y = 30 },
-            c_imgui.ImGuiCond_FirstUseEver,
-            c_imgui.ImVec2{ .x = 0, .y = 0 },
+        imgui.c.ImGui_SetNextWindowPosEx(
+            imgui.c.ImVec2{ .x = 350, .y = 30 },
+            imgui.c.ImGuiCond_FirstUseEver,
+            imgui.c.ImVec2{ .x = 0, .y = 0 },
         );
-        c_imgui.ImGui_SetNextWindowSize(c_imgui.ImVec2{ .x = 300, .y = 540 }, c_imgui.ImGuiCond_FirstUseEver);
+        imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 300, .y = 540 }, imgui.c.ImGuiCond_FirstUseEver);
 
-        _ = c_imgui.ImGui_Begin("Game state", null, c_imgui.ImGuiWindowFlags_NoFocusOnAppearing);
-        defer c_imgui.ImGui_End();
+        _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
+        defer imgui.c.ImGui_End();
 
         internal.inspectStruct(state, &.{"entity"}, false, &inputCustomTypes);
     }
@@ -488,18 +487,18 @@ fn inputCustomTypes(
 
     switch (@TypeOf(field_ptr.*)) {
         Vector2 => {
-            c_imgui.ImGui_PushIDPtr(field_ptr);
-            defer c_imgui.ImGui_PopID();
+            imgui.c.ImGui_PushIDPtr(field_ptr);
+            defer imgui.c.ImGui_PopID();
 
-            _ = c_imgui.ImGui_InputFloat2Ex(struct_field.name, @ptrCast(field_ptr), "%.2f", 0);
+            _ = imgui.c.ImGui_InputFloat2Ex(struct_field.name, @ptrCast(field_ptr), "%.2f", 0);
         },
         Color => {
-            c_imgui.ImGui_PushIDPtr(field_ptr);
-            defer c_imgui.ImGui_PopID();
+            imgui.c.ImGui_PushIDPtr(field_ptr);
+            defer imgui.c.ImGui_PopID();
 
-            _ = c_imgui.ImGui_InputScalarNEx(
+            _ = imgui.c.ImGui_InputScalarNEx(
                 struct_field.name,
-                c_imgui.ImGuiDataType_U8,
+                imgui.c.ImGuiDataType_U8,
                 @ptrCast(field_ptr),
                 4,
                 null,
@@ -516,18 +515,18 @@ fn inputCustomTypes(
                 "{d} ({d})",
                 .{ entity_id.index, entity_id.generation },
             ) catch "";
-            c_imgui.ImGui_LabelText("EntityId", id);
+            imgui.c.ImGui_LabelText("EntityId", id);
         },
         PoolId => {
             const pool_id: *PoolId = @ptrCast(field_ptr);
             var buf: [64]u8 = undefined;
             const id = std.fmt.bufPrintZ(&buf, "pool index: {d}", .{pool_id.index}) catch "";
-            c_imgui.ImGui_Text(id.ptr);
+            imgui.c.ImGui_Text(id.ptr);
         },
         EntityType => {
             inline for (@typeInfo(EntityType).@"enum".fields, 0..) |field, i| {
                 if (@intFromEnum(field_ptr.*) == i) {
-                    c_imgui.ImGui_LabelText("Type", field.name);
+                    imgui.c.ImGui_LabelText("Type", field.name);
                 }
             }
         },
