@@ -6,7 +6,13 @@ const PLATFORM = @import("builtin").os.tag;
 const LIB_BASE_NAME = @import("build_options").lib_base_name;
 
 const LIB_DIRECTORY = if (PLATFORM == .windows) "zig-out/bin/" else "zig-out/lib/";
-const LIB_NAME = if (PLATFORM == .windows) LIB_BASE_NAME ++ ".dll" else "lib" ++ LIB_BASE_NAME ++ ".dylib";
+const LIB_NAME =
+    if (PLATFORM == .windows)
+        LIB_BASE_NAME ++ ".dll"
+    else if (PLATFORM == .macos)
+        "lib" ++ LIB_BASE_NAME ++ ".dylib"
+    else
+        "lib" ++ LIB_BASE_NAME ++ ".so";
 const LIB_NAME_RUNTIME = if (PLATFORM == .windows and DEBUG) LIB_BASE_NAME ++ "_temp.dll" else LIB_NAME;
 
 const WINDOW_WIDTH = if (DEBUG) 800 else 1600;
