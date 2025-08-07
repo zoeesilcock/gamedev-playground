@@ -7,14 +7,17 @@
         .sdl = .{
             .url = "git+https://github.com/castholm/SDL.git#v0.2.5+3.2.18",
             .hash = "1220ca3b04ae6dc839fc2896e1f5da839208b2257f8e72dd9290cceaefbdc19d5b7b",
+            .lazy = true,
         },
         .imgui = .{
             .url = "git+https://github.com/ocornut/imgui.git?ref=v1.92.1-docking#44aa9a4b3a6f27d09a4eb5770d095cbd376dfc4b",
             .hash = "1220232253d1937e8637cd68a873abc00b5f99365d39c0e0e3604c14225ee3344a39",
+            .lazy = true,
         },
         .dear_bindings = .{
             .url = "git+https://github.com/dearimgui/dear_bindings.git?ref=DearBindings_v0.16_ImGui_v1.92.1-docking#089a24e9d9dd9b9ab950566a56f4c778e74fd70e",
             .hash = "12204facbdecf41077398715569720a443707ef97051f30790e1e4c4046528a0b6dc",
+            .lazy = true,
         },
     },
     .paths = .{

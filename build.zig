@@ -60,10 +60,13 @@ pub fn buildExecutable(
         },
     });
 
-    sdl_mod.addIncludePath(getSDLIncludePath(b, target, optimize));
-    imgui_mod.addIncludePath(getSDLIncludePath(b, target, optimize));
-    internal_mod.addIncludePath(getSDLIncludePath(b, target, optimize));
-    exe.root_module.addImport("sdl", sdl_mod);
+    if (getSDLIncludePath(b, target, optimize)) |sdl_include_path| {
+        sdl_mod.addIncludePath(sdl_include_path);
+        imgui_mod.addIncludePath(sdl_include_path);
+        internal_mod.addIncludePath(sdl_include_path);
+
+        exe.root_module.addImport("sdl", sdl_mod);
+    }
 
     linkExeLibraries(b, exe, target, optimize);
 
@@ -137,8 +140,8 @@ pub fn getSDLIncludePath(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-) std.Build.LazyPath {
-    var result: std.Build.LazyPath = undefined;
+) ?std.Build.LazyPath {
+    var result: ?std.Build.LazyPath = null;
 
     if (b.lazyDependency("sdl", .{
         .target = target,
@@ -222,22 +225,24 @@ fn generateImGuiBindingsStep(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) void {
-    const imgui_dep = b.dependency("imgui", .{
+    if (b.lazyDependency("imgui", .{
         .target = target,
         .optimize = optimize,
-    });
-    const dear_bindings_dep = b.dependency("dear_bindings", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    const generate_bindings_step = b.step("generate_imgui_bindings", "Generate C-bindings for imgui");
-    const dear_bindings = b.addSystemCommand(&.{
-        "python",
-        "dear_bindings.py",
-    });
-    dear_bindings.setCwd(dear_bindings_dep.path("."));
-    dear_bindings.addArg("-o");
-    dear_bindings.addFileArg(b.path("src/dcimgui/dcimgui"));
-    dear_bindings.addFileArg(imgui_dep.path("imgui.h"));
-    generate_bindings_step.dependOn(&dear_bindings.step);
+    })) |imgui_dep| {
+        if (b.lazyDependency("dear_bindings", .{
+            .target = target,
+            .optimize = optimize,
+        })) |dear_bindings_dep| {
+            const generate_bindings_step = b.step("generate_imgui_bindings", "Generate C-bindings for imgui");
+            const dear_bindings = b.addSystemCommand(&.{
+                "python",
+                "dear_bindings.py",
+            });
+            dear_bindings.setCwd(dear_bindings_dep.path("."));
+            dear_bindings.addArg("-o");
+            dear_bindings.addFileArg(b.path("src/dcimgui/dcimgui"));
+            dear_bindings.addFileArg(imgui_dep.path("imgui.h"));
+            generate_bindings_step.dependOn(&dear_bindings.step);
+        }
+    }
 }
