@@ -195,6 +195,16 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         allocator = logging_allocator_ptr.allocator();
     }
 
+    const device = sdl.SDL_CreateGPUDevice(
+        sdl.SDL_GPU_SHADERFORMAT_SPIRV | sdl.SDL_GPU_SHADERFORMAT_DXIL | sdl.SDL_GPU_SHADERFORMAT_MSL | sdl.SDL_GPU_SHADERFORMAT_METALLIB,
+        true,
+        null,
+    );
+    if (device == null) {
+        std.log.err("Failed to create GPU device: {s}", .{sdl.SDL_GetError()});
+        @panic("Can't run without a GPU device.");
+    }
+
     var state: *State = allocator.create(State) catch @panic("Out of memory");
     state.* = .{
         .allocator = allocator,
@@ -202,11 +212,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         .window = window,
         .window_width = window_width,
         .window_height = window_height,
-        .device = sdl.SDL_CreateGPUDevice(
-            sdl.SDL_GPU_SHADERFORMAT_SPIRV | sdl.SDL_GPU_SHADERFORMAT_DXIL | sdl.SDL_GPU_SHADERFORMAT_MSL,
-            true,
-            null,
-        ).?,
+        .device = device.?,
         .camera = Camera.init(@as(f32, @floatFromInt(window_width)) / @as(f32, @floatFromInt(window_height))),
         .entities = .empty,
     };
