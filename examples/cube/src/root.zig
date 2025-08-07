@@ -31,6 +31,7 @@ pub const State = struct {
     debug_allocator: *DebugAllocator = undefined,
 
     fps_state: ?*FPSState = null,
+    inspect_game_state: bool = false,
 
     window: *sdl.SDL_Window,
     device: *sdl.SDL_GPUDevice,
@@ -412,6 +413,11 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
     var continue_running: bool = true;
     var event: sdl.SDL_Event = undefined;
     while (sdl.SDL_PollEvent(&event)) {
+        const event_used = if (INTERNAL) imgui.processEvent(&event) else false;
+        if (event_used) {
+            continue;
+        }
+
         if (event.type == sdl.SDL_EVENT_QUIT or (event.type == sdl.SDL_EVENT_KEY_DOWN and event.key.key == sdl.SDLK_ESCAPE)) {
             continue_running = false;
             break;
@@ -421,6 +427,9 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
             switch (event.key.key) {
                 sdl.SDLK_F1 => {
                     state.fps_state.?.toggleMode();
+                },
+                sdl.SDLK_G => {
+                    state.inspect_game_state = !state.inspect_game_state;
                 },
                 else => {},
             }
@@ -497,6 +506,21 @@ pub export fn draw(state_ptr: *anyopaque) void {
         if (INTERNAL) {
             imgui.newFrame();
             state.fps_state.?.draw();
+
+            if (state.inspect_game_state) {
+                imgui.c.ImGui_SetNextWindowPosEx(
+                    imgui.c.ImVec2{ .x = 475, .y = 30 },
+                    imgui.c.ImGuiCond_FirstUseEver,
+                    imgui.c.ImVec2{ .x = 0, .y = 0 },
+                );
+                imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 300, .y = 540 }, imgui.c.ImGuiCond_FirstUseEver);
+
+                _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
+                defer imgui.c.ImGui_End();
+
+                internal.inspectStruct(state, &.{}, false, inputCustomTypes);
+            }
+
             imgui.renderGPU(command_buffer, swapchain_texture);
         }
     }
@@ -623,4 +647,29 @@ fn loadShader(
     }
 
     return shader;
+}
+
+fn inputCustomTypes(
+    struct_field: std.builtin.Type.StructField,
+    field_ptr: anytype,
+) bool {
+    var handled: bool = true;
+
+    switch (@TypeOf(field_ptr.*)) {
+        Vector2 => {
+            imgui.c.ImGui_PushIDPtr(field_ptr);
+            defer imgui.c.ImGui_PopID();
+
+            _ = imgui.c.ImGui_InputFloat2Ex(struct_field.name, @ptrCast(field_ptr), "%.2f", 0);
+        },
+        Vector3 => {
+            imgui.c.ImGui_PushIDPtr(field_ptr);
+            defer imgui.c.ImGui_PopID();
+
+            _ = imgui.c.ImGui_InputFloat3Ex(struct_field.name, @ptrCast(field_ptr), "%.2f", 0);
+        },
+        else => handled = false,
+    }
+
+    return handled;
 }
