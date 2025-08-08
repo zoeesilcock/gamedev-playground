@@ -39,6 +39,10 @@ pub const State = struct {
     line_pipeline: *sdl.SDL_GPUGraphicsPipeline = undefined,
     vertex_buffer: *sdl.SDL_GPUBuffer = undefined,
     index_buffer: *sdl.SDL_GPUBuffer = undefined,
+    render_texture_format: sdl.SDL_GPUTextureFormat = undefined,
+    render_texture_sample_count: sdl.SDL_GPUSampleCount = sdl.SDL_GPU_SAMPLECOUNT_1,
+    render_texture: *sdl.SDL_GPUTexture = undefined,
+    resolve_texture: *sdl.SDL_GPUTexture = undefined,
     depth_stencil_format: sdl.SDL_GPUTextureFormat = undefined,
     depth_stencil_texture: *sdl.SDL_GPUTexture = undefined,
 
@@ -80,7 +84,7 @@ const Camera = struct {
 
     pub fn init(aspect_ratio: f32) Camera {
         return .{
-            .position = .{ 5, 5, 5 },
+            .position = .{ 3, 3, 3 },
             .target = .{ 0, 0, 0 },
             .up = .{ 0, 1, 0 },
             .fov = 75 * sdl.SDL_PI_F / 180,
@@ -216,8 +220,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         null,
     );
     if (device == null) {
-        std.log.err("Failed to create GPU device: {s}", .{sdl.SDL_GetError()});
-        @panic("Can't run without a GPU device.");
+        std.debug.panic("Failed to create GPU device: {s}", .{sdl.SDL_GetError()});
     }
 
     var state: *State = allocator.create(State) catch @panic("Out of memory");
@@ -283,10 +286,20 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         @panic("Failed to find a supported stencil format");
     }
 
+    state.render_texture_format = sdl.SDL_GetGPUSwapchainTextureFormat(state.device, state.window);
+    var sample_count: usize = 0;
+    for (0..4) |i| {
+        if (sdl.SDL_GPUTextureSupportsSampleCount(state.device, state.render_texture_format, @intCast(i))) {
+            sample_count = i;
+        }
+    }
+    state.render_texture_sample_count = @intCast(sample_count);
+    std.log.info("Multisample count: {d}x", .{ @as(u8, @intCast(1)) << @intCast(sample_count) });
+
     setupWindowSize(state);
 
     const color_target_descriptions: []const sdl.SDL_GPUColorTargetDescription = &.{.{
-        .format = sdl.SDL_GetGPUSwapchainTextureFormat(state.device, state.window),
+        .format = state.render_texture_format,
     }};
     const vertex_buffer_descriptions: []const sdl.SDL_GPUVertexBufferDescription = &.{
         .{
@@ -330,6 +343,9 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
             .compare_op = sdl.SDL_GPU_COMPAREOP_LESS,
             .write_mask = 0xFF,
         },
+        .multisample_state = .{
+            .sample_count = state.render_texture_sample_count,
+        },
         .primitive_type = sdl.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
         .vertex_shader = vertex_shader,
         .fragment_shader = fragment_shader,
@@ -369,6 +385,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     }
 
     submitVertexData(state);
+    std.log.info("Submitted vertex data: {s}", .{ sdl.SDL_GetError() });
 
     if (INTERNAL) {
         imgui.initGPU(state.window, state.device, @floatFromInt(window_width), @floatFromInt(window_height));
@@ -390,14 +407,52 @@ fn setupWindowSize(state: *State) void {
             .height = state.window_height,
             .layer_count_or_depth = 1,
             .num_levels = 1,
-            .sample_count = sdl.SDL_GPU_SAMPLECOUNT_1,
+            .format = state.render_texture_format,
+            .sample_count = state.render_texture_sample_count,
+            .usage = if (state.render_texture_sample_count == sdl.SDL_GPU_SAMPLECOUNT_1)
+                sdl.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER
+            else
+                sdl.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
+        },
+    )) |texture| {
+        state.render_texture = texture;
+    } else {
+        @panic("Failed to create render texture");
+    }
+
+    if (sdl.SDL_CreateGPUTexture(
+        state.device,
+        &.{
+            .type = sdl.SDL_GPU_TEXTURETYPE_2D,
+            .width = state.window_width,
+            .height = state.window_height,
+            .layer_count_or_depth = 1,
+            .num_levels = 1,
+            .format = state.render_texture_format,
+            .usage = sdl.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER,
+        },
+    )) |texture| {
+        state.resolve_texture = texture;
+    } else {
+        @panic("Failed to create resolve texture");
+    }
+
+    if (sdl.SDL_CreateGPUTexture(
+        state.device,
+        &.{
+            .type = sdl.SDL_GPU_TEXTURETYPE_2D,
+            .width = state.window_width,
+            .height = state.window_height,
+            .layer_count_or_depth = 1,
+            .num_levels = 1,
+            .sample_count = state.render_texture_sample_count,
             .format = state.depth_stencil_format,
             .usage = sdl.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
         },
     )) |texture| {
         state.depth_stencil_texture = texture;
     } else {
-        @panic("Failed to create depth stencil texure");
+        @panic("Failed to create depth stencil texture");
     }
 }
 
@@ -411,6 +466,8 @@ pub export fn deinit(state_ptr: *anyopaque) void {
     sdl.SDL_ReleaseGPUGraphicsPipeline(state.device, state.fill_pipeline);
     sdl.SDL_ReleaseGPUGraphicsPipeline(state.device, state.line_pipeline);
 
+    sdl.SDL_ReleaseGPUTexture(state.device, state.render_texture);
+    sdl.SDL_ReleaseGPUTexture(state.device, state.resolve_texture);
     sdl.SDL_ReleaseGPUTexture(state.device, state.depth_stencil_texture);
 
     sdl.SDL_ReleaseGPUBuffer(state.device, state.vertex_buffer);
@@ -508,17 +565,30 @@ pub export fn draw(state_ptr: *anyopaque) void {
     }
 
     var opt_swapchain_texture: ?*sdl.SDL_GPUTexture = null;
-    if (!sdl.SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, state.window, &opt_swapchain_texture, null, null)) {
+    var swapchain_texture_width: u32 = 0;
+    var swapchain_texture_height: u32 = 0;
+    if (!sdl.SDL_WaitAndAcquireGPUSwapchainTexture(
+        command_buffer,
+        state.window,
+        &opt_swapchain_texture,
+        &swapchain_texture_width,
+        &swapchain_texture_height,
+    )) {
         std.log.err("Failed to acquire GPU swapchain texture: {s}", .{sdl.SDL_GetError()});
     }
 
     if (opt_swapchain_texture) |swapchain_texture| {
         var color_target_info: sdl.SDL_GPUColorTargetInfo = .{
-            .texture = swapchain_texture,
+            .texture = state.render_texture,
             .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
             .load_op = sdl.SDL_GPU_LOADOP_CLEAR,
             .store_op = sdl.SDL_GPU_STOREOP_STORE,
         };
+
+        if (state.render_texture_sample_count != sdl.SDL_GPU_SAMPLECOUNT_1) {
+            color_target_info.store_op = sdl.SDL_GPU_STOREOP_RESOLVE;
+            color_target_info.resolve_texture = state.resolve_texture;
+        }
 
         var depth_stencil_target_info: sdl.SDL_GPUDepthStencilTargetInfo = .{
             .texture = state.depth_stencil_texture,
@@ -549,6 +619,21 @@ pub export fn draw(state_ptr: *anyopaque) void {
 
         sdl.SDL_EndGPURenderPass(render_pass);
 
+        sdl.SDL_BlitGPUTexture(command_buffer, &.{
+            .source = .{
+                .texture = color_target_info.resolve_texture orelse color_target_info.texture,
+                .w = swapchain_texture_width,
+                .h = swapchain_texture_height,
+            },
+            .destination = .{
+                .texture = swapchain_texture,
+                .w = swapchain_texture_width,
+                .h = swapchain_texture_height,
+            },
+            .load_op = sdl.SDL_GPU_LOADOP_DONT_CARE,
+            .filter = sdl.SDL_GPU_FILTER_LINEAR,
+        });
+
         if (INTERNAL) {
             imgui.newFrame();
             state.fps_state.?.draw();
@@ -572,7 +657,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
     }
 
     if (!sdl.SDL_SubmitGPUCommandBuffer(command_buffer)) {
-        std.log.err("Failed to submit GPU command buffer: {s}", .{sdl.SDL_GetError()});
+        std.debug.panic("Failed to submit GPU command buffer: {s}", .{sdl.SDL_GetError()});
     }
 }
 
