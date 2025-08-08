@@ -46,8 +46,21 @@ pub const State = struct {
     window_height: u32,
     fullscreen: bool = false,
 
+    paused: bool = false,
+    time: u64 = 0,
+    delta_time: u64 = 0,
+    delta_time_actual: u64 = 0,
+
     camera: Camera,
     entities: ArrayList(Entity),
+
+    pub fn deltaTime(self: *State) f32 {
+        return @as(f32, @floatFromInt(self.delta_time)) / 1000;
+    }
+
+    pub fn deltaTimeActual(self: *State) f32 {
+        return @as(f32, @floatFromInt(self.delta_time_actual)) / 1000;
+    }
 };
 
 const Entity = struct {
@@ -215,6 +228,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         .window_width = window_width,
         .window_height = window_height,
         .device = device.?,
+        .time = sdl.SDL_GetTicks(),
         .camera = undefined,
         .entities = .empty,
     };
@@ -444,6 +458,9 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
                 sdl.SDLK_F1 => {
                     state.fps_state.?.toggleMode();
                 },
+                sdl.SDLK_P => {
+                    state.paused = !state.paused;
+                },
                 sdl.SDLK_F => {
                     state.fullscreen = !state.fullscreen;
                     _ = sdl.SDL_SetWindowFullscreen(state.window, state.fullscreen);
@@ -466,12 +483,17 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
 pub export fn tick(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
+    const new_time: u64 = sdl.SDL_GetTicks();
+    state.delta_time_actual = new_time - state.time;
+    state.delta_time = if (state.paused) 0 else state.delta_time_actual;
+    state.time = new_time;
+
     if (INTERNAL) {
         state.fps_state.?.addFrameTime(sdl.SDL_GetPerformanceCounter());
     }
 
     const test_entity = &state.entities.items[0];
-    test_entity.rotation[Y] += 0.01;
+    test_entity.rotation[Y] += 1 * state.deltaTime();
     if (test_entity.rotation[Y] > 360) {
         test_entity.rotation[Y] -= 360;
     }
