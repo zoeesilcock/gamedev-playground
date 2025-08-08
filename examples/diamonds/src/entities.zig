@@ -9,7 +9,6 @@ const Color = math.Color;
 const Vector2 = math.Vector2;
 const X = math.X;
 const Y = math.Y;
-const Z = math.Z;
 
 // TODO: Remove once Zig has finished migrating to unmanaged-style containers.
 const ArrayList = std.ArrayListUnmanaged;
@@ -22,8 +21,8 @@ pub const EntityType = enum(u8) {
 };
 
 pub const EntityId = struct {
-    index: u32,
-    generation: u32,
+    index: u32 = 0,
+    generation: u32 = 0,
 
     pub fn equals(self: EntityId, other: ?EntityId) bool {
         return other != null and
@@ -32,40 +31,51 @@ pub const EntityId = struct {
     }
 };
 
+pub const Entity = struct {
+    id: EntityId = .{},
+    is_in_use: bool = false,
+    entity_type: EntityType = .Background,
+
+    transform: ?*TransformComponent = null,
+    collider: ?*ColliderComponent = null,
+    sprite: ?*SpriteComponent = null,
+    color: ?*ColorComponent = null,
+    block: ?*BlockComponent = null,
+    title: ?*TitleComponent = null,
+    tween: ?*TweenComponent = null,
+
+    pub fn init(allocator: std.mem.Allocator) !*Entity {
+        var entity = try allocator.create(Entity);
+        entity.* = .{};
+        return entity;
+    }
+};
+
 pub const EntityIterator = struct {
     entities: *ArrayList(*Entity),
     index: usize = 0,
 
+    /// Iterate over entities that are in use and have all requested components.
+    /// Example: iter.next(&.{ .transform, .collider })
     pub fn next(self: *EntityIterator, comptime with_components: []const @TypeOf(.EnumLiteral)) ?*Entity {
-        var result: ?*Entity = null;
-        const start = self.index;
-        for (self.entities.items[start..]) |entity| {
-            self.index += 1;
+        const items = self.entities.items;
+        while (self.index < items.len) : (self.index += 1) {
+            const e = items[self.index];
+            if (!e.is_in_use) continue;
 
-            if (entity.is_in_use) {
-                var has_all_components: bool = true;
-                inline for (with_components) |component| {
-                    const component_name = @tagName(component);
-                    const component_type = @TypeOf(@field(entity.*, component_name));
-
-                    std.debug.assert(@typeInfo(component_type) == .optional);
-
-                    const field_offset = @offsetOf(@TypeOf(entity.*), component_name);
-                    const base_ptr: [*]u8 = @ptrCast(entity);
-                    const field_ptr: *component_type = @ptrCast(@alignCast(&base_ptr[field_offset]));
-
-                    if (field_ptr.* == null) {
-                        has_all_components = false;
-                    }
-                }
-
-                if (has_all_components) {
-                    result = entity;
+            var ok = true;
+            inline for (with_components) |component| {
+                if (@field(e.*, @tagName(component)) == null) {
+                    ok = false;
                     break;
                 }
             }
+            if (ok) {
+                self.index += 1; // advance past current
+                return e;
+            }
         }
-        return result;
+        return null;
     }
 
     pub fn reset(self: *EntityIterator) void {
@@ -73,44 +83,20 @@ pub const EntityIterator = struct {
     }
 };
 
-pub const Entity = struct {
-    id: EntityId,
-    is_in_use: bool,
-    entity_type: EntityType,
-
-    transform: ?*TransformComponent,
-    collider: ?*ColliderComponent,
-    sprite: ?*SpriteComponent,
-    color: ?*ColorComponent,
-    block: ?*BlockComponent,
-    title: ?*TitleComponent,
-    tween: ?*TweenComponent,
-
-    pub fn init(allocator: std.mem.Allocator) !*Entity {
-        var entity: *Entity = try allocator.create(Entity);
-        entity.transform = null;
-        entity.collider = null;
-        entity.sprite = null;
-        entity.color = null;
-        entity.block = null;
-        entity.title = null;
-        entity.tween = null;
-        return entity;
-    }
-};
-
 pub const TransformComponent = struct {
     pool_id: PoolId,
     entity: *Entity,
 
-    position: Vector2,
-    scale: Vector2,
-    velocity: Vector2,
-    next_velocity: Vector2,
+    position: Vector2 = .{ 0, 0 },
+    scale: Vector2 = .{ 1, 1 },
+    velocity: Vector2 = .{ 0, 0 },
+    next_velocity: Vector2 = .{ 0, 0 }, // optional staging if you use physics integrators
 
     pub fn tick(iter: *EntityIterator, delta_time: f32) void {
-        while (iter.next(&.{.transform})) |entity| {
-            entity.transform.?.position += entity.transform.?.velocity * @as(Vector2, @splat(delta_time));
+        const dt = @as(Vector2, @splat(delta_time));
+        while (iter.next(&.{ .transform })) |e| {
+            const t = e.transform.?;
+            t.position += t.velocity * dt;
         }
     }
 };
@@ -134,182 +120,169 @@ pub const ColliderComponent = struct {
     pool_id: PoolId,
     entity: *Entity,
 
-    offset: Vector2,
-    size: Vector2,
-    radius: f32,
-    shape: ColliderShape,
+    /// local-space offset from entity.transform.position
+    offset: Vector2 = .{ 0, 0 },
+    size: Vector2 = .{ 0, 0 }, // for squares
+    radius: f32 = 0,           // for circles
+    shape: ColliderShape = .Square,
 
-    pub fn top(self: *const ColliderComponent) f32 {
-        return self.offset[Y];
+    inline fn top(self: *const ColliderComponent) f32 { return self.offset[Y]; }
+    inline fn left(self: *const ColliderComponent) f32 { return self.offset[X]; }
+
+    inline fn bottom(self: *const ColliderComponent) f32 {
+        return switch (self.shape) {
+            .Square => self.offset[Y] + self.size[Y],
+            .Circle => self.offset[Y] + self.radius * 2,
+        };
     }
 
-    pub fn bottom(self: *const ColliderComponent) f32 {
-        switch (self.shape) {
-            .Square => {
-                return self.offset[Y] + self.size[Y];
-            },
-            .Circle => {
-                return self.offset[Y] + self.radius * 2;
-            },
-        }
-    }
-
-    pub fn left(self: *const ColliderComponent) f32 {
-        return self.offset[X];
-    }
-
-    pub fn right(self: *const ColliderComponent) f32 {
-        switch (self.shape) {
-            .Square => {
-                return self.offset[X] + self.size[X];
-            },
-            .Circle => {
-                return self.offset[X] + self.radius * 2;
-            },
-        }
+    inline fn right(self: *const ColliderComponent) f32 {
+        return switch (self.shape) {
+            .Square => self.offset[X] + self.size[X],
+            .Circle => self.offset[X] + self.radius * 2,
+        };
     }
 
     pub fn center(self: *const ColliderComponent, transform: *const TransformComponent) Vector2 {
-        switch (self.shape) {
-            .Square => {
-                return Vector2{
-                    transform.position[X] + self.offset[X] + self.size[X] * 0.5,
-                    transform.position[Y] + self.offset[Y] + self.size[Y] * 0.5,
-                };
+        return switch (self.shape) {
+            .Square => .{
+                transform.position[X] + self.offset[X] + self.size[X] * 0.5,
+                transform.position[Y] + self.offset[Y] + self.size[Y] * 0.5,
             },
-            .Circle => {
-                return Vector2{
-                    transform.position[X] + self.offset[X] + self.radius,
-                    transform.position[Y] + self.offset[Y] + self.radius,
-                };
+            .Circle => .{
+                transform.position[X] + self.offset[X] + self.radius,
+                transform.position[Y] + self.offset[Y] + self.radius,
             },
-        }
+        };
     }
 
     pub fn containsPoint(self: *const ColliderComponent, point: Vector2) bool {
-        var contains_point = false;
-        var position: Vector2 = .{ 0, 0 };
+        var pos: Vector2 = .{ 0, 0 };
+        if (self.entity.transform) |t| pos = t.position;
 
-        if (self.entity.transform) |transform| {
-            position = transform.position;
-        }
+        const l = pos[X] + self.left();
+        const r = pos[X] + self.right();
+        const t = pos[Y] + self.top();
+        const b = pos[Y] + self.bottom();
 
-        if ((point[X] <= position[X] + self.right() and point[X] >= position[X] + self.left()) and
-            (point[Y] <= position[Y] + self.bottom() and point[Y] >= position[Y] + self.top()))
-        {
-            contains_point = true;
-        }
+        return point[X] >= l and point[X] <= r and point[Y] >= t and point[Y] <= b;
+    }
 
-        return contains_point;
+    fn aabbOverlap(a_l: f32, a_r: f32, a_t: f32, a_b: f32, b_l: f32, b_r: f32, b_t: f32, b_b: f32) bool {
+        // Canonical AABB overlap test
+        return (a_l < b_r and a_r > b_l and a_t < b_b and a_b > b_t);
     }
 
     fn collidesWithAnyAt(self: *ColliderComponent, iter: *EntityIterator, at: TransformComponent) ?*Entity {
-        var result: ?*Entity = null;
-
-        while (iter.next(&.{.collider})) |entity| {
-            if (self.entity != entity and self.collidesWithAt(entity.collider.?, at)) {
-                result = entity;
-                break;
-            }
+        var inner = iter.*;
+        while (inner.next(&.{ .collider })) |other| {
+            if (self.entity == other) continue;
+            if (self.collidesWithAt(other.collider.?, at)) return other;
         }
-
-        return result;
+        return null;
     }
 
     pub fn collidesWithAt(self: *ColliderComponent, other: *ColliderComponent, at: TransformComponent) bool {
-        var collides = false;
+        if (other.entity.transform == null) return false;
 
-        if (other.entity.transform) |other_at| {
-            if (self.shape == other.shape) {
-                switch (self.shape) {
-                    .Circle => unreachable,
-                    .Square => {
-                        if (((at.position[X] + self.left() >= other_at.position[X] + other.left() and at.position[X] + self.left() <= other_at.position[X] + other.right()) or
-                            (at.position[X] + self.right() >= other_at.position[X] + other.left() and at.position[X] + self.right() <= other_at.position[X] + other.right())) and
-                            ((at.position[Y] + self.bottom() >= other_at.position[Y] + other.top() and at.position[Y] + self.bottom() <= other_at.position[Y] + other.bottom()) or
-                                (at.position[Y] + self.top() <= other_at.position[Y] + other.bottom() and at.position[Y] + self.top() >= other_at.position[Y] + other.top())))
-                        {
-                            collides = true;
-                        }
-                    },
-                }
-            } else {
-                var circle_radius: f32 = 0;
-                var circle_transform: ?*const TransformComponent = null;
-                var circle_collider: *const ColliderComponent = undefined;
-                var square_transform: ?*const TransformComponent = null;
-                var square_collider: *const ColliderComponent = undefined;
+        const other_t = other.entity.transform.?;
 
-                if (self.shape == .Circle) {
-                    circle_collider = self;
-                    circle_transform = &at;
-                    circle_radius = self.radius;
-                } else {
-                    square_collider = self;
-                    square_transform = &at;
-                }
+        // Same-shape fast paths
+        if (self.shape == other.shape) {
+            switch (self.shape) {
+                .Square => {
+                    const a_l = at.position[X] + self.left();
+                    const a_r = at.position[X] + self.right();
+                    const a_t = at.position[Y] + self.top();
+                    const a_b = at.position[Y] + self.bottom();
 
-                if (other.shape == .Circle) {
-                    circle_collider = other;
-                    circle_transform = other.entity.transform;
-                    circle_radius = other.radius;
-                } else {
-                    square_collider = other;
-                    square_transform = other.entity.transform;
-                }
+                    const b_l = other_t.position[X] + other.left();
+                    const b_r = other_t.position[X] + other.right();
+                    const b_t = other_t.position[Y] + other.top();
+                    const b_b = other_t.position[Y] + other.bottom();
 
-                if (circle_transform) |circle| {
-                    if (square_transform) |square| {
-                        const circle_position = circle_collider.center(circle);
-                        const closest_x: f32 = std.math.clamp(
-                            circle_position[X],
-                            square.position[X] + square_collider.left(),
-                            square.position[X] + square_collider.right(),
-                        );
-                        const closest_y: f32 = std.math.clamp(
-                            circle_position[Y],
-                            square.position[Y] + square_collider.top(),
-                            square.position[Y] + square_collider.bottom(),
-                        );
-                        const distance_x: f32 = circle_position[X] - closest_x;
-                        const distance_y: f32 = circle_position[Y] - closest_y;
-                        const distance: f32 = (distance_x * distance_x) + (distance_y * distance_y);
+                    return aabbOverlap(a_l, a_r, a_t, a_b, b_l, b_r, b_t, b_b);
+                },
+                .Circle => {
+                    // Circle–circle not currently used in your code; add if needed.
+                    // Placeholder: treat as bounding squares
+                    const a_l = at.position[X] + self.left();
+                    const a_r = at.position[X] + self.right();
+                    const a_t = at.position[Y] + self.top();
+                    const a_b = at.position[Y] + self.bottom();
 
-                        if (distance < circle_radius * circle_radius) {
-                            collides = true;
-                        }
-                    }
-                }
+                    const b_l = other_t.position[X] + other.left();
+                    const b_r = other_t.position[X] + other.right();
+                    const b_t = other_t.position[Y] + other.top();
+                    const b_b = other_t.position[Y] + other.bottom();
+
+                    return aabbOverlap(a_l, a_r, a_t, a_b, b_l, b_r, b_t, b_b);
+                },
             }
         }
 
-        return collides;
+        // Mixed circle–square
+        var circle_col: *const ColliderComponent = undefined;
+        var circle_t: *const TransformComponent = undefined;
+        var r: f32 = 0;
+
+        var square_col: *const ColliderComponent = undefined;
+        var square_t: *const TransformComponent = undefined;
+
+        if (self.shape == .Circle) {
+            circle_col = self;
+            circle_t = &at;
+            r = self.radius;
+            square_col = other;
+            square_t = other_t;
+        } else if (other.shape == .Circle) {
+            circle_col = other;
+            circle_t = other_t;
+            r = other.radius;
+            square_col = self;
+            square_t = &at;
+        } else unreachable;
+
+        const c = circle_col.center(circle_t);
+        const s_l = square_t.position[X] + square_col.left();
+        const s_r = square_t.position[X] + square_col.right();
+        const s_t = square_t.position[Y] + square_col.top();
+        const s_b = square_t.position[Y] + square_col.bottom();
+
+        const closest_x = std.math.clamp(c[X], s_l, s_r);
+        const closest_y = std.math.clamp(c[Y], s_t, s_b);
+        const dx = c[X] - closest_x;
+        const dy = c[Y] - closest_y;
+        const dist2 = dx * dx + dy * dy;
+
+        return dist2 < r * r;
     }
 
+    /// Returns at most one vertical and one horizontal collision for moving entities.
     pub fn checkForCollisions(iter: *EntityIterator, delta_time: f32) CollisionResult {
         var result: CollisionResult = .{};
         var inner_iter: EntityIterator = iter.*;
 
-        while (iter.next(&.{ .collider, .transform })) |entity| {
-            const transform = entity.transform.?;
+        while (iter.next(&.{ .collider, .transform })) |e| {
+            const t = e.transform.?;
 
-            // Check in the Y direction.
-            if (transform.velocity[Y] != 0) {
-                var next_transform = transform.*;
-                next_transform.position[Y] += next_transform.velocity[Y] * delta_time;
+            // Y sweep
+            if (t.velocity[Y] != 0) {
+                var next_t = t.*;
+                next_t.position[Y] += next_t.velocity[Y] * delta_time;
                 inner_iter.reset();
-                if (entity.collider.?.collidesWithAnyAt(&inner_iter, next_transform)) |other_entity| {
-                    result.vertical = .{ .id = entity.id, .other_id = other_entity.id };
+                if (e.collider.?.collidesWithAnyAt(&inner_iter, next_t)) |o| {
+                    result.vertical = .{ .id = e.id, .other_id = o.id };
                 }
             }
 
-            // Check in the X direction.
-            if (transform.velocity[X] != 0) {
-                var next_transform = transform.*;
-                next_transform.position[X] += next_transform.velocity[X] * delta_time;
+            // X sweep
+            if (t.velocity[X] != 0) {
+                var next_t = t.*;
+                next_t.position[X] += next_t.velocity[X] * delta_time;
                 inner_iter.reset();
-                if (entity.collider.?.collidesWithAnyAt(&inner_iter, next_transform)) |other_entity| {
-                    result.horizontal = .{ .id = entity.id, .other_id = other_entity.id };
+                if (e.collider.?.collidesWithAnyAt(&inner_iter, next_t)) |o| {
+                    result.horizontal = .{ .id = e.id, .other_id = o.id };
                 }
             }
         }
@@ -322,43 +295,48 @@ pub const SpriteComponent = struct {
     pool_id: PoolId,
     entity: *Entity,
 
-    frame_index: u32,
-    tint: Color,
-    duration_shown: f32,
-    loop_animation: bool,
-    animation_completed: bool,
-    current_animation: ?*aseprite.AseTagsChunk,
+    frame_index: u32 = 0,
+    tint: Color = .{ 255, 255, 255, 255 },
+    duration_shown: f32 = 0,
+    loop_animation: bool = true,
+    animation_completed: bool = false,
+    current_animation: ?*aseprite.AseTagsChunk = null,
 
     pub fn tick(assets: *game.Assets, iter: *EntityIterator, delta_time: f32) void {
-        while (iter.next(&.{.sprite})) |entity| {
-            const sprite = entity.sprite.?;
-            if (assets.getSpriteAsset(sprite)) |sprite_asset| {
-                if (sprite_asset.document.frames.len > 1) {
-                    const current_frame = sprite_asset.document.frames[sprite.frame_index];
-                    var from_frame: u16 = 0;
-                    var to_frame: u16 = @intCast(sprite_asset.document.frames.len);
+        while (iter.next(&.{ .sprite })) |e| {
+            const s = e.sprite.?;
+            if (assets.getSpriteAsset(s)) |sprite_asset| {
+                const frames_len = sprite_asset.document.frames.len;
+                if (frames_len <= 1) continue;
 
-                    if (sprite.current_animation) |tag| {
-                        from_frame = tag.from_frame;
-                        to_frame = tag.to_frame;
-                    }
+                const current_frame = sprite_asset.document.frames[s.frame_index];
 
-                    sprite.duration_shown += delta_time;
+                var from_frame: u16 = 0;
+                var to_frame: u16 = @intCast(frames_len - 1);
+                if (s.current_animation) |tag| {
+                    from_frame = tag.from_frame;
+                    to_frame = tag.to_frame;
+                }
 
-                    if (sprite.duration_shown * 1000 >= @as(f64, @floatFromInt(current_frame.header.frame_duration))) {
-                        var next_frame = sprite.frame_index + 1;
-                        if (next_frame > to_frame) {
-                            if (sprite.loop_animation) {
-                                next_frame = from_frame;
-                            } else {
-                                sprite.animation_completed = true;
-                                next_frame = to_frame;
-                                continue;
-                            }
+                s.duration_shown += delta_time;
+
+                // frame_duration is in milliseconds
+                const need_ms = @as(f32, @floatFromInt(current_frame.header.frame_duration));
+                const have_ms = s.duration_shown * 1000.0;
+                if (have_ms >= need_ms) {
+                    s.duration_shown = 0;
+                    var next_frame = s.frame_index + 1;
+
+                    if (next_frame > to_frame) {
+                        if (s.loop_animation) {
+                            next_frame = from_frame;
+                        } else {
+                            s.animation_completed = true;
+                            next_frame = to_frame;
                         }
-
-                        sprite.setFrame(next_frame, sprite_asset);
                     }
+
+                    s.setFrame(next_frame, sprite_asset);
                 }
             }
         }
@@ -366,55 +344,44 @@ pub const SpriteComponent = struct {
 
     pub fn setFrame(self: *SpriteComponent, index: u32, sprite_asset: *game.SpriteAsset) void {
         if (index < sprite_asset.document.frames.len) {
-            self.duration_shown = 0;
             self.frame_index = index;
+            self.duration_shown = 0;
         }
     }
 
     pub fn getTexture(self: *SpriteComponent, assets: *game.Assets) ?*sdl.SDL_Texture {
-        var result: ?*sdl.SDL_Texture = null;
-
-        if (assets.getSpriteAsset(self)) |sprite_asset| {
-            if (self.frame_index < sprite_asset.frames.len) {
-                result = sprite_asset.frames[self.frame_index];
-            }
+        if (assets.getSpriteAsset(self)) |sa| {
+            if (self.frame_index < sa.frames.len) return sa.frames[self.frame_index];
         }
-
-        return result;
+        return null;
     }
 
     pub fn startAnimation(self: *SpriteComponent, name: []const u8, assets: *game.Assets) void {
-        var opt_tag: ?*aseprite.AseTagsChunk = null;
+        var found: ?*aseprite.AseTagsChunk = null;
 
-        if (assets.getSpriteAsset(self)) |sprite_asset| {
-            outer: for (sprite_asset.document.frames) |frame| {
+        if (assets.getSpriteAsset(self)) |sa| {
+            // NOTE: If your aseprite binding exposes tags separate from frames,
+            // prefer iterating that table. This loop stays backward compatible.
+            outer: for (sa.document.frames) |frame| {
                 for (frame.tags) |tag| {
                     if (std.mem.eql(u8, tag.tag_name, name)) {
-                        opt_tag = tag;
+                        found = tag;
                         break :outer;
                     }
                 }
             }
 
-            if (opt_tag) |tag| {
+            if (found) |tag| {
                 self.current_animation = tag;
                 self.loop_animation = false;
                 self.animation_completed = false;
-                self.setFrame(tag.from_frame, sprite_asset);
+                self.setFrame(tag.from_frame, sa);
             }
         }
     }
 
     pub fn isAnimating(self: *SpriteComponent, name: []const u8) bool {
-        var result = false;
-
-        if (self.current_animation) |tag| {
-            if (std.mem.eql(u8, name, tag.tag_name)) {
-                result = true;
-            }
-        }
-
-        return result;
+        return if (self.current_animation) |tag| std.mem.eql(u8, name, tag.tag_name) else false;
     }
 
     pub fn containsPoint(
@@ -424,28 +391,21 @@ pub const SpriteComponent = struct {
         world_scale: f32,
         assets: *game.Assets,
     ) bool {
-        var contains_point = false;
-        var position: Vector2 = .{ 0, 0 };
-
-        if (assets.getSpriteAsset(self)) |sprite_asset| {
-            if (self.entity.transform) |transform| {
-                position = transform.position;
-            }
+        if (assets.getSpriteAsset(self)) |sa| {
+            var pos: Vector2 = .{ 0, 0 };
             if (self.entity.title) |title| {
-                position = title.getPosition(dest_rect, world_scale, assets);
+                pos = title.getPosition(dest_rect, world_scale, assets);
+            } else if (self.entity.transform) |t| {
+                pos = t.position;
             }
 
-            const width: f32 = @floatFromInt(sprite_asset.document.header.width);
-            const height: f32 = @floatFromInt(sprite_asset.document.header.height);
+            const width: f32 = @floatFromInt(sa.document.header.width);
+            const height: f32 = @floatFromInt(sa.document.header.height);
 
-            if ((point[X] <= position[X] + width and point[X] >= position[X]) and
-                (point[Y] <= position[Y] + height and point[Y] >= position[Y]))
-            {
-                contains_point = true;
-            }
+            return point[X] >= pos[X] and point[X] <= pos[X] + width and
+                   point[Y] >= pos[Y] and point[Y] <= pos[Y] + height;
         }
-
-        return contains_point;
+        return false;
     }
 };
 
@@ -459,7 +419,7 @@ pub const ColorComponent = struct {
     pool_id: PoolId,
     entity: *Entity,
 
-    color: ColorComponentValue,
+    color: ColorComponentValue = .Gray,
 };
 
 pub const BlockType = enum {
@@ -472,7 +432,7 @@ pub const BlockComponent = struct {
     pool_id: PoolId,
     entity: *Entity,
 
-    type: BlockType,
+    type: BlockType = .Wall,
 };
 
 pub const TitleType = enum {
@@ -487,9 +447,9 @@ pub const TitleComponent = struct {
     pool_id: PoolId,
     entity: *Entity,
 
-    type: TitleType,
-    has_duration: bool,
-    duration_remaining: u64,
+    type: TitleType = .GET_READY,
+    has_duration: bool = false,
+    duration_remaining: u64 = 0,
 
     pub fn getPosition(
         self: *const TitleComponent,
@@ -503,24 +463,38 @@ pub const TitleComponent = struct {
 
         if (self.entity.sprite) |sprite| {
             if (sprite.getTexture(assets)) |texture| {
-                const size: Vector2 = .{
-                    (@as(f32, @floatFromInt(texture.w))),
-                    (@as(f32, @floatFromInt(texture.h))),
-                };
+                // If your SDL binding requires SDL_QueryTexture, adapt here.
+                const size: Vector2 = .{ @as(f32, @floatFromInt(texture.w)), @as(f32, @floatFromInt(texture.h)) };
                 result = Vector2{ dest_rect.w, dest_rect.h } / scale - size;
                 result *= half;
-
-                if (self.entity.transform) |transform| {
-                    result += transform.position;
-                }
+                if (self.entity.transform) |t| result += t.position;
             }
         }
-
         return result;
     }
 };
 
-pub const TweenedValue = union {
+pub const TweenEasing = enum {
+    linear,
+    ease_in,
+    ease_out,
+    ease_in_out,
+
+    fn apply(e: TweenEasing, t: f32) f32 {
+        const clamped = std.math.clamp(t, 0.0, 1.0);
+        return switch (e) {
+            .linear => clamped,
+            .ease_in => clamped * clamped,
+            .ease_out => 1.0 - (1.0 - clamped) * (1.0 - clamped),
+            .ease_in_out => if (clamped < 0.5)
+                2.0 * clamped * clamped
+            else
+                1.0 - std.math.pow(f32, -2.0 * clamped + 2.0, 2.0) / 2.0,
+        };
+    }
+};
+
+pub const TweenedValue = union(enum) {
     f32: f32,
     color: Color,
 };
@@ -529,69 +503,116 @@ pub const TweenComponent = struct {
     pool_id: PoolId,
     entity: *Entity,
 
-    delay: u64,
-    duration: u64,
-    time_passed: u64,
+    delay: u64 = 0,      // ms
+    duration: u64 = 0,   // ms
+    time_passed: u64 = 0,
 
-    target: EntityId,
-    target_component: []const u8,
-    target_field: []const u8,
+    easing: TweenEasing = .linear,
 
-    start_value: TweenedValue,
-    end_value: TweenedValue,
+    target: EntityId = .{},
+    target_component: []const u8 = "",
+    target_field: []const u8 = "",
+
+    start_value: TweenedValue = .{ .f32 = 0 },
+    end_value: TweenedValue = .{ .f32 = 1 },
+
+    // --- Bound target (resolved once) ---
+    bound_f32: ?*f32 = null,
+    bound_color: ?*Color = null,
+    bound_ready: bool = false,
 
     pub fn tick(state: *game.State, iter: *EntityIterator, delta_time: f32) void {
-        while (iter.next(&.{.tween})) |entity| {
-            const tween = entity.tween.?;
-            const total_duration = tween.delay + tween.duration;
-            tween.time_passed += @intFromFloat(delta_time * 1000);
+        while (iter.next(&.{ .tween })) |e| {
+            const tw = e.tween.?;
 
-            if (tween.time_passed <= total_duration and tween.delay <= tween.time_passed) {
-                const t: f32 =
-                    @as(f32, @floatFromInt(tween.time_passed - tween.delay)) /
-                    @as(f32, @floatFromInt(tween.duration));
+            // One-time bind of the target pointer (no per-frame reflection scans).
+            if (!tw.bound_ready) {
+                tw.bound_ready = tw.bind(state);
+            }
+            if (!tw.bound_ready) continue;
 
-                const type_info = @typeInfo(Entity);
-                if (state.getEntity(tween.target)) |target| {
-                    inline for (type_info.@"struct".fields) |entity_field_info| {
-                        if (std.mem.eql(u8, entity_field_info.name, tween.target_component)) {
-                            const entity_field = @field(target, entity_field_info.name);
-                            if (@typeInfo(@TypeOf(entity_field)) == .optional) {
-                                if (entity_field) |component| {
-                                    const component_info = @typeInfo(@TypeOf(component.*));
-                                    inline for (component_info.@"struct".fields) |component_field_info| {
-                                        if (std.mem.eql(u8, component_field_info.name, tween.target_field)) {
-                                            const current_value = &@field(component, component_field_info.name);
-                                            switch (@TypeOf(current_value)) {
-                                                *f32 => {
-                                                    current_value.* = lerp(tween.start_value.f32, tween.end_value.f32, t);
-                                                },
-                                                *Color => {
-                                                    current_value.* = .{
-                                                        lerpU8(tween.start_value.color[0], tween.end_value.color[0], t),
-                                                        lerpU8(tween.start_value.color[1], tween.end_value.color[1], t),
-                                                        lerpU8(tween.start_value.color[2], tween.end_value.color[2], t),
-                                                        lerpU8(tween.start_value.color[3], tween.end_value.color[3], t),
-                                                    };
-                                                },
-                                                else => {},
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+            // Advance time with saturation
+            const add_ms: u64 = @intFromFloat(std.math.max(0.0, delta_time) * 1000.0);
+            if (std.math.addo(u64, tw.time_passed, add_ms)) |_| {
+                tw.time_passed = std.math.maxInt(u64); // saturate
+            } else {
+                tw.time_passed += add_ms;
+            }
+
+            const total = tw.delay + tw.duration;
+            if (total == 0) continue;
+
+            if (tw.time_passed < tw.delay) continue;
+
+            const raw_t = @as(f32, @floatFromInt(tw.time_passed - tw.delay)) /
+                          @as(f32, @floatFromInt(tw.duration));
+            const t = tw.easing.apply(raw_t);
+
+            switch (tw.start_value) {
+                .f32 => {
+                    const a = tw.start_value.f32;
+                    const b = tw.end_value.f32;
+                    if (tw.bound_f32) |p| p.* = lerpf(a, b, t);
+                },
+                .color => {
+                    const a = tw.start_value.color;
+                    const b = tw.end_value.color;
+                    if (tw.bound_color) |p| {
+                        p.* = .{
+                            lerpU8(a[0], b[0], t),
+                            lerpU8(a[1], b[1], t),
+                            lerpU8(a[2], b[2], t),
+                            lerpU8(a[3], b[3], t),
+                        };
+                    }
+                },
+            }
+        }
+    }
+
+    /// Resolve the target pointer once using your field names.
+    fn bind(self: *TweenComponent, state: *game.State) bool {
+        if (state.getEntity(self.target)) |target| {
+            const ent_info = @typeInfo(Entity);
+            inline for (ent_info.@"struct".fields) |entity_field_info| {
+                if (!std.mem.eql(u8, entity_field_info.name, self.target_component)) continue;
+
+                const entity_field = @field(target, entity_field_info.name);
+                if (@typeInfo(@TypeOf(entity_field)) != .optional) break;
+
+                if (entity_field) |component| {
+                    const comp_info = @typeInfo(@TypeOf(component.*));
+                    inline for (comp_info.@"struct".fields) |comp_field_info| {
+                        if (!std.mem.eql(u8, comp_field_info.name, self.target_field)) continue;
+
+                        // Type-directed binding
+                        const ptr_any = &@field(component, comp_field_info.name);
+                        switch (@TypeOf(ptr_any)) {
+                            *f32 => {
+                                self.bound_f32 = ptr_any;
+                                self.bound_color = null;
+                                return true;
+                            },
+                            *Color => {
+                                self.bound_color = ptr_any;
+                                self.bound_f32 = null;
+                                return true;
+                            },
+                            else => return false,
                         }
                     }
                 }
             }
         }
-    }
-
-    fn lerpU8(min: u8, max: u8, t: f32) u8 {
-        return @intFromFloat(lerp(@floatFromInt(min), @floatFromInt(max), t));
-    }
-
-    fn lerp(min: f32, max: f32, t: f32) f32 {
-        return (1.0 - t) * min + t * max;
+        return false;
     }
 };
+
+inline fn lerpf(a: f32, b: f32, t: f32) f32 {
+    const clamped = std.math.clamp(t, 0.0, 1.0);
+    return (1.0 - clamped) * a + clamped * b;
+}
+
+inline fn lerpU8(min: u8, max: u8, t: f32) u8 {
+    return @intFromFloat(lerpf(@floatFromInt(min), @floatFromInt(max), t));
+}
