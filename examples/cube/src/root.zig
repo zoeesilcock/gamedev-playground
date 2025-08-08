@@ -39,10 +39,12 @@ pub const State = struct {
     line_pipeline: *sdl.SDL_GPUGraphicsPipeline = undefined,
     vertex_buffer: *sdl.SDL_GPUBuffer = undefined,
     index_buffer: *sdl.SDL_GPUBuffer = undefined,
+    depth_stencil_format: sdl.SDL_GPUTextureFormat = undefined,
     depth_stencil_texture: *sdl.SDL_GPUTexture = undefined,
 
     window_width: u32,
     window_height: u32,
+    fullscreen: bool = false,
 
     camera: Camera,
     entities: ArrayList(Entity),
@@ -213,7 +215,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         .window_width = window_width,
         .window_height = window_height,
         .device = device.?,
-        .camera = Camera.init(@as(f32, @floatFromInt(window_width)) / @as(f32, @floatFromInt(window_height))),
+        .camera = undefined,
         .entities = .empty,
     };
 
@@ -248,42 +250,26 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     }
     defer sdl.SDL_ReleaseGPUShader(state.device, fragment_shader);
 
-    var depth_stencil_format: sdl.SDL_GPUTextureFormat = undefined;
+    state.depth_stencil_format = undefined;
     if (sdl.SDL_GPUTextureSupportsFormat(
         state.device,
         sdl.SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,
         sdl.SDL_GPU_TEXTURETYPE_2D,
         sdl.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
     )) {
-        depth_stencil_format = sdl.SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
+        state.depth_stencil_format = sdl.SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
     } else if (sdl.SDL_GPUTextureSupportsFormat(
         state.device,
         sdl.SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,
         sdl.SDL_GPU_TEXTURETYPE_2D,
         sdl.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
     )) {
-        depth_stencil_format = sdl.SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
+        state.depth_stencil_format = sdl.SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
     } else {
         @panic("Failed to find a supported stencil format");
     }
 
-    if (sdl.SDL_CreateGPUTexture(
-        state.device,
-        &.{
-            .type = sdl.SDL_GPU_TEXTURETYPE_2D,
-            .width = window_width,
-            .height = window_height,
-            .layer_count_or_depth = 1,
-            .num_levels = 1,
-            .sample_count = sdl.SDL_GPU_SAMPLECOUNT_1,
-            .format = depth_stencil_format,
-            .usage = sdl.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
-        },
-    )) |texture| {
-        state.depth_stencil_texture = texture;
-    } else {
-        @panic("Failed to create depth stencil texure");
-    }
+    setupWindowSize(state);
 
     const color_target_descriptions: []const sdl.SDL_GPUColorTargetDescription = &.{.{
         .format = sdl.SDL_GetGPUSwapchainTextureFormat(state.device, state.window),
@@ -315,7 +301,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
             .num_color_targets = 1,
             .color_target_descriptions = color_target_descriptions.ptr,
             .has_depth_stencil_target = true,
-            .depth_stencil_format = depth_stencil_format,
+            .depth_stencil_format = state.depth_stencil_format,
         },
         .vertex_input_state = .{
             .num_vertex_buffers = 1,
@@ -377,6 +363,30 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     return state;
 }
 
+fn setupWindowSize(state: *State) void {
+    _ = sdl.SDL_GetWindowSizeInPixels(state.window, @ptrCast(&state.window_width), @ptrCast(&state.window_height));
+
+    state.camera = Camera.init(@as(f32, @floatFromInt(state.window_width)) / @as(f32, @floatFromInt(state.window_height)));
+
+    if (sdl.SDL_CreateGPUTexture(
+        state.device,
+        &.{
+            .type = sdl.SDL_GPU_TEXTURETYPE_2D,
+            .width = state.window_width,
+            .height = state.window_height,
+            .layer_count_or_depth = 1,
+            .num_levels = 1,
+            .sample_count = sdl.SDL_GPU_SAMPLECOUNT_1,
+            .format = state.depth_stencil_format,
+            .usage = sdl.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+        },
+    )) |texture| {
+        state.depth_stencil_texture = texture;
+    } else {
+        @panic("Failed to create depth stencil texure");
+    }
+}
+
 pub export fn deinit(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
@@ -434,11 +444,19 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
                 sdl.SDLK_F1 => {
                     state.fps_state.?.toggleMode();
                 },
+                sdl.SDLK_F => {
+                    state.fullscreen = !state.fullscreen;
+                    _ = sdl.SDL_SetWindowFullscreen(state.window, state.fullscreen);
+                },
                 sdl.SDLK_G => {
                     state.inspect_game_state = !state.inspect_game_state;
                 },
                 else => {},
             }
+        }
+
+        if (event.type == sdl.SDL_EVENT_WINDOW_RESIZED) {
+            setupWindowSize(state);
         }
     }
 
