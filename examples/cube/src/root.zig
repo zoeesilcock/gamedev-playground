@@ -455,15 +455,15 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
 
         if (event.type == sdl.SDL_EVENT_KEY_DOWN) {
             switch (event.key.key) {
-                sdl.SDLK_F1 => {
-                    state.fps_state.?.toggleMode();
-                },
                 sdl.SDLK_P => {
                     state.paused = !state.paused;
                 },
                 sdl.SDLK_F => {
                     state.fullscreen = !state.fullscreen;
                     _ = sdl.SDL_SetWindowFullscreen(state.window, state.fullscreen);
+                },
+                sdl.SDLK_F1 => {
+                    state.fps_state.?.toggleMode();
                 },
                 sdl.SDLK_G => {
                     state.inspect_game_state = !state.inspect_game_state;

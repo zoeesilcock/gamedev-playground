@@ -4,11 +4,16 @@ This example uses the SDL3 GPU API to render a cube.
 
 ![Playground screenshot](screenshot.png)
 
+### Controls
+* P: Toggle pause.
+* F: Toggle fullscreen.
+
 
 ## Integrated editor
 
 ### Controls
 * F1: Cycle between FPS display modes (none, number, or number and graph).
+* G: Toggle game state inspector.
 
 
 ## Hot reloading
