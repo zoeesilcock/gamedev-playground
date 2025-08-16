@@ -1,6 +1,12 @@
 const std = @import("std");
 const runtime = @import("runtime");
 
+const SHADER_FORMATS: []const []const u8 = &.{ "spv", "msl", "dxil" };
+const SHADERS: []const []const u8 = &.{
+    "cube.vert",
+    "solid_color.frag",
+};
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -19,6 +25,7 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
+    module.addOptions("build_options", build_options);
     const lib = b.addSharedLibrary(.{
         .name = lib_base_name,
         .root_module = module,
@@ -31,7 +38,24 @@ pub fn build(b: *std.Build) !void {
     const check = b.step("check", "Check if it compiles");
     check.dependOn(&lib_check.step);
 
-    module.addOptions("build_options", build_options);
+    const compile_shaders_step = b.step("compile_shaders", "Compile SHADERS. (requires a working shadercross installation on the path)");
+    inline for (SHADERS) |shader| {
+        inline for (SHADER_FORMATS) |shader_output_format| {
+            const output_name = shader ++ "." ++ shader_output_format;
+            var compile_shader = b.addSystemCommand(&.{"shadercross"});
+            compile_shader.addFileArg(b.path("src/shaders/" ++ shader ++ ".hlsl"));
+            compile_shader.addArg("-o");
+            const compiled_shader = compile_shader.addOutputFileArg(output_name);
+            const installed_shader = b.addInstallFile(compiled_shader, "../assets/shaders/" ++ output_name);
+
+            compile_shader.has_side_effects = true;
+
+            compile_shaders_step.dependOn(&compile_shader.step);
+            compile_shaders_step.dependOn(&installed_shader.step);
+        }
+    }
+
+    b.getInstallStep().dependOn(compile_shaders_step);
 
     const runtime_dep = b.dependency("runtime", .{
         .target = target,
@@ -74,30 +98,6 @@ pub fn build(b: *std.Build) !void {
     runtime.linkImgui(runtime_dep.builder, lib, target, optimize, internal);
 
     b.installArtifact(lib);
-
-    const compile_shaders_step = b.step("compile_shaders", "Compile shaders. (requires a working shadercross installation on the path)");
-    const shader_output_formats: []const []const u8 = &.{
-        "spv",
-        "msl",
-        "dxil",
-    };
-    const shaders: []const []const u8 = &.{
-        "cube.vert",
-        "solid_color.frag",
-    };
-    for (shaders) |shader| {
-        for (shader_output_formats) |shader_output_format| {
-            var input_buf: [128]u8 = undefined;
-            var output_buf: [128]u8 = undefined;
-            const compile_shader = b.addSystemCommand(&.{
-                "shadercross",
-                try std.fmt.bufPrint(&input_buf, "src/shaders/{s}.hlsl", .{ shader }),
-                "-o",
-                try std.fmt.bufPrint(&output_buf, "assets/shaders/{s}.{s}", .{ shader, shader_output_format }),
-            });
-            compile_shaders_step.dependOn(&compile_shader.step);
-        }
-    }
 
     if (!lib_only) {
         const test_step = b.step("test", "Run unit tests");
