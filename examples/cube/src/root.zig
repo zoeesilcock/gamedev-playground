@@ -255,205 +255,14 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         @panic("Failed to claim window for GPU device.");
     }
 
-    const vertex_shader = loadShader(state, "cube.vert", 0, 1, 0, 0);
-    if (vertex_shader == null) {
-        @panic("Failed to load vertex shader");
-    }
-    defer sdl.SDL_ReleaseGPUShader(state.device, vertex_shader);
-
-    const fragment_shader = loadShader(state, "solid_color.frag", 0, 0, 0, 0);
-    if (fragment_shader == null) {
-        @panic("Failed to load fragment shader");
-    }
-    defer sdl.SDL_ReleaseGPUShader(state.device, fragment_shader);
-
-    state.depth_stencil_format = undefined;
-    if (sdl.SDL_GPUTextureSupportsFormat(
-        state.device,
-        sdl.SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,
-        sdl.SDL_GPU_TEXTURETYPE_2D,
-        sdl.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
-    )) {
-        state.depth_stencil_format = sdl.SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
-    } else if (sdl.SDL_GPUTextureSupportsFormat(
-        state.device,
-        sdl.SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,
-        sdl.SDL_GPU_TEXTURETYPE_2D,
-        sdl.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
-    )) {
-        state.depth_stencil_format = sdl.SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
-    } else {
-        @panic("Failed to find a supported stencil format");
-    }
-
-    state.render_texture_format = sdl.SDL_GetGPUSwapchainTextureFormat(state.device, state.window);
-    var sample_count: usize = 0;
-    for (0..4) |i| {
-        if (sdl.SDL_GPUTextureSupportsSampleCount(state.device, state.render_texture_format, @intCast(i))) {
-            sample_count = i;
-        }
-    }
-    state.render_texture_sample_count = @intCast(sample_count);
-    std.log.info("Multisample count: {d}x", .{ @as(u8, @intCast(1)) << @intCast(sample_count) });
-
-    setupWindowSize(state);
-
-    const color_target_descriptions: []const sdl.SDL_GPUColorTargetDescription = &.{.{
-        .format = state.render_texture_format,
-    }};
-    const vertex_buffer_descriptions: []const sdl.SDL_GPUVertexBufferDescription = &.{
-        .{
-            .slot = 0,
-            .input_rate = sdl.SDL_GPU_VERTEXINPUTRATE_VERTEX,
-            .instance_step_rate = 0,
-            .pitch = @sizeOf(PositionColorVertex),
-        },
-    };
-    const vertex_attributes: []const sdl.SDL_GPUVertexAttribute = &.{
-        .{
-            .buffer_slot = 0,
-            .format = sdl.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-            .location = 0,
-            .offset = 0,
-        },
-        .{
-            .buffer_slot = 0,
-            .format = sdl.SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,
-            .location = 1,
-            .offset = @sizeOf(f32) * 3,
-        },
-    };
-    var pipeline_create_info: sdl.SDL_GPUGraphicsPipelineCreateInfo = .{
-        .target_info = .{
-            .num_color_targets = 1,
-            .color_target_descriptions = color_target_descriptions.ptr,
-            .has_depth_stencil_target = true,
-            .depth_stencil_format = state.depth_stencil_format,
-        },
-        .vertex_input_state = .{
-            .num_vertex_buffers = 1,
-            .vertex_buffer_descriptions = vertex_buffer_descriptions.ptr,
-            .num_vertex_attributes = 2,
-            .vertex_attributes = vertex_attributes.ptr,
-        },
-        .depth_stencil_state = .{
-            .enable_depth_test = true,
-            .enable_depth_write = true,
-            .enable_stencil_test = false,
-            .compare_op = sdl.SDL_GPU_COMPAREOP_LESS,
-            .write_mask = 0xFF,
-        },
-        .multisample_state = .{
-            .sample_count = state.render_texture_sample_count,
-        },
-        .primitive_type = sdl.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
-        .vertex_shader = vertex_shader,
-        .fragment_shader = fragment_shader,
-    };
-
-    pipeline_create_info.rasterizer_state.fill_mode = sdl.SDL_GPU_FILLMODE_FILL;
-    if (sdl.SDL_CreateGPUGraphicsPipeline(state.device, &pipeline_create_info)) |fill_pipeline| {
-        state.fill_pipeline = fill_pipeline;
-    } else {
-        @panic("Failed to create fill pipeline.");
-    }
-
-    pipeline_create_info.rasterizer_state.fill_mode = sdl.SDL_GPU_FILLMODE_LINE;
-    if (sdl.SDL_CreateGPUGraphicsPipeline(state.device, &pipeline_create_info)) |line_pipeline| {
-        state.line_pipeline = line_pipeline;
-    } else {
-        @panic("Failed to create line pipeline.");
-    }
-
-    var buffer_create_info: sdl.SDL_GPUBufferCreateInfo = .{
-        .usage = sdl.SDL_GPU_BUFFERUSAGE_VERTEX,
-        .size = VERTICES.len * @sizeOf(PositionColorVertex),
-    };
-    if (sdl.SDL_CreateGPUBuffer(state.device, &buffer_create_info)) |buffer| {
-        state.vertex_buffer = buffer;
-    } else {
-        @panic("Failed to create vertex buffer.");
-    }
-    buffer_create_info = .{
-        .usage = sdl.SDL_GPU_BUFFERUSAGE_INDEX,
-        .size = INDICES.len * @sizeOf(u16),
-    };
-    if (sdl.SDL_CreateGPUBuffer(state.device, &buffer_create_info)) |buffer| {
-        state.index_buffer = buffer;
-    } else {
-        @panic("Failed to create index buffer.");
-    }
-
+    initPipeline(state);
     submitVertexData(state);
-    std.log.info("Submitted vertex data: {s}", .{ sdl.SDL_GetError() });
 
     if (INTERNAL) {
         imgui.initGPU(state.window, state.device, @floatFromInt(window_width), @floatFromInt(window_height));
     }
 
     return state;
-}
-
-fn setupWindowSize(state: *State) void {
-    _ = sdl.SDL_GetWindowSizeInPixels(state.window, @ptrCast(&state.window_width), @ptrCast(&state.window_height));
-
-    state.camera = Camera.init(@as(f32, @floatFromInt(state.window_width)) / @as(f32, @floatFromInt(state.window_height)));
-
-    if (sdl.SDL_CreateGPUTexture(
-        state.device,
-        &.{
-            .type = sdl.SDL_GPU_TEXTURETYPE_2D,
-            .width = state.window_width,
-            .height = state.window_height,
-            .layer_count_or_depth = 1,
-            .num_levels = 1,
-            .format = state.render_texture_format,
-            .sample_count = state.render_texture_sample_count,
-            .usage = if (state.render_texture_sample_count == sdl.SDL_GPU_SAMPLECOUNT_1)
-                sdl.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER
-            else
-                sdl.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
-        },
-    )) |texture| {
-        state.render_texture = texture;
-    } else {
-        @panic("Failed to create render texture");
-    }
-
-    if (sdl.SDL_CreateGPUTexture(
-        state.device,
-        &.{
-            .type = sdl.SDL_GPU_TEXTURETYPE_2D,
-            .width = state.window_width,
-            .height = state.window_height,
-            .layer_count_or_depth = 1,
-            .num_levels = 1,
-            .format = state.render_texture_format,
-            .usage = sdl.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER,
-        },
-    )) |texture| {
-        state.resolve_texture = texture;
-    } else {
-        @panic("Failed to create resolve texture");
-    }
-
-    if (sdl.SDL_CreateGPUTexture(
-        state.device,
-        &.{
-            .type = sdl.SDL_GPU_TEXTURETYPE_2D,
-            .width = state.window_width,
-            .height = state.window_height,
-            .layer_count_or_depth = 1,
-            .num_levels = 1,
-            .sample_count = state.render_texture_sample_count,
-            .format = state.depth_stencil_format,
-            .usage = sdl.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
-        },
-    )) |texture| {
-        state.depth_stencil_texture = texture;
-    } else {
-        @panic("Failed to create depth stencil texture");
-    }
 }
 
 pub export fn deinit(state_ptr: *anyopaque) void {
@@ -463,35 +272,33 @@ pub export fn deinit(state_ptr: *anyopaque) void {
         imgui.deinit();
     }
 
-    sdl.SDL_ReleaseGPUGraphicsPipeline(state.device, state.fill_pipeline);
-    sdl.SDL_ReleaseGPUGraphicsPipeline(state.device, state.line_pipeline);
-
-    sdl.SDL_ReleaseGPUTexture(state.device, state.render_texture);
-    sdl.SDL_ReleaseGPUTexture(state.device, state.resolve_texture);
-    sdl.SDL_ReleaseGPUTexture(state.device, state.depth_stencil_texture);
-
-    sdl.SDL_ReleaseGPUBuffer(state.device, state.vertex_buffer);
-    sdl.SDL_ReleaseGPUBuffer(state.device, state.index_buffer);
+    deinitPipeline(state);
+    deinitWindowSize(state);
 
     sdl.SDL_ReleaseWindowFromGPUDevice(state.device, state.window);
     sdl.SDL_DestroyGPUDevice(state.device);
 }
 
 pub export fn willReload(state_ptr: *anyopaque) void {
-    _ = state_ptr;
+    const state: *State = @ptrCast(@alignCast(state_ptr));
 
     if (INTERNAL) {
         imgui.deinit();
     }
+
+    deinitPipeline(state);
 }
 
 pub export fn reloaded(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
-    submitVertexData(state);
+
+    initPipeline(state);
 
     if (INTERNAL) {
         imgui.initGPU(state.window, state.device, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
     }
+
+    submitVertexData(state);
 }
 
 pub export fn processInput(state_ptr: *anyopaque) bool {
@@ -530,7 +337,8 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
         }
 
         if (event.type == sdl.SDL_EVENT_WINDOW_RESIZED) {
-            setupWindowSize(state);
+            deinitWindowSize(state);
+            initWindowSize(state);
         }
     }
 
@@ -661,64 +469,211 @@ pub export fn draw(state_ptr: *anyopaque) void {
     }
 }
 
-fn submitVertexData(state: *State) void {
-    var transfer_buffer_create_info: sdl.SDL_GPUTransferBufferCreateInfo = .{
-        .usage = sdl.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = @sizeOf(PositionColorVertex) * VERTICES.len + @sizeOf(u16) * INDICES.len,
-    };
-    const opt_transfer_buffer: ?*sdl.SDL_GPUTransferBuffer = sdl.SDL_CreateGPUTransferBuffer(
-        state.device,
-        &transfer_buffer_create_info,
-    );
-
-    if (opt_transfer_buffer) |transfer_buffer| {
-        if (sdl.SDL_MapGPUTransferBuffer(state.device, transfer_buffer, false)) |data| {
-            var transfer_data: [*]PositionColorVertex = @ptrCast(@alignCast(data));
-            @memcpy(transfer_data[0..VERTICES.len], VERTICES);
-
-            var transfer_data2: [*]u16 = @ptrCast(@alignCast(transfer_data + VERTICES.len));
-            @memcpy(transfer_data2[0..INDICES.len], INDICES);
-
-            sdl.SDL_UnmapGPUTransferBuffer(state.device, transfer_buffer);
-
-            const upload_command_buffer: ?*sdl.SDL_GPUCommandBuffer = sdl.SDL_AcquireGPUCommandBuffer(state.device);
-            const copy_pass: ?*sdl.SDL_GPUCopyPass = sdl.SDL_BeginGPUCopyPass(upload_command_buffer);
-            sdl.SDL_UploadToGPUBuffer(
-                copy_pass,
-                &.{
-                    .transfer_buffer = transfer_buffer,
-                    .offset = 0,
-                },
-                &.{
-                    .buffer = state.vertex_buffer,
-                    .offset = 0,
-                    .size = VERTICES.len * @sizeOf(PositionColorVertex),
-                },
-                false,
-            );
-            sdl.SDL_UploadToGPUBuffer(
-                copy_pass,
-                &.{
-                    .transfer_buffer = transfer_buffer,
-                    .offset = VERTICES.len * @sizeOf(PositionColorVertex),
-                },
-                &.{
-                    .buffer = state.index_buffer,
-                    .offset = 0,
-                    .size = INDICES.len * @sizeOf(u16),
-                },
-                false,
-            );
-
-            sdl.SDL_EndGPUCopyPass(copy_pass);
-            _ = sdl.SDL_SubmitGPUCommandBuffer(upload_command_buffer);
-            sdl.SDL_ReleaseGPUTransferBuffer(state.device, transfer_buffer);
-        } else {
-            @panic("Failed to map transfer buffer to GPU.");
-        }
-    } else {
-        @panic("Failed to create transfer buffer.");
+fn initPipeline(state: *State) void {
+    const vertex_shader = loadShader(state, "cube.vert", 0, 1, 0, 0);
+    if (vertex_shader == null) {
+        @panic("Failed to load vertex shader");
     }
+    defer sdl.SDL_ReleaseGPUShader(state.device, vertex_shader);
+
+    const fragment_shader = loadShader(state, "solid_color.frag", 0, 0, 0, 0);
+    if (fragment_shader == null) {
+        @panic("Failed to load fragment shader");
+    }
+    defer sdl.SDL_ReleaseGPUShader(state.device, fragment_shader);
+
+    state.depth_stencil_format = undefined;
+    if (sdl.SDL_GPUTextureSupportsFormat(
+        state.device,
+        sdl.SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,
+        sdl.SDL_GPU_TEXTURETYPE_2D,
+        sdl.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+    )) {
+        state.depth_stencil_format = sdl.SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
+    } else if (sdl.SDL_GPUTextureSupportsFormat(
+        state.device,
+        sdl.SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,
+        sdl.SDL_GPU_TEXTURETYPE_2D,
+        sdl.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+    )) {
+        state.depth_stencil_format = sdl.SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
+    } else {
+        @panic("Failed to find a supported stencil format");
+    }
+
+    state.render_texture_format = sdl.SDL_GetGPUSwapchainTextureFormat(state.device, state.window);
+    var sample_count: usize = 0;
+    for (0..4) |i| {
+        if (sdl.SDL_GPUTextureSupportsSampleCount(state.device, state.render_texture_format, @intCast(i))) {
+            sample_count = i;
+        }
+    }
+    state.render_texture_sample_count = @intCast(sample_count);
+    std.log.info("Multisample count: {d}x", .{@as(u8, @intCast(1)) << @intCast(sample_count)});
+
+    initWindowSize(state);
+
+    const color_target_descriptions: []const sdl.SDL_GPUColorTargetDescription = &.{.{
+        .format = state.render_texture_format,
+    }};
+    const vertex_buffer_descriptions: []const sdl.SDL_GPUVertexBufferDescription = &.{
+        .{
+            .slot = 0,
+            .input_rate = sdl.SDL_GPU_VERTEXINPUTRATE_VERTEX,
+            .instance_step_rate = 0,
+            .pitch = @sizeOf(PositionColorVertex),
+        },
+    };
+    const vertex_attributes: []const sdl.SDL_GPUVertexAttribute = &.{
+        .{
+            .buffer_slot = 0,
+            .format = sdl.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+            .location = 0,
+            .offset = 0,
+        },
+        .{
+            .buffer_slot = 0,
+            .format = sdl.SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,
+            .location = 1,
+            .offset = @sizeOf(f32) * 3,
+        },
+    };
+    var pipeline_create_info: sdl.SDL_GPUGraphicsPipelineCreateInfo = .{
+        .target_info = .{
+            .num_color_targets = 1,
+            .color_target_descriptions = color_target_descriptions.ptr,
+            .has_depth_stencil_target = true,
+            .depth_stencil_format = state.depth_stencil_format,
+        },
+        .vertex_input_state = .{
+            .num_vertex_buffers = 1,
+            .vertex_buffer_descriptions = vertex_buffer_descriptions.ptr,
+            .num_vertex_attributes = 2,
+            .vertex_attributes = vertex_attributes.ptr,
+        },
+        .depth_stencil_state = .{
+            .enable_depth_test = true,
+            .enable_depth_write = true,
+            .enable_stencil_test = false,
+            .compare_op = sdl.SDL_GPU_COMPAREOP_LESS,
+            .write_mask = 0xFF,
+        },
+        .multisample_state = .{
+            .sample_count = state.render_texture_sample_count,
+        },
+        .primitive_type = sdl.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+        .vertex_shader = vertex_shader,
+        .fragment_shader = fragment_shader,
+    };
+
+    pipeline_create_info.rasterizer_state.fill_mode = sdl.SDL_GPU_FILLMODE_FILL;
+    if (sdl.SDL_CreateGPUGraphicsPipeline(state.device, &pipeline_create_info)) |fill_pipeline| {
+        state.fill_pipeline = fill_pipeline;
+    } else {
+        @panic("Failed to create fill pipeline.");
+    }
+
+    pipeline_create_info.rasterizer_state.fill_mode = sdl.SDL_GPU_FILLMODE_LINE;
+    if (sdl.SDL_CreateGPUGraphicsPipeline(state.device, &pipeline_create_info)) |line_pipeline| {
+        state.line_pipeline = line_pipeline;
+    } else {
+        @panic("Failed to create line pipeline.");
+    }
+
+    var buffer_create_info: sdl.SDL_GPUBufferCreateInfo = .{
+        .usage = sdl.SDL_GPU_BUFFERUSAGE_VERTEX,
+        .size = VERTICES.len * @sizeOf(PositionColorVertex),
+    };
+    if (sdl.SDL_CreateGPUBuffer(state.device, &buffer_create_info)) |buffer| {
+        state.vertex_buffer = buffer;
+    } else {
+        @panic("Failed to create vertex buffer.");
+    }
+    buffer_create_info = .{
+        .usage = sdl.SDL_GPU_BUFFERUSAGE_INDEX,
+        .size = INDICES.len * @sizeOf(u16),
+    };
+    if (sdl.SDL_CreateGPUBuffer(state.device, &buffer_create_info)) |buffer| {
+        state.index_buffer = buffer;
+    } else {
+        @panic("Failed to create index buffer.");
+    }
+}
+
+fn deinitPipeline(state: *State) void {
+    sdl.SDL_ReleaseGPUGraphicsPipeline(state.device, state.fill_pipeline);
+    sdl.SDL_ReleaseGPUGraphicsPipeline(state.device, state.line_pipeline);
+
+    sdl.SDL_ReleaseGPUBuffer(state.device, state.vertex_buffer);
+    sdl.SDL_ReleaseGPUBuffer(state.device, state.index_buffer);
+}
+
+fn initWindowSize(state: *State) void {
+    _ = sdl.SDL_GetWindowSizeInPixels(state.window, @ptrCast(&state.window_width), @ptrCast(&state.window_height));
+
+    state.camera = Camera.init(@as(f32, @floatFromInt(state.window_width)) / @as(f32, @floatFromInt(state.window_height)));
+
+    if (sdl.SDL_CreateGPUTexture(
+        state.device,
+        &.{
+            .type = sdl.SDL_GPU_TEXTURETYPE_2D,
+            .width = state.window_width,
+            .height = state.window_height,
+            .layer_count_or_depth = 1,
+            .num_levels = 1,
+            .format = state.render_texture_format,
+            .sample_count = state.render_texture_sample_count,
+            .usage = if (state.render_texture_sample_count == sdl.SDL_GPU_SAMPLECOUNT_1)
+                sdl.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER
+            else
+                sdl.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
+        },
+    )) |texture| {
+        state.render_texture = texture;
+    } else {
+        @panic("Failed to create render texture");
+    }
+
+    if (sdl.SDL_CreateGPUTexture(
+        state.device,
+        &.{
+            .type = sdl.SDL_GPU_TEXTURETYPE_2D,
+            .width = state.window_width,
+            .height = state.window_height,
+            .layer_count_or_depth = 1,
+            .num_levels = 1,
+            .format = state.render_texture_format,
+            .usage = sdl.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER,
+        },
+    )) |texture| {
+        state.resolve_texture = texture;
+    } else {
+        @panic("Failed to create resolve texture");
+    }
+
+    if (sdl.SDL_CreateGPUTexture(
+        state.device,
+        &.{
+            .type = sdl.SDL_GPU_TEXTURETYPE_2D,
+            .width = state.window_width,
+            .height = state.window_height,
+            .layer_count_or_depth = 1,
+            .num_levels = 1,
+            .sample_count = state.render_texture_sample_count,
+            .format = state.depth_stencil_format,
+            .usage = sdl.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+        },
+    )) |texture| {
+        state.depth_stencil_texture = texture;
+    } else {
+        @panic("Failed to create depth stencil texture");
+    }
+}
+
+fn deinitWindowSize(state: *State) void {
+    sdl.SDL_ReleaseGPUTexture(state.device, state.render_texture);
+    sdl.SDL_ReleaseGPUTexture(state.device, state.resolve_texture);
+    sdl.SDL_ReleaseGPUTexture(state.device, state.depth_stencil_texture);
 }
 
 fn loadShader(
@@ -803,4 +758,64 @@ fn inputCustomTypes(
     }
 
     return handled;
+}
+
+fn submitVertexData(state: *State) void {
+    var transfer_buffer_create_info: sdl.SDL_GPUTransferBufferCreateInfo = .{
+        .usage = sdl.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = @sizeOf(PositionColorVertex) * VERTICES.len + @sizeOf(u16) * INDICES.len,
+    };
+    const opt_transfer_buffer: ?*sdl.SDL_GPUTransferBuffer = sdl.SDL_CreateGPUTransferBuffer(
+        state.device,
+        &transfer_buffer_create_info,
+    );
+
+    if (opt_transfer_buffer) |transfer_buffer| {
+        if (sdl.SDL_MapGPUTransferBuffer(state.device, transfer_buffer, false)) |data| {
+            var transfer_data: [*]PositionColorVertex = @ptrCast(@alignCast(data));
+            @memcpy(transfer_data[0..VERTICES.len], VERTICES);
+
+            var transfer_data2: [*]u16 = @ptrCast(@alignCast(transfer_data + VERTICES.len));
+            @memcpy(transfer_data2[0..INDICES.len], INDICES);
+
+            sdl.SDL_UnmapGPUTransferBuffer(state.device, transfer_buffer);
+
+            const upload_command_buffer: ?*sdl.SDL_GPUCommandBuffer = sdl.SDL_AcquireGPUCommandBuffer(state.device);
+            const copy_pass: ?*sdl.SDL_GPUCopyPass = sdl.SDL_BeginGPUCopyPass(upload_command_buffer);
+            sdl.SDL_UploadToGPUBuffer(
+                copy_pass,
+                &.{
+                    .transfer_buffer = transfer_buffer,
+                    .offset = 0,
+                },
+                &.{
+                    .buffer = state.vertex_buffer,
+                    .offset = 0,
+                    .size = VERTICES.len * @sizeOf(PositionColorVertex),
+                },
+                false,
+            );
+            sdl.SDL_UploadToGPUBuffer(
+                copy_pass,
+                &.{
+                    .transfer_buffer = transfer_buffer,
+                    .offset = VERTICES.len * @sizeOf(PositionColorVertex),
+                },
+                &.{
+                    .buffer = state.index_buffer,
+                    .offset = 0,
+                    .size = INDICES.len * @sizeOf(u16),
+                },
+                false,
+            );
+
+            sdl.SDL_EndGPUCopyPass(copy_pass);
+            _ = sdl.SDL_SubmitGPUCommandBuffer(upload_command_buffer);
+            sdl.SDL_ReleaseGPUTransferBuffer(state.device, transfer_buffer);
+        } else {
+            @panic("Failed to map transfer buffer to GPU.");
+        }
+    } else {
+        @panic("Failed to create transfer buffer.");
+    }
 }
