@@ -17,7 +17,7 @@ This example uses the SDL3 GPU API to render a cube.
 
 
 ## Hot reloading
-To automatically rebuild the shared library when you change the code you can leave the following command running in a separate terminal:
+To automatically rebuild the shared library and the shaders when the underlying code changes, leave the following command running in a separate terminal:
 ```
 zig build -Dlib_only --watch
 ```
