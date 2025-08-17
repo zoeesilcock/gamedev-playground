@@ -48,8 +48,6 @@ pub fn build(b: *std.Build) !void {
             const compiled_shader = compile_shader.addOutputFileArg(output_name);
             const installed_shader = b.addInstallFile(compiled_shader, "../assets/shaders/" ++ output_name);
 
-            try compile_shader.step.addWatchInput(b.path("src/shaders/" ++ shader ++ ".hlsl"));
-
             compile_shaders_step.dependOn(&compile_shader.step);
             compile_shaders_step.dependOn(&installed_shader.step);
         }
