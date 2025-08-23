@@ -46,16 +46,21 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
     if (std.fs.cwd().openFile(path, .{ .mode = .read_only })) |file| {
         defer file.close();
 
-        const opt_header: ?*AseHeader = try parseHeader(&file, allocator);
+        var buf: [1024 * 1024]u8 = undefined;
+        var file_reader = file.reader(&buf);
+
+        const opt_header: ?*AseHeader = try parseHeader(&file_reader.interface, allocator);
         var frames: ArrayList(AseFrame) = .empty;
         defer frames.deinit(allocator);
+
+        std.log.info("loadDocument: {s}", .{path});
 
         if (opt_header) |header| {
             std.debug.assert(header.magic_number == 0xA5E0);
             std.log.info("Frame count: {d}", .{header.frames});
 
             for (0..header.frames) |_| {
-                if (try parseFrameHeader(&file, allocator)) |frame_header| {
+                if (try parseFrameHeader(&file_reader.interface, allocator)) |frame_header| {
                     std.debug.assert(frame_header.magic_number == 0xF1FA);
                     std.log.info(
                         "Frame size: {d}, chunks: {d}",
@@ -66,7 +71,7 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
                     var opt_tags: ?[]*AseTagsChunk = null;
 
                     for (0..frame_header.chunkCount()) |_| {
-                        if (try parseChunkHeader(&file, allocator)) |chunk_header| {
+                        if (try parseChunkHeader(&file_reader.interface, allocator)) |chunk_header| {
                             defer allocator.destroy(chunk_header);
                             std.log.info(
                                 "Chunk size: {d}, chunk_type: {}",
@@ -75,15 +80,15 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
 
                             switch (chunk_header.chunk_type) {
                                 .Cel => {
-                                    if (try parseCelChunk(&file, chunk_header, allocator)) |cel_chunk| {
+                                    if (try parseCelChunk(&file_reader.interface, chunk_header, allocator)) |cel_chunk| {
                                         try cel_chunks.append(allocator, cel_chunk);
                                     }
                                 },
                                 .Tags => {
-                                    opt_tags = try parseTagsChunks(&file, allocator);
+                                    opt_tags = try parseTagsChunks(&file_reader.interface, allocator);
                                 },
                                 else => {
-                                    _ = try file.reader().skipBytes(chunk_header.chunkSize(), .{});
+                                    file_reader.interface.toss(chunk_header.chunkSize());
                                 },
                             }
                         }
@@ -104,7 +109,11 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
                     .header = header,
                     .frames = try frames.toOwnedSlice(allocator),
                 };
+            } else {
+                std.log.err("No frames found in aseprite file.", .{});
             }
+        } else {
+            std.log.err("Failed to parse aseprite header.", .{});
         }
     } else |err| {
         std.log.info("Cannot find file '{s}': {s}", .{ path, @errorName(err) });
@@ -300,74 +309,74 @@ pub const AseTagsChunk = struct {
     tag_name: []const u8, // STRING Tag name
 };
 
-fn parseHeader(file: *const std.fs.File, allocator: std.mem.Allocator) !?*AseHeader {
+fn parseHeader(reader: *std.Io.Reader, allocator: std.mem.Allocator) !?*AseHeader {
     const header: *AseHeader = try allocator.create(AseHeader);
 
-    header.file_size = try file.reader().readInt(u32, .little);
-    header.magic_number = try file.reader().readInt(u16, .little);
-    header.frames = try file.reader().readInt(u16, .little);
-    header.width = try file.reader().readInt(u16, .little);
-    header.height = try file.reader().readInt(u16, .little);
-    header.color_depth = try file.reader().readInt(u16, .little);
-    header.flags = try file.reader().readInt(u32, .little);
-    header.speed = try file.reader().readInt(u16, .little);
-    header.padding1 = try file.reader().readInt(u32, .little);
-    header.padding2 = try file.reader().readInt(u32, .little);
-    header.palette_index = try file.reader().readInt(u8, .little);
-    try file.reader().skipBytes(3, .{});
-    header.color_count = try file.reader().readInt(u16, .little);
-    header.pixel_width = try file.reader().readInt(u8, .little);
-    header.pixel_height = try file.reader().readInt(u8, .little);
-    header.grid_y = try file.reader().readInt(i16, .little);
-    header.grid_x = try file.reader().readInt(i16, .little);
-    header.grid_width = try file.reader().readInt(u16, .little);
-    header.grid_height = try file.reader().readInt(u16, .little);
-    try file.reader().skipBytes(84, .{});
+    header.file_size = try reader.takeInt(u32, .little);
+    header.magic_number = try reader.takeInt(u16, .little);
+    header.frames = try reader.takeInt(u16, .little);
+    header.width = try reader.takeInt(u16, .little);
+    header.height = try reader.takeInt(u16, .little);
+    header.color_depth = try reader.takeInt(u16, .little);
+    header.flags = try reader.takeInt(u32, .little);
+    header.speed = try reader.takeInt(u16, .little);
+    header.padding1 = try reader.takeInt(u32, .little);
+    header.padding2 = try reader.takeInt(u32, .little);
+    header.palette_index = try reader.takeInt(u8, .little);
+    reader.toss(3);
+    header.color_count = try reader.takeInt(u16, .little);
+    header.pixel_width = try reader.takeInt(u8, .little);
+    header.pixel_height = try reader.takeInt(u8, .little);
+    header.grid_y = try reader.takeInt(i16, .little);
+    header.grid_x = try reader.takeInt(i16, .little);
+    header.grid_width = try reader.takeInt(u16, .little);
+    header.grid_height = try reader.takeInt(u16, .little);
+    reader.toss(84);
 
     return header;
 }
 
-fn parseFrameHeader(file: *const std.fs.File, allocator: std.mem.Allocator) !?*AseFrameHeader {
+fn parseFrameHeader(reader: *std.Io.Reader, allocator: std.mem.Allocator) !?*AseFrameHeader {
     const header: *AseFrameHeader = try allocator.create(AseFrameHeader);
 
-    header.byte_count = try file.reader().readInt(u32, .little);
-    header.magic_number = try file.reader().readInt(u16, .little);
-    header.old_chunk_count = try file.reader().readInt(u16, .little);
-    header.frame_duration = try file.reader().readInt(u16, .little);
-    try file.reader().skipBytes(2, .{});
-    header.chunk_count = try file.reader().readInt(u32, .little);
+    header.byte_count = try reader.takeInt(u32, .little);
+    header.magic_number = try reader.takeInt(u16, .little);
+    header.old_chunk_count = try reader.takeInt(u16, .little);
+    header.frame_duration = try reader.takeInt(u16, .little);
+    reader.toss(2);
+    header.chunk_count = try reader.takeInt(u32, .little);
 
     return header;
 }
 
-fn parseChunkHeader(file: *const std.fs.File, allocator: std.mem.Allocator) !?*AseChunkHeader {
+fn parseChunkHeader(reader: *std.Io.Reader, allocator: std.mem.Allocator) !?*AseChunkHeader {
     const header: *AseChunkHeader = try allocator.create(AseChunkHeader);
 
-    header.size = try file.reader().readInt(u32, .little);
-    header.chunk_type = @enumFromInt(try file.reader().readInt(u16, .little));
+    header.size = try reader.takeInt(u32, .little);
+    header.chunk_type = @enumFromInt(try reader.takeInt(u16, .little));
 
     return header;
 }
 
-fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: std.mem.Allocator) !?*AseCelChunk {
+fn parseCelChunk(reader: *std.Io.Reader, header: *AseChunkHeader, allocator: std.mem.Allocator) !?*AseCelChunk {
     const chunk: *AseCelChunk = try allocator.create(AseCelChunk);
 
-    chunk.layer_index = try file.reader().readInt(u16, .little);
-    chunk.x = try file.reader().readInt(i16, .little);
-    chunk.y = try file.reader().readInt(i16, .little);
-    chunk.opacity = try file.reader().readInt(u8, .little);
-    chunk.cel_type = @enumFromInt(try file.reader().readInt(u16, .little));
-    chunk.z_index = try file.reader().readInt(i16, .little);
+    chunk.layer_index = try reader.takeInt(u16, .little);
+    chunk.x = try reader.takeInt(i16, .little);
+    chunk.y = try reader.takeInt(i16, .little);
+    chunk.opacity = try reader.takeInt(u8, .little);
+    chunk.cel_type = @enumFromInt(try reader.takeInt(u16, .little));
+    chunk.z_index = try reader.takeInt(i16, .little);
 
     std.log.info("Cel x: {d}, y: {d}, type: {}", .{ chunk.x, chunk.y, chunk.cel_type });
 
-    _ = try file.reader().skipBytes(5, .{});
+    reader.toss(5);
 
     switch (chunk.cel_type) {
         .compressedImage => {
             chunk.data = .{ .compressedImage = .{
-                .width = try file.reader().readInt(u16, .little),
-                .height = try file.reader().readInt(u16, .little),
+                .width = try reader.takeInt(u16, .little),
+                .height = try reader.takeInt(u16, .little),
                 .pixels = undefined,
             } };
 
@@ -382,51 +391,44 @@ fn parseCelChunk(file: *const std.fs.File, header: *AseChunkHeader, allocator: s
                 .{ data_size, header.chunkSize(), AseCelChunk.headerSize(chunk.cel_type) },
             );
 
-            const compressed_data: []u8 = try allocator.alloc(u8, data_size);
-            defer allocator.free(compressed_data);
-            const bytes_read = try file.reader().read(compressed_data);
-
-            std.log.info("Read: {d}, expected: {d}", .{ bytes_read, data_size });
-            std.debug.assert(bytes_read == data_size);
-
-            var compressed_stream = std.io.fixedBufferStream(compressed_data);
-            var decompress_stream = std.compress.zlib.decompressor(compressed_stream.reader());
-            chunk.data.compressedImage.pixels =
-                try decompress_stream.reader().readAllAlloc(allocator, std.math.maxInt(usize));
+            var decompress_buffer: [std.compress.flate.max_window_len]u8 = undefined;
+            var decompress: std.compress.flate.Decompress = .init(reader, .zlib, &decompress_buffer);
+            const decompress_reader: *std.Io.Reader = &decompress.reader;
+            chunk.data.compressedImage.pixels = try decompress_reader.allocRemaining(allocator, .unlimited);
 
             std.log.info("Decompressed: {d}", .{chunk.data.compressedImage.pixels.len});
         },
         else => {
-            _ = try file.reader().skipBytes(AseCelChunk.headerSize(chunk.cel_type), .{});
+            reader.toss(AseCelChunk.headerSize(chunk.cel_type));
         },
     }
 
     return chunk;
 }
 
-fn parseTagsChunks(file: *const std.fs.File, allocator: std.mem.Allocator) !?[]*AseTagsChunk {
+fn parseTagsChunks(reader: *std.Io.Reader, allocator: std.mem.Allocator) !?[]*AseTagsChunk {
     var tag_chunks: ArrayList(*AseTagsChunk) = .empty;
 
     const header: AseTagsChunkHeader = .{
-        .count = try file.reader().readInt(u16, .little),
+        .count = try reader.takeInt(u16, .little),
     };
 
-    _ = try file.reader().skipBytes(8, .{});
+    reader.toss(8);
 
     for (0..header.count) |_| {
         const chunk: *AseTagsChunk = try allocator.create(AseTagsChunk);
 
-        chunk.from_frame = try file.reader().readInt(u16, .little);
-        chunk.to_frame = try file.reader().readInt(u16, .little);
-        chunk.loop_direction = @enumFromInt(try file.reader().readInt(u8, .little));
-        chunk.repeat_count = try file.reader().readInt(u16, .little);
+        chunk.from_frame = try reader.takeInt(u16, .little);
+        chunk.to_frame = try reader.takeInt(u16, .little);
+        chunk.loop_direction = @enumFromInt(try reader.takeInt(u8, .little));
+        chunk.repeat_count = try reader.takeInt(u16, .little);
 
-        _ = try file.reader().skipBytes(6 + 3 + 1, .{});
+        reader.toss(6 + 3 + 1);
 
-        const tag_name_length = try file.reader().readInt(u16, .little);
+        const tag_name_length = try reader.takeInt(u16, .little);
         var buffer: ArrayList(u8) = .empty;
         for (0..tag_name_length) |_| {
-            try buffer.append(allocator, try file.reader().readByte());
+            try buffer.append(allocator, try reader.takeByte());
         }
         chunk.tag_name = try buffer.toOwnedSlice(allocator);
 

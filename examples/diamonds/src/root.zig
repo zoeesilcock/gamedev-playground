@@ -929,7 +929,14 @@ fn unloadAssets(state: *State) void {
 fn loadSprite(path: []const u8, renderer: *sdl.SDL_Renderer, allocator: std.mem.Allocator) ?SpriteAsset {
     var result: ?SpriteAsset = null;
 
-    if (aseprite.loadDocument(path, allocator) catch undefined) |doc| {
+    std.log.info("loadSprite: {s}", .{path});
+
+    const opt_doc = aseprite.loadDocument(path, allocator) catch |err| blk: {
+        std.log.err("Asperite loadDocument failed: {t}", .{err});
+        break :blk null;
+    };
+
+    if (opt_doc) |doc| {
         var textures: ArrayList(*sdl.SDL_Texture) = .empty;
 
         for (doc.frames) |frame| {
@@ -982,6 +989,8 @@ fn loadSprite(path: []const u8, renderer: *sdl.SDL_Renderer, allocator: std.mem.
             .document = doc,
             .frames = textures.toOwnedSlice(allocator) catch &.{},
         };
+    } else {
+        @panic("aseprite.loadDocument failed");
     }
 
     return result;
@@ -1041,15 +1050,19 @@ pub fn loadLevel(state: *State, name: []const u8) !void {
     var buf: [LEVEL_NAME_BUFFER_SIZE * 2]u8 = undefined;
     const path = try std.fmt.bufPrint(&buf, "assets/{s}.lvl", .{name});
     const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
-    const wall_count = try file.reader().readInt(u32, .little);
+
+    var reader_buf: [10 * 1024]u8 = undefined;
+    var file_reader = file.reader(&reader_buf);
+    var reader: *std.Io.Reader = &file_reader.interface;
+    const wall_count = try reader.takeInt(u32, .little);
 
     unloadLevel(state);
 
     for (0..wall_count) |_| {
-        const color = try file.reader().readInt(u32, .little);
-        const block_type = try file.reader().readInt(u32, .little);
-        const x = try file.reader().readInt(i32, .little);
-        const y = try file.reader().readInt(i32, .little);
+        const color = try reader.takeInt(u32, .little);
+        const block_type = try reader.takeInt(u32, .little);
+        const x = try reader.takeInt(i32, .little);
+        const y = try reader.takeInt(i32, .little);
 
         _ = try addWall(
             state,

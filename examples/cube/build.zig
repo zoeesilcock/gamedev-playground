@@ -26,12 +26,14 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
     module.addOptions("build_options", build_options);
-    const lib = b.addSharedLibrary(.{
+    const lib = b.addLibrary(.{
+        .linkage = .dynamic,
         .name = lib_base_name,
         .root_module = module,
     });
 
-    const lib_check = b.addSharedLibrary(.{
+    const lib_check = b.addLibrary(.{
+        .linkage = .dynamic,
         .name = lib_base_name,
         .root_module = module,
     });

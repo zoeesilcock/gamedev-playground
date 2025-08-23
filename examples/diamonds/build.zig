@@ -19,12 +19,14 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const lib = b.addSharedLibrary(.{
+    const lib = b.addLibrary(.{
+        .linkage = .dynamic,
         .name = lib_base_name,
         .root_module = module,
     });
 
-    const lib_check = b.addSharedLibrary(.{
+    const lib_check = b.addLibrary(.{
+        .linkage = .dynamic,
         .name = lib_base_name,
         .root_module = module,
     });
