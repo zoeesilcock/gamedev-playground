@@ -1,8 +1,5 @@
 const std = @import("std");
 
-// TODO: Remove once Zig has finished migrating to unmanaged-style containers.
-const ArrayList = std.ArrayListUnmanaged;
-
 // Public API.
 pub const AseDocument = struct {
     header: *const AseHeader,
@@ -50,7 +47,7 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
         var file_reader = file.reader(&buf);
 
         const opt_header: ?*AseHeader = try parseHeader(&file_reader.interface, allocator);
-        var frames: ArrayList(AseFrame) = .empty;
+        var frames: std.ArrayList(AseFrame) = .empty;
         defer frames.deinit(allocator);
 
         std.log.info("loadDocument: {s}", .{path});
@@ -67,7 +64,7 @@ pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocumen
                         .{ frame_header.byte_count, frame_header.chunkCount() },
                     );
 
-                    var cel_chunks: ArrayList(*AseCelChunk) = .empty;
+                    var cel_chunks: std.ArrayList(*AseCelChunk) = .empty;
                     var opt_tags: ?[]*AseTagsChunk = null;
 
                     for (0..frame_header.chunkCount()) |_| {
@@ -407,7 +404,7 @@ fn parseCelChunk(reader: *std.Io.Reader, header: *AseChunkHeader, allocator: std
 }
 
 fn parseTagsChunks(reader: *std.Io.Reader, allocator: std.mem.Allocator) !?[]*AseTagsChunk {
-    var tag_chunks: ArrayList(*AseTagsChunk) = .empty;
+    var tag_chunks: std.ArrayList(*AseTagsChunk) = .empty;
 
     const header: AseTagsChunkHeader = .{
         .count = try reader.takeInt(u16, .little),
@@ -426,7 +423,7 @@ fn parseTagsChunks(reader: *std.Io.Reader, allocator: std.mem.Allocator) !?[]*As
         reader.toss(6 + 3 + 1);
 
         const tag_name_length = try reader.takeInt(u16, .little);
-        var buffer: ArrayList(u8) = .empty;
+        var buffer: std.ArrayList(u8) = .empty;
         for (0..tag_name_length) |_| {
             try buffer.append(allocator, try reader.takeByte());
         }

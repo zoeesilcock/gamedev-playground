@@ -31,9 +31,6 @@ const G = math.G;
 const B = math.B;
 const A = math.A;
 
-// TODO: Remove once Zig has finished migrating to unmanaged-style containers.
-const ArrayList = std.ArrayListUnmanaged;
-
 const PLATFORM = @import("builtin").os.tag;
 const DOUBLE_CLICK_THRESHOLD: u64 = 300;
 const MAX_FRAME_TIME_COUNT: u32 = 300;
@@ -58,7 +55,7 @@ pub const DebugState = struct {
     show_state_inspector: bool,
 
     show_colliders: bool,
-    collisions: ArrayList(DebugCollision),
+    collisions: std.ArrayList(DebugCollision),
 
     memory_usage: [MAX_MEMORY_USAGE_COUNT]u64,
     memory_usage_current_index: u32,

@@ -40,8 +40,6 @@ const G = math.G;
 const B = math.B;
 const A = math.A;
 
-// TODO: Remove once Zig has finished migrating to unmanaged-style containers.
-const ArrayList = std.ArrayListUnmanaged;
 const DebugAllocator = std.heap.DebugAllocator(.{
     .enable_memory_limit = true,
     .retain_metadata = INTERNAL,
@@ -101,8 +99,8 @@ pub const State = struct {
     lives_remaining: u32,
 
     // Entities.
-    entities: ArrayList(*Entity),
-    entities_free: ArrayList(u32),
+    entities: std.ArrayList(*Entity),
+    entities_free: std.ArrayList(u32),
     entities_iterator: EntityIterator,
     ball_id: ?EntityId,
     current_title_id: ?EntityId,
@@ -937,7 +935,7 @@ fn loadSprite(path: []const u8, renderer: *sdl.SDL_Renderer, allocator: std.mem.
     };
 
     if (opt_doc) |doc| {
-        var textures: ArrayList(*sdl.SDL_Texture) = .empty;
+        var textures: std.ArrayList(*sdl.SDL_Texture) = .empty;
 
         for (doc.frames) |frame| {
             const surface = sdlPanicIfNull(
