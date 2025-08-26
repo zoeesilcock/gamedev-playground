@@ -16,9 +16,6 @@ const Y = math.Y;
 const Z = math.Z;
 const FPSState = internal.FPSState;
 
-// TODO: Remove once Zig has finished migrating to unmanaged-style containers.
-const ArrayList = std.ArrayListUnmanaged;
-
 const DebugAllocator = std.heap.DebugAllocator(.{
     .enable_memory_limit = true,
     .retain_metadata = INTERNAL,
@@ -56,7 +53,7 @@ pub const State = struct {
     delta_time_actual: u64 = 0,
 
     camera: Camera,
-    entities: ArrayList(Entity),
+    entities: std.ArrayList(Entity),
 
     pub fn deltaTime(self: *State) f32 {
         return @as(f32, @floatFromInt(self.delta_time)) / 1000;

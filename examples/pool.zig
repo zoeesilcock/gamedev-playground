@@ -1,8 +1,5 @@
 const std = @import("std");
 
-// TODO: Remove once Zig has finished migrating to unmanaged-style containers.
-const ArrayList = std.ArrayListUnmanaged;
-
 pub const PoolId = struct {
     index: u32,
 
@@ -21,11 +18,11 @@ pub fn Pool(comptime PooledType: type) type {
             item: PooledType,
         };
 
-        entries: ArrayList(PoolEntry),
-        entries_free: ArrayList(u32),
+        entries: std.ArrayList(PoolEntry),
+        entries_free: std.ArrayList(u32),
 
         pub fn init(initial_count: u32, allocator: std.mem.Allocator) !Self {
-            var entries: ArrayList(PoolEntry) = .empty;
+            var entries: std.ArrayList(PoolEntry) = .empty;
             var entries_slice = try entries.addManyAsSlice(allocator, initial_count);
             for (0..initial_count) |i| {
                 entries_slice[i].is_used = false;
@@ -34,7 +31,7 @@ pub fn Pool(comptime PooledType: type) type {
                 };
             }
 
-            var entries_free: ArrayList(u32) = .empty;
+            var entries_free: std.ArrayList(u32) = .empty;
             var entries_free_slice = try entries_free.addManyAsSlice(allocator, initial_count);
             for (0..initial_count) |i| {
                 entries_free_slice[i] = @intCast(i);

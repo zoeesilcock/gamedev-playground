@@ -11,8 +11,6 @@ const X = math.X;
 const Y = math.Y;
 const Z = math.Z;
 
-// TODO: Remove once Zig has finished migrating to unmanaged-style containers.
-const ArrayList = std.ArrayListUnmanaged;
 const PoolId = pool.PoolId;
 
 pub const EntityType = enum(u8) {
@@ -33,7 +31,7 @@ pub const EntityId = struct {
 };
 
 pub const EntityIterator = struct {
-    entities: *ArrayList(*Entity),
+    entities: *std.ArrayList(*Entity),
     index: usize = 0,
 
     pub fn next(self: *EntityIterator, comptime with_components: []const @TypeOf(.EnumLiteral)) ?*Entity {

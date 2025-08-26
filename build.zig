@@ -177,10 +177,13 @@ fn createImGuiLib(
         .optimize = optimize,
         .preferred_link_mode = .dynamic,
     })) |sdl_dep| {
-        const dcimgui_sdl = b.addStaticLibrary(.{
-            .name = "dcimgui_sdl",
+        const module = b.createModule(.{
             .target = target,
             .optimize = optimize,
+        });
+        const dcimgui_sdl = b.addLibrary(.{
+            .name = "dcimgui_sdl",
+            .root_module = module,
         });
 
         dcimgui_sdl.root_module.link_libcpp = true;
