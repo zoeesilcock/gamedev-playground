@@ -31,9 +31,6 @@ const G = math.G;
 const B = math.B;
 const A = math.A;
 
-// TODO: Remove once Zig has finished migrating to unmanaged-style containers.
-const ArrayList = std.ArrayListUnmanaged;
-
 const PLATFORM = @import("builtin").os.tag;
 const DOUBLE_CLICK_THRESHOLD: u64 = 300;
 const MAX_FRAME_TIME_COUNT: u32 = 300;
@@ -58,7 +55,7 @@ pub const DebugState = struct {
     show_state_inspector: bool,
 
     show_colliders: bool,
-    collisions: ArrayList(DebugCollision),
+    collisions: std.ArrayList(DebugCollision),
 
     memory_usage: [MAX_MEMORY_USAGE_COUNT]u64,
     memory_usage_current_index: u32,
@@ -764,18 +761,24 @@ fn saveLevel(state: *State, name: []const u8) !void {
     const file = try std.fs.cwd().createFile(path, .{ .truncate = true });
     defer file.close();
 
+    var writer_buf: [10 * 1024]u8 = undefined;
+    var file_writer = file.writer(&writer_buf);
+    var writer: *std.Io.Writer = &file_writer.interface;
+
     var walls_count: u32 = 0;
     var iter: EntityIterator = .{ .entities = &state.entities };
     while (iter.next(&.{ .block, .color, .transform })) |_| {
         walls_count += 1;
     }
-    try file.writer().writeInt(u32, walls_count, .little);
+    try writer.writeInt(u32, walls_count, .little);
 
     iter.reset();
     while (iter.next(&.{ .block, .color, .transform })) |entity| {
-        try file.writer().writeInt(u32, @intFromEnum(entity.color.?.color), .little);
-        try file.writer().writeInt(u32, @intFromEnum(entity.block.?.type), .little);
-        try file.writer().writeInt(i32, @intFromFloat(@round(entity.transform.?.position[X])), .little);
-        try file.writer().writeInt(i32, @intFromFloat(@round(entity.transform.?.position[Y])), .little);
+        try writer.writeInt(u32, @intFromEnum(entity.color.?.color), .little);
+        try writer.writeInt(u32, @intFromEnum(entity.block.?.type), .little);
+        try writer.writeInt(i32, @intFromFloat(@round(entity.transform.?.position[X])), .little);
+        try writer.writeInt(i32, @intFromFloat(@round(entity.transform.?.position[Y])), .little);
     }
+
+    try writer.flush();
 }
