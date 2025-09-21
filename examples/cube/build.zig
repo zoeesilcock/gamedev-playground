@@ -5,6 +5,8 @@ const SHADER_FORMATS: []const []const u8 = &.{ "spv", "msl", "dxil" };
 const SHADERS: []const []const u8 = &.{
     "cube.vert",
     "solid_color.frag",
+    "screen.vert",
+    "screen.frag",
 };
 
 pub fn build(b: *std.Build) !void {
