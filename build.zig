@@ -129,7 +129,7 @@ pub fn getSDL(
     if (b.lazyDependency("sdl", .{
         .target = target,
         .optimize = optimize,
-        .preferred_link_mode = .dynamic,
+        .preferred_linkage = .dynamic,
     })) |sdl_dep| {
         result = sdl_dep.artifact("SDL3");
     }
@@ -146,7 +146,7 @@ pub fn getSDLIncludePath(
     if (b.lazyDependency("sdl", .{
         .target = target,
         .optimize = optimize,
-        .preferred_link_mode = .dynamic,
+        .preferred_linkage = .dynamic,
     })) |sdl_dep| {
         result = sdl_dep.path("include");
     }
@@ -175,7 +175,7 @@ fn createImGuiLib(
     if (b.lazyDependency("sdl", .{
         .target = target,
         .optimize = optimize,
-        .preferred_link_mode = .dynamic,
+        .preferred_linkage = .dynamic,
     })) |sdl_dep| {
         const module = b.createModule(.{
             .target = target,
