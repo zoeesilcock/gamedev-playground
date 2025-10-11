@@ -1,4 +1,5 @@
 const std = @import("std");
+const sdl_utils = @import("sdl");
 const sdl = @import("sdl").c;
 const internal = @import("internal");
 const aseprite = @import("aseprite");
@@ -389,22 +390,6 @@ pub const SpriteAsset = struct {
     }
 };
 
-fn sdlPanicIfNull(result: anytype, message: []const u8) @TypeOf(result) {
-    if (result == null) {
-        std.log.err("{s} SDL error: {s}", .{ message, sdl.SDL_GetError() });
-        @panic(message);
-    }
-
-    return result;
-}
-
-fn sdlPanic(result: bool, message: []const u8) void {
-    if (result == false) {
-        std.log.err("{s} SDL error: {s}", .{ message, sdl.SDL_GetError() });
-        @panic(message);
-    }
-}
-
 pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) *anyopaque {
     var backing_allocator = std.heap.page_allocator;
     var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
@@ -424,7 +409,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         .game_allocator = game_allocator,
 
         .window = window,
-        .renderer = sdlPanicIfNull(sdl.SDL_CreateRenderer(window, null), "Failed to create renderer.").?,
+        .renderer = sdl_utils.panicIfNull(sdl.SDL_CreateRenderer(window, null), "Failed to create renderer.").?,
 
         .window_width = window_width,
         .window_height = window_height,
@@ -531,7 +516,7 @@ pub fn setupRenderTexture(state: *State) void {
         .h = @as(f32, @floatFromInt(state.world_height)) * state.world_scale,
     };
 
-    state.render_texture = sdlPanicIfNull(sdl.SDL_CreateTexture(
+    state.render_texture = sdl_utils.panicIfNull(sdl.SDL_CreateTexture(
         state.renderer,
         sdl.SDL_PIXELFORMAT_RGBA32,
         sdl.SDL_TEXTUREACCESS_TARGET,
@@ -539,7 +524,7 @@ pub fn setupRenderTexture(state: *State) void {
         @intCast(state.world_height),
     ), "Failed to initialize main render texture.");
 
-    sdlPanic(
+    sdl_utils.panic(
         sdl.SDL_SetTextureScaleMode(state.render_texture, sdl.SDL_SCALEMODE_NEAREST),
         "Failed to set scale mode for the main render texture.",
     );
@@ -793,7 +778,7 @@ fn handleBallCollision(state: *State, ball: *Entity, block: *Entity) void {
 pub export fn draw(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    sdlPanic(sdl.SDL_SetRenderTarget(state.renderer, state.render_texture), "Failed to set render target.");
+    sdl_utils.panic(sdl.SDL_SetRenderTarget(state.renderer, state.render_texture), "Failed to set render target.");
     {
         _ = sdl.SDL_SetRenderDrawColor(state.renderer, 0, 0, 0, 255);
         _ = sdl.SDL_RenderClear(state.renderer);
@@ -868,8 +853,8 @@ fn drawTextureAt(state: *State, texture: *sdl.SDL_Texture, position: Vector2, sc
         .h = @as(f32, @floatFromInt(texture.h)) * scale[Y],
     };
 
-    sdlPanic(sdl.SDL_SetTextureColorMod(texture, tint[R], tint[G], tint[B]), "Failed to set texture color mod.");
-    sdlPanic(sdl.SDL_SetTextureAlphaMod(texture, tint[A]), "Failed to set texture alpha mod.");
+    sdl_utils.panic(sdl.SDL_SetTextureColorMod(texture, tint[R], tint[G], tint[B]), "Failed to set texture color mod.");
+    sdl_utils.panic(sdl.SDL_SetTextureAlphaMod(texture, tint[A]), "Failed to set texture alpha mod.");
 
     _ = sdl.SDL_RenderTexture(state.renderer, texture, null, &texture_rect);
 }
@@ -938,7 +923,7 @@ fn loadSprite(path: []const u8, renderer: *sdl.SDL_Renderer, allocator: std.mem.
         var textures: std.ArrayList(*sdl.SDL_Texture) = .empty;
 
         for (doc.frames) |frame| {
-            const surface = sdlPanicIfNull(
+            const surface = sdl_utils.panicIfNull(
                 sdl.SDL_CreateSurface(
                     doc.header.width,
                     doc.header.height,
@@ -955,7 +940,7 @@ fn loadSprite(path: []const u8, renderer: *sdl.SDL_Renderer, allocator: std.mem.
                     .w = cel_chunk.data.compressedImage.width,
                     .h = cel_chunk.data.compressedImage.height,
                 };
-                const cel_surface = sdlPanicIfNull(
+                const cel_surface = sdl_utils.panicIfNull(
                     sdl.SDL_CreateSurfaceFrom(
                         cel_chunk.data.compressedImage.width,
                         cel_chunk.data.compressedImage.height,
@@ -967,13 +952,13 @@ fn loadSprite(path: []const u8, renderer: *sdl.SDL_Renderer, allocator: std.mem.
                 );
                 defer sdl.SDL_DestroySurface(cel_surface);
 
-                sdlPanic(
+                sdl_utils.panic(
                     sdl.SDL_BlitSurface(cel_surface, null, surface, &dest_rect),
                     "Failed to blit cel surface into sprite surface",
                 );
             }
 
-            const texture = sdlPanicIfNull(
+            const texture = sdl_utils.panicIfNull(
                 sdl.SDL_CreateTextureFromSurface(renderer, surface),
                 "Failed to create texture from surface",
             );
