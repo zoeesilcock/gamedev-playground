@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) !void {
     build_options.addOption([]const u8, "lib_base_name", lib_base_name);
 
     const test_step = b.step("test", "Run unit tests");
-    const exe = buildExecutable(b, b, build_options, target, optimize, test_step);
+    const exe = buildExecutable(b, b, "gamedev-playground", build_options, target, optimize, test_step);
     b.installArtifact(exe);
 
     generateImGuiBindingsStep(b, target, optimize);
@@ -20,6 +20,7 @@ pub fn build(b: *std.Build) !void {
 pub fn buildExecutable(
     b: *std.Build,
     client_b: *std.Build,
+    name: []const u8,
     build_options: *std.Build.Step.Options,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
@@ -32,7 +33,7 @@ pub fn buildExecutable(
     });
     module.addOptions("build_options", build_options);
     const exe = b.addExecutable(.{
-        .name = "gamedev-playground",
+        .name = name,
         .root_module = module,
     });
 

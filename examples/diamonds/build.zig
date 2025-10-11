@@ -85,7 +85,15 @@ pub fn build(b: *std.Build) void {
 
     if (!lib_only) {
         const test_step = b.step("test", "Run unit tests");
-        const exe = runtime.buildExecutable(runtime_dep.builder, b, build_options, target, optimize, test_step);
+        const exe = runtime.buildExecutable(
+            runtime_dep.builder,
+            b,
+            "diamonds",
+            build_options,
+            target,
+            optimize,
+            test_step,
+        );
         b.installArtifact(exe);
     }
 }
