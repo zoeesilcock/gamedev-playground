@@ -1,7 +1,7 @@
 .{
     .name = .diamonds_example,
     .version = "0.1.0",
-    .minimum_zig_version = "0.14.1",
+    .minimum_zig_version = "0.15.1",
     .fingerprint = 0x5b4abc708109fe2f,
     .dependencies = .{
         .runtime = .{
