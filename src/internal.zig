@@ -350,7 +350,7 @@ pub fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
     c_imgui.ImGui_PushIDPtr(value);
     defer c_imgui.ImGui_PopID();
 
-    var current_item: i32 = @intFromEnum(value.*);
+    var current_item: i32 = @intCast(@intFromEnum(value.*));
     if (c_imgui.ImGui_ComboCharEx(heading, &current_item, &items, count, 0)) {
         value.* = @enumFromInt(current_item);
     }

@@ -16,6 +16,12 @@ const X = math.X;
 const Y = math.Y;
 const Z = math.Z;
 const FPSState = internal.FPSState;
+const ScreenEffect = enum(u32) {
+    None = 0,
+    VerticalWave,
+    HorizontalWave,
+    DoubleWaveAllTheWayAcrossTheSky,
+};
 
 const DebugAllocator = std.heap.DebugAllocator(.{
     .enable_memory_limit = true,
@@ -51,6 +57,7 @@ pub const State = struct {
     window_width: u32,
     window_height: u32,
     fullscreen: bool = false,
+    screen_effect: ScreenEffect = .None,
 
     paused: bool = false,
     time: u64 = 0,
@@ -60,12 +67,23 @@ pub const State = struct {
     camera: Camera,
     entities: std.ArrayList(Entity),
 
+    pub fn currentTime(self: *State) f32 {
+        return @as(f32, @floatFromInt(self.time)) / 1000;
+    }
+
     pub fn deltaTime(self: *State) f32 {
         return @as(f32, @floatFromInt(self.delta_time)) / 1000;
     }
 
     pub fn deltaTimeActual(self: *State) f32 {
         return @as(f32, @floatFromInt(self.delta_time_actual)) / 1000;
+    }
+
+    pub fn getFragmentUniforms(self: *State) FragmentUniforms {
+        return .{
+            .time = self.currentTime(),
+            .screen_effect = @intFromEnum(self.screen_effect),
+        };
     }
 };
 
@@ -224,6 +242,11 @@ const QUAD_INDICES: []const u16 = &.{
     0, 3, 2,
 };
 
+const FragmentUniforms = struct {
+    time: f32,
+    screen_effect: u32,
+};
+
 pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) *anyopaque {
     var backing_allocator = std.heap.page_allocator;
     var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
@@ -354,6 +377,14 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
                 sdl.SDLK_G => {
                     state.inspect_game_state = !state.inspect_game_state;
                 },
+                sdl.SDLK_E => {
+                    var next_effect = @intFromEnum(state.screen_effect) + 1;
+                    if (next_effect >= @typeInfo(ScreenEffect).@"enum".fields.len) {
+                        next_effect = 0;
+                    }
+
+                    state.screen_effect = @enumFromInt(next_effect);
+                },
                 else => {},
             }
         }
@@ -468,6 +499,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
             1,
             null,
         );
+        sdl.SDL_PushGPUFragmentUniformData(command_buffer, 0, &state.getFragmentUniforms(), @sizeOf(FragmentUniforms));
         sdl.SDL_BindGPUGraphicsPipeline(screen_render_pass, state.screen_pipeline);
         sdl.SDL_BindGPUVertexBuffers(screen_render_pass, 0, &.{ .buffer = state.quad_vertex_buffer, .offset = 0 }, 1);
         sdl.SDL_BindGPUIndexBuffer(
@@ -531,7 +563,7 @@ fn initPipeline(state: *State) void {
     }
     defer sdl.SDL_ReleaseGPUShader(state.device, screen_vertex_shader);
 
-    const screen_fragment_shader = loadShader(state, "screen.frag", 1, 0, 0, 0);
+    const screen_fragment_shader = loadShader(state, "screen.frag", 1, 2, 0, 0);
     if (screen_fragment_shader == null) {
         @panic("Failed to load screen fragment shader");
     }

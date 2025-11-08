@@ -14,6 +14,7 @@ This example uses the SDL3 GPU API to render a cube.
 ### Controls
 * F1: Cycle between FPS display modes (none, number, or number and graph).
 * G: Toggle game state inspector.
+* E: Cycle which screen space shader effect to use.
 
 
 ## Hot reloading
