@@ -61,10 +61,20 @@ pub fn buildExecutable(
         },
     });
 
+    const aseprite_mod = b.addModule("aseprite", .{
+        .root_source_file = b.path("src/aseprite.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "sdl", .module = sdl_mod },
+        },
+    });
+
     if (getSDLIncludePath(b, target, optimize)) |sdl_include_path| {
         sdl_mod.addIncludePath(sdl_include_path);
         imgui_mod.addIncludePath(sdl_include_path);
         internal_mod.addIncludePath(sdl_include_path);
+        aseprite_mod.addIncludePath(sdl_include_path);
 
         exe.root_module.addImport("sdl", sdl_mod);
     }

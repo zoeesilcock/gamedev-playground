@@ -44,3 +44,4 @@ Building the runtime executable in a different project works by importing the de
 * sdl - exposes the SDL C API.
 * imgui - exposes the ImGui C API and backend integrations for the SDL3 Renderer and SDL3 GPU APIs.
 * internal - exposes tools used to generate editors and tools for internal builds.
+* aseprite - exposes the aseprite importer.
