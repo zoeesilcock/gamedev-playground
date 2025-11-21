@@ -6,10 +6,11 @@ const entities = @import("entities.zig");
 const pool = @import("pool");
 const math = @import("math");
 const imgui = @import("imgui");
+const aseprite = @import("aseprite");
 
 const State = game.State;
 const Assets = game.Assets;
-const SpriteAsset = game.SpriteAsset;
+const AsepriteAsset = aseprite.AsepriteAsset;
 const Entity = entities.Entity;
 const EntityIterator = entities.EntityIterator;
 const EntityId = entities.EntityId;
@@ -727,7 +728,7 @@ fn drawEntityHighlight(
     }
 }
 
-fn getTiledPosition(position: Vector2, asset: *const SpriteAsset) Vector2 {
+fn getTiledPosition(position: Vector2, asset: *const AsepriteAsset) Vector2 {
     const tile_x = @divFloor(position[X], @as(f32, @floatFromInt(asset.document.header.width)));
     const tile_y = @divFloor(position[Y], @as(f32, @floatFromInt(asset.document.header.height)));
     return Vector2{

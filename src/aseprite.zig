@@ -1,4 +1,6 @@
 const std = @import("std");
+const sdl = @import("sdl").c;
+const sdl_utils = @import("sdl");
 
 // Public API.
 pub const AseDocument = struct {
@@ -34,6 +36,87 @@ const AseFrame = struct {
         allocator.free(self.cel_chunks);
 
         allocator.destroy(self.header);
+    }
+};
+
+pub const AsepriteAsset = struct {
+    document: AseDocument,
+    frames: []*sdl.SDL_Texture,
+    path: []const u8,
+
+    pub fn deinit(self: *AsepriteAsset, allocator: std.mem.Allocator) void {
+        self.document.deinit(allocator);
+        allocator.free(self.frames);
+    }
+
+    pub fn load(path: []const u8, renderer: *sdl.SDL_Renderer, allocator: std.mem.Allocator) ?AsepriteAsset {
+        var result: ?AsepriteAsset = null;
+
+        std.log.info("loadSprite: {s}", .{path});
+
+        const opt_doc = loadDocument(path, allocator) catch |err| blk: {
+            std.log.err("Asperite loadDocument failed: {t}", .{err});
+            break :blk null;
+        };
+
+        if (opt_doc) |doc| {
+            var textures: std.ArrayList(*sdl.SDL_Texture) = .empty;
+
+            for (doc.frames) |frame| {
+                const surface = sdl_utils.panicIfNull(
+                    sdl.SDL_CreateSurface(
+                        doc.header.width,
+                        doc.header.height,
+                        sdl.SDL_PIXELFORMAT_RGBA32,
+                    ),
+                    "Failed to create a surface to blit sprite data into",
+                );
+                defer sdl.SDL_DestroySurface(surface);
+
+                for (frame.cel_chunks) |cel_chunk| {
+                    var dest_rect = sdl.SDL_Rect{
+                        .x = cel_chunk.x,
+                        .y = cel_chunk.y,
+                        .w = cel_chunk.data.compressedImage.width,
+                        .h = cel_chunk.data.compressedImage.height,
+                    };
+                    const cel_surface = sdl_utils.panicIfNull(
+                        sdl.SDL_CreateSurfaceFrom(
+                            cel_chunk.data.compressedImage.width,
+                            cel_chunk.data.compressedImage.height,
+                            sdl.SDL_PIXELFORMAT_RGBA32,
+                            @ptrCast(@constCast(cel_chunk.data.compressedImage.pixels)),
+                            cel_chunk.data.compressedImage.width * @sizeOf(u32),
+                        ),
+                        "Failed to create surface from data",
+                    );
+                    defer sdl.SDL_DestroySurface(cel_surface);
+
+                    sdl_utils.panic(
+                        sdl.SDL_BlitSurface(cel_surface, null, surface, &dest_rect),
+                        "Failed to blit cel surface into sprite surface",
+                    );
+                }
+
+                const texture = sdl_utils.panicIfNull(
+                    sdl.SDL_CreateTextureFromSurface(renderer, surface),
+                    "Failed to create texture from surface",
+                );
+                textures.append(allocator, texture.?) catch undefined;
+            }
+
+            std.log.info("loadSprite: {s}: {d}", .{ path, doc.frames.len });
+
+            result = AsepriteAsset{
+                .path = path,
+                .document = doc,
+                .frames = textures.toOwnedSlice(allocator) catch &.{},
+            };
+        } else {
+            @panic("aseprite.loadDocument failed");
+        }
+
+        return result;
     }
 };
 

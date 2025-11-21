@@ -10,6 +10,7 @@ const Vector2 = math.Vector2;
 const X = math.X;
 const Y = math.Y;
 const Z = math.Z;
+const AsepriteAsset = aseprite.AsepriteAsset;
 
 const PoolId = pool.PoolId;
 
@@ -362,7 +363,7 @@ pub const SpriteComponent = struct {
         }
     }
 
-    pub fn setFrame(self: *SpriteComponent, index: u32, sprite_asset: *game.SpriteAsset) void {
+    pub fn setFrame(self: *SpriteComponent, index: u32, sprite_asset: *AsepriteAsset) void {
         if (index < sprite_asset.document.frames.len) {
             self.duration_shown = 0;
             self.frame_index = index;

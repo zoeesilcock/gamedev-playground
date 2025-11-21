@@ -29,6 +29,7 @@ const TweenComponent = entities.TweenComponent;
 const TweenedValue = entities.TweenedValue;
 const Pool = pool.Pool;
 const FPSState = internal.FPSState;
+const AsepriteAsset = aseprite.AsepriteAsset;
 
 const Vector2 = math.Vector2;
 const X = math.X;
@@ -290,30 +291,30 @@ const Input = struct {
 };
 
 pub const Assets = struct {
-    life_filled: ?SpriteAsset = null,
-    life_outlined: ?SpriteAsset = null,
-    life_backdrop: ?SpriteAsset = null,
+    life_filled: ?AsepriteAsset = null,
+    life_outlined: ?AsepriteAsset = null,
+    life_backdrop: ?AsepriteAsset = null,
 
-    ball_red: ?SpriteAsset = null,
-    ball_blue: ?SpriteAsset = null,
+    ball_red: ?AsepriteAsset = null,
+    ball_blue: ?AsepriteAsset = null,
 
-    block_gray: ?SpriteAsset = null,
-    block_red: ?SpriteAsset = null,
-    block_blue: ?SpriteAsset = null,
-    block_change_red: ?SpriteAsset = null,
-    block_change_blue: ?SpriteAsset = null,
-    block_deadly: ?SpriteAsset = null,
+    block_gray: ?AsepriteAsset = null,
+    block_red: ?AsepriteAsset = null,
+    block_blue: ?AsepriteAsset = null,
+    block_change_red: ?AsepriteAsset = null,
+    block_change_blue: ?AsepriteAsset = null,
+    block_deadly: ?AsepriteAsset = null,
 
-    background: ?SpriteAsset = null,
+    background: ?AsepriteAsset = null,
 
-    title_paused: ?SpriteAsset = null,
-    title_get_ready: ?SpriteAsset = null,
-    title_cleared: ?SpriteAsset = null,
-    title_death: ?SpriteAsset = null,
-    title_game_over: ?SpriteAsset = null,
+    title_paused: ?AsepriteAsset = null,
+    title_get_ready: ?AsepriteAsset = null,
+    title_cleared: ?AsepriteAsset = null,
+    title_death: ?AsepriteAsset = null,
+    title_game_over: ?AsepriteAsset = null,
 
-    pub fn getSpriteAsset(self: *Assets, sprite: *const SpriteComponent) ?*SpriteAsset {
-        var result: ?*SpriteAsset = null;
+    pub fn getSpriteAsset(self: *Assets, sprite: *const SpriteComponent) ?*AsepriteAsset {
+        var result: ?*AsepriteAsset = null;
 
         if (sprite.entity.title) |title| {
             result = switch (title.type) {
@@ -343,7 +344,7 @@ pub const Assets = struct {
         return result;
     }
 
-    pub fn getWall(self: *Assets, color: ColorComponentValue, block_type: BlockType) *SpriteAsset {
+    pub fn getWall(self: *Assets, color: ColorComponentValue, block_type: BlockType) *AsepriteAsset {
         switch (block_type) {
             .Wall => {
                 return switch (color) {
@@ -370,23 +371,12 @@ pub const Assets = struct {
         unreachable;
     }
 
-    pub fn getBall(self: *Assets, color: ColorComponentValue) *SpriteAsset {
+    pub fn getBall(self: *Assets, color: ColorComponentValue) *AsepriteAsset {
         return switch (color) {
             .Red => &self.ball_red.?,
             .Blue => &self.ball_blue.?,
             .Gray => unreachable,
         };
-    }
-};
-
-pub const SpriteAsset = struct {
-    document: aseprite.AseDocument,
-    frames: []*sdl.SDL_Texture,
-    path: []const u8,
-
-    pub fn deinit(self: *SpriteAsset, allocator: std.mem.Allocator) void {
-        self.document.deinit(allocator);
-        allocator.free(self.frames);
     }
 };
 
@@ -860,27 +850,27 @@ fn drawTextureAt(state: *State, texture: *sdl.SDL_Texture, position: Vector2, sc
 }
 
 fn loadAssets(state: *State) void {
-    state.assets.life_filled = loadSprite("assets/life_filled.aseprite", state.renderer, state.allocator);
-    state.assets.life_outlined = loadSprite("assets/life_outlined.aseprite", state.renderer, state.allocator);
-    state.assets.life_backdrop = loadSprite("assets/life_backdrop.aseprite", state.renderer, state.allocator);
+    state.assets.life_filled = .load("assets/life_filled.aseprite", state.renderer, state.allocator);
+    state.assets.life_outlined = .load("assets/life_outlined.aseprite", state.renderer, state.allocator);
+    state.assets.life_backdrop = .load("assets/life_backdrop.aseprite", state.renderer, state.allocator);
 
-    state.assets.ball_red = loadSprite("assets/ball_red.aseprite", state.renderer, state.allocator);
-    state.assets.ball_blue = loadSprite("assets/ball_blue.aseprite", state.renderer, state.allocator);
+    state.assets.ball_red = .load("assets/ball_red.aseprite", state.renderer, state.allocator);
+    state.assets.ball_blue = .load("assets/ball_blue.aseprite", state.renderer, state.allocator);
 
-    state.assets.block_gray = loadSprite("assets/block_gray.aseprite", state.renderer, state.allocator);
-    state.assets.block_red = loadSprite("assets/block_red.aseprite", state.renderer, state.allocator);
-    state.assets.block_blue = loadSprite("assets/block_blue.aseprite", state.renderer, state.allocator);
-    state.assets.block_change_red = loadSprite("assets/block_change_red.aseprite", state.renderer, state.allocator);
-    state.assets.block_change_blue = loadSprite("assets/block_change_blue.aseprite", state.renderer, state.allocator);
-    state.assets.block_deadly = loadSprite("assets/block_deadly.aseprite", state.renderer, state.allocator);
+    state.assets.block_gray = .load("assets/block_gray.aseprite", state.renderer, state.allocator);
+    state.assets.block_red = .load("assets/block_red.aseprite", state.renderer, state.allocator);
+    state.assets.block_blue = .load("assets/block_blue.aseprite", state.renderer, state.allocator);
+    state.assets.block_change_red = .load("assets/block_change_red.aseprite", state.renderer, state.allocator);
+    state.assets.block_change_blue = .load("assets/block_change_blue.aseprite", state.renderer, state.allocator);
+    state.assets.block_deadly = .load("assets/block_deadly.aseprite", state.renderer, state.allocator);
 
-    state.assets.background = loadSprite("assets/background.aseprite", state.renderer, state.allocator);
+    state.assets.background = .load("assets/background.aseprite", state.renderer, state.allocator);
 
-    state.assets.title_paused = loadSprite("assets/title_paused.aseprite", state.renderer, state.allocator);
-    state.assets.title_get_ready = loadSprite("assets/title_get_ready.aseprite", state.renderer, state.allocator);
-    state.assets.title_cleared = loadSprite("assets/title_cleared.aseprite", state.renderer, state.allocator);
-    state.assets.title_death = loadSprite("assets/title_death.aseprite", state.renderer, state.allocator);
-    state.assets.title_game_over = loadSprite("assets/title_game_over.aseprite", state.renderer, state.allocator);
+    state.assets.title_paused = .load("assets/title_paused.aseprite", state.renderer, state.allocator);
+    state.assets.title_get_ready = .load("assets/title_get_ready.aseprite", state.renderer, state.allocator);
+    state.assets.title_cleared = .load("assets/title_cleared.aseprite", state.renderer, state.allocator);
+    state.assets.title_death = .load("assets/title_death.aseprite", state.renderer, state.allocator);
+    state.assets.title_game_over = .load("assets/title_game_over.aseprite", state.renderer, state.allocator);
 }
 
 fn unloadAssets(state: *State) void {
@@ -907,76 +897,6 @@ fn unloadAssets(state: *State) void {
     state.assets.title_game_over.?.deinit(state.allocator);
 
     std.log.info("Assets unloaded.", .{});
-}
-
-fn loadSprite(path: []const u8, renderer: *sdl.SDL_Renderer, allocator: std.mem.Allocator) ?SpriteAsset {
-    var result: ?SpriteAsset = null;
-
-    std.log.info("loadSprite: {s}", .{path});
-
-    const opt_doc = aseprite.loadDocument(path, allocator) catch |err| blk: {
-        std.log.err("Asperite loadDocument failed: {t}", .{err});
-        break :blk null;
-    };
-
-    if (opt_doc) |doc| {
-        var textures: std.ArrayList(*sdl.SDL_Texture) = .empty;
-
-        for (doc.frames) |frame| {
-            const surface = sdl_utils.panicIfNull(
-                sdl.SDL_CreateSurface(
-                    doc.header.width,
-                    doc.header.height,
-                    sdl.SDL_PIXELFORMAT_RGBA32,
-                ),
-                "Failed to create a surface to blit sprite data into",
-            );
-            defer sdl.SDL_DestroySurface(surface);
-
-            for (frame.cel_chunks) |cel_chunk| {
-                var dest_rect = sdl.SDL_Rect{
-                    .x = cel_chunk.x,
-                    .y = cel_chunk.y,
-                    .w = cel_chunk.data.compressedImage.width,
-                    .h = cel_chunk.data.compressedImage.height,
-                };
-                const cel_surface = sdl_utils.panicIfNull(
-                    sdl.SDL_CreateSurfaceFrom(
-                        cel_chunk.data.compressedImage.width,
-                        cel_chunk.data.compressedImage.height,
-                        sdl.SDL_PIXELFORMAT_RGBA32,
-                        @ptrCast(@constCast(cel_chunk.data.compressedImage.pixels)),
-                        cel_chunk.data.compressedImage.width * @sizeOf(u32),
-                    ),
-                    "Failed to create surface from data",
-                );
-                defer sdl.SDL_DestroySurface(cel_surface);
-
-                sdl_utils.panic(
-                    sdl.SDL_BlitSurface(cel_surface, null, surface, &dest_rect),
-                    "Failed to blit cel surface into sprite surface",
-                );
-            }
-
-            const texture = sdl_utils.panicIfNull(
-                sdl.SDL_CreateTextureFromSurface(renderer, surface),
-                "Failed to create texture from surface",
-            );
-            textures.append(allocator, texture.?) catch undefined;
-        }
-
-        std.log.info("loadSprite: {s}: {d}", .{ path, doc.frames.len });
-
-        result = SpriteAsset{
-            .path = path,
-            .document = doc,
-            .frames = textures.toOwnedSlice(allocator) catch &.{},
-        };
-    } else {
-        @panic("aseprite.loadDocument failed");
-    }
-
-    return result;
 }
 
 fn spawnBackground(state: *State) !void {
