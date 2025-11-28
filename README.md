@@ -7,11 +7,11 @@ Playground for exploring ways of making game development a more pleasurable expe
 
 ### [Diamonds](examples/diamonds/README.md)
 This example is inspired by the classic game [Diamonds](https://en.wikipedia.org/wiki/Diamonds_\(video_game\)). The objective is to clear the screen of colored blocks without hitting spiky blocks. It uses the SDL3 Renderer API to render 2D sprites based on Aseprite files.
-![Playground screenshot](examples/diamonds/screenshot.png)
+![Diamonds screenshot](examples/diamonds/screenshot.png)
 
 ### [Cube](examples/cube/README.md)
 This example uses the SDL3 GPU API to render a cube.
-![Playground screenshot](examples/cube/screenshot.png)
+![Cube screenshot](examples/cube/screenshot.png)
 
 
 ## Hot reloading
