@@ -1,5 +1,5 @@
 const std = @import("std");
-const sdl_utls = @import("sdl");
+const sdl_utils = @import("sdl");
 const sdl = @import("sdl").c;
 const imgui = @import("imgui");
 const internal = @import("internal");
@@ -248,6 +248,8 @@ const FragmentUniforms = struct {
 };
 
 pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) *anyopaque {
+    sdl_utils.logError(sdl.SDL_SetWindowTitle(window, "Cube"), "Failed to set window title");
+
     var backing_allocator = std.heap.page_allocator;
     var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
     game_allocator.* = .init;
@@ -260,7 +262,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         allocator = logging_allocator_ptr.allocator();
     }
 
-    const device = sdl_utls.panicIfNull(sdl.SDL_CreateGPUDevice(
+    const device = sdl_utils.panicIfNull(sdl.SDL_CreateGPUDevice(
         sdl.SDL_GPU_SHADERFORMAT_SPIRV | sdl.SDL_GPU_SHADERFORMAT_DXIL | sdl.SDL_GPU_SHADERFORMAT_MSL | sdl.SDL_GPU_SHADERFORMAT_METALLIB,
         true,
         null,
@@ -422,7 +424,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
 
     // Draw to texture.
     var command_buffer: ?*sdl.SDL_GPUCommandBuffer =
-        sdl_utls.panicIfNull(sdl.SDL_AcquireGPUCommandBuffer(state.device), "Failed to acquire GPU commmand buffer");
+        sdl_utils.panicIfNull(sdl.SDL_AcquireGPUCommandBuffer(state.device), "Failed to acquire GPU commmand buffer");
 
     var color_target_info: sdl.SDL_GPUColorTargetInfo = .{
         .texture = state.render_texture,
@@ -471,7 +473,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
 
     // Draw texture to screen.
     var command_buffer_submitted = sdl.SDL_SubmitGPUCommandBuffer(command_buffer);
-    sdl_utls.panic(command_buffer_submitted, "Failed to submit GPU command buffer");
+    sdl_utils.panic(command_buffer_submitted, "Failed to submit GPU command buffer");
     command_buffer = sdl.SDL_AcquireGPUCommandBuffer(state.device);
 
     var opt_swapchain_texture: ?*sdl.SDL_GPUTexture = null;
@@ -484,7 +486,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
         &swapchain_texture_width,
         &swapchain_texture_height,
     );
-    sdl_utls.panic(swapchain_acquired, "Failed to acquire GPU swapchain texture");
+    sdl_utils.panic(swapchain_acquired, "Failed to acquire GPU swapchain texture");
 
     if (opt_swapchain_texture) |swapchain_texture| {
         var screen_target_info: sdl.SDL_GPUColorTargetInfo = .{
@@ -541,7 +543,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
         }
     }
     command_buffer_submitted = sdl.SDL_SubmitGPUCommandBuffer(command_buffer);
-    sdl_utls.panic(command_buffer_submitted, "Failed to submit GPU command buffer");
+    sdl_utils.panic(command_buffer_submitted, "Failed to submit GPU command buffer");
 }
 
 fn initPipeline(state: *State) void {

@@ -22,3 +22,9 @@ pub fn panic(result: bool, message: []const u8) void {
         @panic(message);
     }
 }
+
+pub fn logError(result: bool, message: []const u8) void {
+    if (result == false) {
+        std.log.err("{s} SDL error: {s}", .{ message, c.SDL_GetError() });
+    }
+}
