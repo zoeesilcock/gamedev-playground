@@ -12,7 +12,6 @@ const State = game.State;
 const Assets = game.Assets;
 const AsepriteAsset = aseprite.AsepriteAsset;
 const Entity = entities.Entity;
-const EntityIterator = entities.EntityIterator;
 const EntityId = entities.EntityId;
 const EntityType = entities.EntityType;
 const Collision = entities.Collision;
@@ -203,30 +202,19 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
         return;
     }
 
-    if (state.getEntity(state.debug_state.hovered_entity_id)) |hovered_entity| {
+    if (state.getFatEntity(state.debug_state.hovered_entity_id)) |hovered_entity| {
         if (input.left_mouse_pressed) {
             // Grab the color and type of the hovered entity when alt is held down.
             if (state.debug_state.input.alt_key_down) {
-                if (hovered_entity.block) |block| {
-                    state.debug_state.current_block_type = block.type;
-                }
-                if (hovered_entity.color) |color| {
-                    state.debug_state.current_block_color = color.color;
-                }
+                state.debug_state.current_block_type = hovered_entity.block_type;
+                state.debug_state.current_block_color = hovered_entity.color;
             } else {
                 if (state.debug_state.mode == .Edit) {
                     var should_add: bool = true;
 
-                    if (hovered_entity.entity_type == .Wall) {
-                        if (hovered_entity.color) |hovered_color| {
-                            if (hovered_entity.block) |hovered_block_type| {
-                                should_add =
-                                    block_color != hovered_color.color or
-                                    block_type != hovered_block_type.type;
-                            }
-                        }
-
-                        state.removeEntity(hovered_entity);
+                    if (hovered_entity.hasFlag(.has_block) and !hovered_entity.hasFlag(.player_controlled)) {
+                        should_add = block_color != hovered_entity.color or block_type != hovered_entity.block_type;
+                        state.removeFatEntity(hovered_entity);
                     }
 
                     if (should_add) {
@@ -273,7 +261,7 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
 
 fn entityContainsPoint(state: *State, mouse_position: Vector2, entity: *Entity) ?EntityId {
     var result: ?EntityId = null;
-    if (entity.sprite.?.containsPoint(
+    if (entity.spriteContainsPoint(
         mouse_position,
         state.dest_rect,
         state.world_scale,
@@ -288,17 +276,8 @@ fn getHoveredEntity(state: *State) ?EntityId {
     var result: ?EntityId = null;
     const mouse_position = state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale));
 
-    var iter: EntityIterator = .{ .entities = &state.entities };
-    while (iter.next(&.{ .title, .sprite })) |entity| {
-        if (entityContainsPoint(state, mouse_position, entity)) |id| {
-            result = id;
-            break;
-        }
-    }
-
-    if (result == null) {
-        iter.reset();
-        while (iter.next(&.{ .collider, .sprite })) |entity| {
+    for (&state.fat_entities) |*entity| {
+        if (entity.is_in_use and entity.hasFlag(.has_title) and entity.hasFlag(.has_sprite)) {
             if (entityContainsPoint(state, mouse_position, entity)) |id| {
                 result = id;
                 break;
@@ -306,9 +285,17 @@ fn getHoveredEntity(state: *State) ?EntityId {
         }
     }
 
-    if (result == null) {
-        iter.reset();
-        while (iter.next(&.{.sprite})) |entity| {
+    for (&state.fat_entities) |*entity| {
+        if (entity.is_in_use and entity.hasFlag(.has_collider) and entity.hasFlag(.has_sprite)) {
+            if (entityContainsPoint(state, mouse_position, entity)) |id| {
+                result = id;
+                break;
+            }
+        }
+    }
+
+    for (&state.fat_entities) |*entity| {
+        if (entity.is_in_use and entity.hasFlag(.has_sprite)) {
             if (entityContainsPoint(state, mouse_position, entity)) |id| {
                 result = id;
                 break;
@@ -446,7 +433,7 @@ pub fn drawDebugUI(state: *State) void {
         imgui.c.ImGui_End();
     }
 
-    if (state.getEntity(state.debug_state.selected_entity_id)) |selected_entity| {
+    if (state.getFatEntity(state.debug_state.selected_entity_id)) |selected_entity| {
         imgui.c.ImGui_SetNextWindowPosEx(
             imgui.c.ImVec2{ .x = 30, .y = 30 },
             imgui.c.ImGuiCond_FirstUseEver,
@@ -543,9 +530,10 @@ pub fn drawDebugOverlay(state: *State) void {
     };
 
     if (state.debug_state.show_colliders) {
-        var iter: EntityIterator = .{ .entities = &state.entities };
-        while (iter.next(&.{.collider})) |entity| {
-            drawDebugCollider(state.renderer, entity, Color{ 0, 255, 0, 255 }, scale, offset);
+        for (&state.fat_entities) |*entity| {
+            if (entity.is_in_use and entity.hasFlag(.has_collider)) {
+                drawDebugCollider(state.renderer, entity, Color{ 0, 255, 0, 255 }, scale, offset);
+            }
         }
 
         // Highlight collisions.
@@ -562,7 +550,7 @@ pub fn drawDebugOverlay(state: *State) void {
                     @as(f32, @floatFromInt(((collision.time_added + show_time) - state.time))) /
                     @as(f32, @floatFromInt(show_time));
                 const color: Color = .{ 255, 128, 0, @intFromFloat(255 * time_remaining) };
-                if (state.getEntity(collision.collision.other_id)) |other_entity| {
+                if (state.getFatEntity(collision.collision.other_id)) |other_entity| {
                     drawDebugCollider(state.renderer, other_entity, color, scale, offset);
                 }
             }
@@ -614,40 +602,37 @@ fn drawDebugCollider(
     scale: f32,
     offset: Vector2,
 ) void {
-    if (entity.collider) |collider| {
-        if (entity.transform) |transform| {
-            const center = collider.center(transform) + offset;
-            const center_rect: math.Rect = .{
-                .position = Vector2{ center[X] - 0.5, center[Y] - 0.5 },
-                .size = Vector2{ 1, 1 },
-            };
-            const collider_rect: math.Rect = .{
-                .position = Vector2{
-                    (transform.position[X] + collider.left()),
-                    (transform.position[Y] + collider.top()),
-                } + offset,
-                .size = Vector2{
-                    (collider.right() - collider.left()),
-                    (collider.bottom() - collider.top()),
-                },
-            };
+    const center = entity.center() + offset;
+    const center_rect: math.Rect = .{
+        .position = Vector2{ center[X] - 0.5, center[Y] - 0.5 },
+        .size = Vector2{ 1, 1 },
+    };
+    const collider_rect: math.Rect = .{
+        .position = Vector2{
+            (entity.position[X] + entity.colliderLeft()),
+            (entity.position[Y] + entity.colliderTop()),
+        } + offset,
+        .size = Vector2{
+            (entity.colliderRight() - entity.colliderLeft()),
+            (entity.colliderBottom() - entity.colliderTop()),
+        },
+    };
 
-            switch (collider.shape) {
-                .Square => {
-                    _ = sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-                    _ = sdl.SDL_RenderRect(renderer, &collider_rect.scaled(scale).toSDL());
-                },
-                .Circle => {
-                    _ = sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-                    const scale2: Vector2 = @splat(scale);
-                    drawDebugCircle(renderer, center * scale2, collider.radius * scale);
-                },
-            }
-
-            _ = sdl.SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
-            _ = sdl.SDL_RenderFillRect(renderer, &center_rect.scaled(scale).toSDL());
-        }
+    switch (entity.collider_shape) {
+        .Square => {
+            _ = sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
+            _ = sdl.SDL_RenderRect(renderer, &collider_rect.scaled(scale).toSDL());
+        },
+        .Circle => {
+            _ = sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
+            const scale2: Vector2 = @splat(scale);
+            drawDebugCircle(renderer, center * scale2, entity.collider_radius * scale);
+        },
+        .None => unreachable,
     }
+
+    _ = sdl.SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
+    _ = sdl.SDL_RenderFillRect(renderer, &center_rect.scaled(scale).toSDL());
 }
 
 fn drawDebugCircle(renderer: *sdl.SDL_Renderer, center: Vector2, radius: f32) void {
@@ -691,40 +676,38 @@ fn drawEntityHighlight(
     scale: f32,
     offset: Vector2,
 ) void {
-    if (state.getEntity(entity_id)) |entity| {
-        if (entity.transform) |transform| {
-            var entity_rect: math.Rect = .{};
-            if (entity.collider) |collider| {
+    if (state.getFatEntity(entity_id)) |entity| {
+        var entity_rect: math.Rect = .{};
+        if (entity.hasFlag(.has_collider)) {
+            entity_rect = .{
+                .position = Vector2{
+                    entity.position[X] + entity.colliderLeft(),
+                    entity.position[Y] + entity.colliderTop(),
+                } + offset,
+                .size = Vector2{
+                    entity.colliderRight() - entity.colliderLeft(),
+                    entity.colliderBottom() - entity.colliderTop(),
+                },
+            };
+        } else if (entity.hasFlag(.has_sprite)) {
+            if (assets.getSpriteAsset(entity)) |sprite_asset| {
                 entity_rect = .{
-                    .position = Vector2{
-                        transform.position[X] + collider.left(),
-                        transform.position[Y] + collider.top(),
-                    } + offset,
+                    .position = Vector2{ entity.position[X], entity.position[Y] } + offset,
                     .size = Vector2{
-                        collider.right() - collider.left(),
-                        collider.bottom() - collider.top(),
+                        @floatFromInt(sprite_asset.document.header.width),
+                        @floatFromInt(sprite_asset.document.header.height),
                     },
                 };
-            } else if (entity.sprite) |sprite| {
-                if (assets.getSpriteAsset(sprite)) |sprite_asset| {
-                    entity_rect = .{
-                        .position = Vector2{ transform.position[X], transform.position[Y] } + offset,
-                        .size = Vector2{
-                            @floatFromInt(sprite_asset.document.header.width),
-                            @floatFromInt(sprite_asset.document.header.height),
-                        },
-                    };
-                }
             }
-
-            if (entity.title) |title| {
-                const title_position: Vector2 = title.getPosition(state.dest_rect, state.world_scale, &state.assets);
-                entity_rect.position = title_position + offset;
-            }
-
-            _ = sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-            _ = sdl.SDL_RenderRect(renderer, &entity_rect.scaled(scale).toSDL());
         }
+
+        if (entity.hasFlag(.has_title)) {
+            const title_position: Vector2 = entity.getTitlePosition(state.dest_rect, state.world_scale, &state.assets);
+            entity_rect.position = title_position + offset;
+        }
+
+        _ = sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
+        _ = sdl.SDL_RenderRect(renderer, &entity_rect.scaled(scale).toSDL());
     }
 }
 
@@ -738,21 +721,19 @@ fn getTiledPosition(position: Vector2, asset: *const AsepriteAsset) Vector2 {
 }
 
 fn openSprite(state: *State, allocator: std.mem.Allocator, entity: *Entity) void {
-    if (entity.sprite) |sprite| {
-        if (state.assets.getSpriteAsset(sprite)) |sprite_asset| {
-            const process_args = if (PLATFORM == .windows) [_][]const u8{
-                "Aseprite.exe",
-                sprite_asset.path,
-            } else [_][]const u8{
-                "open",
-                sprite_asset.path,
-            };
+    if (state.assets.getSpriteAsset(entity)) |sprite_asset| {
+        const process_args = if (PLATFORM == .windows) [_][]const u8{
+            "Aseprite.exe",
+            sprite_asset.path,
+        } else [_][]const u8{
+            "open",
+            sprite_asset.path,
+        };
 
-            var aseprite_process = std.process.Child.init(&process_args, allocator);
-            aseprite_process.spawn() catch |err| {
-                std.debug.print("Error spawning process: {}\n", .{err});
-            };
-        }
+        var aseprite_process = std.process.Child.init(&process_args, allocator);
+        aseprite_process.spawn() catch |err| {
+            std.debug.print("Error spawning process: {}\n", .{err});
+        };
     }
 }
 
@@ -767,18 +748,20 @@ fn saveLevel(state: *State, name: []const u8) !void {
     var writer: *std.Io.Writer = &file_writer.interface;
 
     var walls_count: u32 = 0;
-    var iter: EntityIterator = .{ .entities = &state.entities };
-    while (iter.next(&.{ .block, .color, .transform })) |_| {
-        walls_count += 1;
+    for (&state.fat_entities) |*entity| {
+        if (entity.is_in_use and entity.hasFlag(.has_block) and entity.hasFlag(.has_transform)) {
+            walls_count += 1;
+        }
     }
     try writer.writeInt(u32, walls_count, .little);
 
-    iter.reset();
-    while (iter.next(&.{ .block, .color, .transform })) |entity| {
-        try writer.writeInt(u32, @intFromEnum(entity.color.?.color), .little);
-        try writer.writeInt(u32, @intFromEnum(entity.block.?.type), .little);
-        try writer.writeInt(i32, @intFromFloat(@round(entity.transform.?.position[X])), .little);
-        try writer.writeInt(i32, @intFromFloat(@round(entity.transform.?.position[Y])), .little);
+    for (&state.fat_entities) |*entity| {
+        if (entity.is_in_use and entity.hasFlag(.has_block) and entity.hasFlag(.has_transform)) {
+            try writer.writeInt(u32, @intFromEnum(entity.color), .little);
+            try writer.writeInt(u32, @intFromEnum(entity.block_type), .little);
+            try writer.writeInt(i32, @intFromFloat(@round(entity.position[X])), .little);
+            try writer.writeInt(i32, @intFromFloat(@round(entity.position[Y])), .little);
+        }
     }
 
     try writer.flush();
