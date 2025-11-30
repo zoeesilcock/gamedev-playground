@@ -97,7 +97,7 @@ pub const State = struct {
     lives_remaining: u32,
 
     // Entities.
-    fat_entities: [MAX_ENTITY_COUNT]Entity,
+    entities: [MAX_ENTITY_COUNT]Entity,
     next_free_entity_index: u32,
 
     ball_id: ?EntityId,
@@ -111,11 +111,11 @@ pub const State = struct {
         return @as(f32, @floatFromInt(self.delta_time_actual)) / 1000;
     }
 
-    pub fn getFatEntity(self: *State, opt_id: ?EntityId) ?*Entity {
+    pub fn getEntity(self: *State, opt_id: ?EntityId) ?*Entity {
         var result: ?*Entity = null;
 
         if (opt_id) |id| {
-            const potential = &self.fat_entities[id.index];
+            const potential = &self.entities[id.index];
             if (potential.id.equals(id) and potential.is_in_use) {
                 result = potential;
             }
@@ -124,13 +124,13 @@ pub const State = struct {
         return result;
     }
 
-    pub fn addFatEntity(self: *State) *Entity {
+    pub fn addEntity(self: *State) *Entity {
         var entity_index: u32 = self.next_free_entity_index;
-        var entity: *Entity = &self.fat_entities[entity_index];
+        var entity: *Entity = &self.entities[entity_index];
 
         while (entity.is_in_use) {
             entity_index += 1;
-            entity = &self.fat_entities[entity_index];
+            entity = &self.entities[entity_index];
         }
 
         std.debug.assert(entity.is_in_use == false);
@@ -147,7 +147,7 @@ pub const State = struct {
         return entity;
     }
 
-    pub fn removeFatEntity(self: *State, entity: *Entity) void {
+    pub fn removeEntity(self: *State, entity: *Entity) void {
         entity.is_in_use = false;
         if (entity.id.index < self.next_free_entity_index) {
             self.next_free_entity_index = entity.id.index;
@@ -163,8 +163,8 @@ pub const State = struct {
     }
 
     pub fn hideTitle(self: *State) void {
-        if (self.getFatEntity(self.current_title_id)) |title_entity| {
-            self.removeFatEntity(title_entity);
+        if (self.getEntity(self.current_title_id)) |title_entity| {
+            self.removeEntity(title_entity);
             self.current_title_id = null;
         }
     }
@@ -211,7 +211,7 @@ pub const State = struct {
     }
 
     pub fn updateTitles(self: *State) void {
-        if (self.getFatEntity(self.current_title_id)) |title| {
+        if (self.getEntity(self.current_title_id)) |title| {
             if (title.has_title_duration) {
                 if (title.duration_remaining >= self.delta_time_actual) {
                     title.duration_remaining -= self.delta_time_actual;
@@ -239,7 +239,7 @@ pub const State = struct {
 
     pub fn pausedDueToTitle(self: *State) bool {
         var result: bool = false;
-        if (self.getFatEntity(self.current_title_id)) |title_entity| {
+        if (self.getEntity(self.current_title_id)) |title_entity| {
             result = title_entity.hasFlag(.has_title);
         }
         return result;
@@ -384,7 +384,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         .level_index = 0,
         .lives_remaining = MAX_LIVES,
 
-        .fat_entities = [1]Entity{.{}} ** MAX_ENTITY_COUNT,
+        .entities = [1]Entity{.{}} ** MAX_ENTITY_COUNT,
         .next_free_entity_index = 0,
 
         .ball_id = null,
@@ -488,7 +488,7 @@ pub export fn reloaded(state_ptr: *anyopaque) void {
         imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
     }
 
-    if (state.getFatEntity(state.ball_id)) |ball| {
+    if (state.getEntity(state.ball_id)) |ball| {
         ball.velocity[Y] = if (ball.velocity[Y] > 0) BALL_VELOCITY else -BALL_VELOCITY;
     }
 }
@@ -578,7 +578,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
 
     state.updateTitles();
 
-    const opt_ball: ?*Entity = state.getFatEntity(state.ball_id);
+    const opt_ball: ?*Entity = state.getEntity(state.ball_id);
     if (opt_ball) |ball| {
         if ((state.ball_horizontal_bounce_start_time + BALL_HORIZONTAL_BOUNCE_TIME) < state.time) {
             if (state.input.left) {
@@ -598,8 +598,8 @@ pub export fn tick(state_ptr: *anyopaque) void {
     // Handle vertical collisions.
     if (collisions.vertical) |collision| {
         if (collision.id.equals(state.ball_id)) {
-            if (state.getFatEntity(collision.id)) |entity| {
-                if (state.getFatEntity(collision.other_id)) |other_entity| {
+            if (state.getEntity(collision.id)) |entity| {
+                if (state.getEntity(collision.other_id)) |other_entity| {
                     entity.next_velocity = entity.velocity;
                     entity.next_velocity[Y] = -entity.next_velocity[Y];
 
@@ -620,8 +620,8 @@ pub export fn tick(state_ptr: *anyopaque) void {
     // Handle horizontal collisions.
     if (collisions.horizontal) |collision| {
         if (collision.id.equals(state.ball_id)) {
-            if (state.getFatEntity(collision.id)) |entity| {
-                if (state.getFatEntity(collision.other_id)) |other_entity| {
+            if (state.getEntity(collision.id)) |entity| {
+                if (state.getEntity(collision.other_id)) |other_entity| {
                     entity.velocity[X] = -entity.velocity[X];
                     state.ball_horizontal_bounce_start_time = state.time;
 
@@ -644,14 +644,14 @@ pub export fn tick(state_ptr: *anyopaque) void {
     }
 
     // Update transforms.
-    for (&state.fat_entities) |*entity| {
+    for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_transform)) {
             entity.position += entity.velocity * @as(Vector2, @splat(delta_time));
         }
     }
 
     // Update tweens.
-    for (&state.fat_entities) |*entity| {
+    for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_tween)) {
             const total_duration = entity.tween_delay + entity.tween_duration;
             entity.tween_time_passed += @intFromFloat(delta_time_actual * 1000);
@@ -662,7 +662,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
                     @as(f32, @floatFromInt(entity.tween_duration));
 
                 const type_info = @typeInfo(Entity);
-                if (state.getFatEntity(entity.tween_target)) |target| {
+                if (state.getEntity(entity.tween_target)) |target| {
                     inline for (type_info.@"struct".fields) |entity_field_info| {
                         if (std.mem.eql(u8, entity_field_info.name, entity.tween_target_field)) {
                             const current_value = &@field(target, entity_field_info.name);
@@ -689,16 +689,16 @@ pub export fn tick(state_ptr: *anyopaque) void {
 
     // Remove any completed tweens.
     // TODO: Can't we combine this with the main tween loop?
-    for (&state.fat_entities) |*entity| {
+    for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_tween)) {
             if (entity.tween_time_passed > entity.tween_duration + entity.tween_delay) {
-                state.removeFatEntity(entity);
+                state.removeEntity(entity);
             }
         }
     }
 
     // Update sprites.
-    for (&state.fat_entities) |*entity| {
+    for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_sprite)) {
             if (state.assets.getSpriteAsset(entity)) |sprite_asset| {
                 if (sprite_asset.document.frames.len > 1) {
@@ -732,7 +732,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
         }
     }
 
-    if (isLevelCompleted(state) and state.getFatEntity(state.current_title_id) == null) {
+    if (isLevelCompleted(state) and state.getEntity(state.current_title_id) == null) {
         if (!INTERNAL) {
             state.showTitleForDuration(.CLEARED, 2000) catch @panic("Failed to show Cleared title");
         } else {
@@ -759,7 +759,7 @@ fn handleBallCollision(state: *State, ball: *Entity, block: *Entity) void {
     }
 
     if (block.block_type == .Wall and block.color == ball.color) {
-        state.removeFatEntity(block);
+        state.removeEntity(block);
     } else if (block.block_type == .ColorChange and block.color != ball.color) {
         ball.color = block.color;
     }
@@ -791,7 +791,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
 }
 
 fn drawWorld(state: *State) void {
-    for (&state.fat_entities) |*entity| {
+    for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_sprite) and entity.hasFlag(.has_transform) and !entity.hasFlag(.is_ui)) {
             if (entity.getTexture(&state.assets)) |texture| {
                 drawTextureAt(state, texture, entity.position, entity.scale, entity.tint);
@@ -825,7 +825,7 @@ fn drawGameUI(state: *State) void {
         }
     }
 
-    for (&state.fat_entities) |*entity| {
+    for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_sprite) and entity.hasFlag(.has_transform) and entity.hasFlag(.is_ui)) {
             if (entity.getTexture(&state.assets)) |texture| {
                 position = entity.getUIPosition(state.dest_rect, state.world_scale, &state.assets);
@@ -921,7 +921,7 @@ fn spawnBall(state: *State) !void {
 }
 
 fn resetBall(state: *State) void {
-    if (state.getFatEntity(state.ball_id)) |ball| {
+    if (state.getEntity(state.ball_id)) |ball| {
         ball.position = BALL_SPAWN;
         ball.velocity[Y] = BALL_VELOCITY;
         ball.color = .Red;
@@ -932,9 +932,9 @@ fn resetBall(state: *State) void {
 }
 
 fn unloadLevel(state: *State) void {
-    for (&state.fat_entities) |*entity| {
+    for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_block)) {
-            state.removeFatEntity(entity);
+            state.removeEntity(entity);
         }
     }
 }
@@ -984,7 +984,7 @@ fn nextLevel(state: *State) void {
 fn isLevelCompleted(state: *State) bool {
     var result = true;
 
-    for (&state.fat_entities) |*entity| {
+    for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_block)) {
             if (entity.block_type == .Wall and entity.color != .Gray) {
                 result = false;
@@ -1005,7 +1005,7 @@ fn addTween(
     delay: u64,
     duration: u64,
 ) !*Entity {
-    var entity: *Entity = state.addFatEntity();
+    var entity: *Entity = state.addEntity();
     entity.addFlag(.has_tween);
 
     entity.tween_delay = delay;
@@ -1023,7 +1023,7 @@ fn addTween(
 }
 
 fn addSprite(state: *State, position: Vector2) !*Entity {
-    var entity: *Entity = state.addFatEntity();
+    var entity: *Entity = state.addEntity();
     entity.addFlag(.has_sprite);
     entity.addFlag(.has_transform);
 

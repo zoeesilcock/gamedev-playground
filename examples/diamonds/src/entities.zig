@@ -292,7 +292,7 @@ pub const Entity = struct {
     pub fn checkForCollisions(state: *State, delta_time: f32) CollisionResult {
         var result: CollisionResult = .{};
 
-        for (&state.fat_entities) |*entity| {
+        for (&state.entities) |*entity| {
             if (entity.is_in_use and entity.hasFlag(.has_collider) and entity.hasFlag(.has_transform)) {
                 // Check in the Y direction.
                 if (entity.velocity[Y] != 0) {
@@ -320,7 +320,7 @@ pub const Entity = struct {
     fn collidesWithAnyAt(self: *Entity, state: *State, at: Entity) ?*Entity {
         var result: ?*Entity = null;
 
-        for (&state.fat_entities) |*entity| {
+        for (&state.entities) |*entity| {
             if (entity.is_in_use and entity.hasFlag(.has_collider)) {
                 if (self != entity and self.collidesWithAt(entity, at)) {
                     result = entity;

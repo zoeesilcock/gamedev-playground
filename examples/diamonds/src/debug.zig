@@ -202,7 +202,7 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
         return;
     }
 
-    if (state.getFatEntity(state.debug_state.hovered_entity_id)) |hovered_entity| {
+    if (state.getEntity(state.debug_state.hovered_entity_id)) |hovered_entity| {
         if (input.left_mouse_pressed) {
             // Grab the color and type of the hovered entity when alt is held down.
             if (state.debug_state.input.alt_key_down) {
@@ -214,7 +214,7 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
 
                     if (hovered_entity.hasFlag(.has_block) and !hovered_entity.hasFlag(.player_controlled)) {
                         should_add = block_color != hovered_entity.color or block_type != hovered_entity.block_type;
-                        state.removeFatEntity(hovered_entity);
+                        state.removeEntity(hovered_entity);
                     }
 
                     if (should_add) {
@@ -276,7 +276,7 @@ fn getHoveredEntity(state: *State) ?EntityId {
     var result: ?EntityId = null;
     const mouse_position = state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale));
 
-    for (&state.fat_entities) |*entity| {
+    for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_title) and entity.hasFlag(.has_sprite)) {
             if (entityContainsPoint(state, mouse_position, entity)) |id| {
                 result = id;
@@ -285,7 +285,7 @@ fn getHoveredEntity(state: *State) ?EntityId {
         }
     }
 
-    for (&state.fat_entities) |*entity| {
+    for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_collider) and entity.hasFlag(.has_sprite)) {
             if (entityContainsPoint(state, mouse_position, entity)) |id| {
                 result = id;
@@ -294,7 +294,7 @@ fn getHoveredEntity(state: *State) ?EntityId {
         }
     }
 
-    for (&state.fat_entities) |*entity| {
+    for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_sprite)) {
             if (entityContainsPoint(state, mouse_position, entity)) |id| {
                 result = id;
@@ -433,7 +433,7 @@ pub fn drawDebugUI(state: *State) void {
         imgui.c.ImGui_End();
     }
 
-    if (state.getFatEntity(state.debug_state.selected_entity_id)) |selected_entity| {
+    if (state.getEntity(state.debug_state.selected_entity_id)) |selected_entity| {
         imgui.c.ImGui_SetNextWindowPosEx(
             imgui.c.ImVec2{ .x = 30, .y = 30 },
             imgui.c.ImGuiCond_FirstUseEver,
@@ -530,7 +530,7 @@ pub fn drawDebugOverlay(state: *State) void {
     };
 
     if (state.debug_state.show_colliders) {
-        for (&state.fat_entities) |*entity| {
+        for (&state.entities) |*entity| {
             if (entity.is_in_use and entity.hasFlag(.has_collider)) {
                 drawDebugCollider(state.renderer, entity, Color{ 0, 255, 0, 255 }, scale, offset);
             }
@@ -550,7 +550,7 @@ pub fn drawDebugOverlay(state: *State) void {
                     @as(f32, @floatFromInt(((collision.time_added + show_time) - state.time))) /
                     @as(f32, @floatFromInt(show_time));
                 const color: Color = .{ 255, 128, 0, @intFromFloat(255 * time_remaining) };
-                if (state.getFatEntity(collision.collision.other_id)) |other_entity| {
+                if (state.getEntity(collision.collision.other_id)) |other_entity| {
                     drawDebugCollider(state.renderer, other_entity, color, scale, offset);
                 }
             }
@@ -676,7 +676,7 @@ fn drawEntityHighlight(
     scale: f32,
     offset: Vector2,
 ) void {
-    if (state.getFatEntity(entity_id)) |entity| {
+    if (state.getEntity(entity_id)) |entity| {
         var entity_rect: math.Rect = .{};
         if (entity.hasFlag(.has_collider)) {
             entity_rect = .{
@@ -748,14 +748,14 @@ fn saveLevel(state: *State, name: []const u8) !void {
     var writer: *std.Io.Writer = &file_writer.interface;
 
     var walls_count: u32 = 0;
-    for (&state.fat_entities) |*entity| {
+    for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_block) and entity.hasFlag(.has_transform)) {
             walls_count += 1;
         }
     }
     try writer.writeInt(u32, walls_count, .little);
 
-    for (&state.fat_entities) |*entity| {
+    for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_block) and entity.hasFlag(.has_transform)) {
             try writer.writeInt(u32, @intFromEnum(entity.color), .little);
             try writer.writeInt(u32, @intFromEnum(entity.block_type), .little);
