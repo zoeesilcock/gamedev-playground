@@ -683,15 +683,8 @@ pub export fn tick(state_ptr: *anyopaque) void {
                         }
                     }
                 }
-            }
-        }
-    }
-
-    // Remove any completed tweens.
-    // TODO: Can't we combine this with the main tween loop?
-    for (&state.entities) |*entity| {
-        if (entity.is_in_use and entity.hasFlag(.has_tween)) {
-            if (entity.tween_time_passed > entity.tween_duration + entity.tween_delay) {
+            } else if (entity.tween_time_passed > entity.tween_duration + entity.tween_delay) {
+                // Remove completed tweens.
                 state.removeEntity(entity);
             }
         }
