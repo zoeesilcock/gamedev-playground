@@ -592,6 +592,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
     }
 
     const delta_time = state.deltaTime();
+    const delta_time_actual = state.deltaTimeActual();
     const collisions: CollisionResult = Entity.checkForCollisions(state, delta_time);
 
     // Handle vertical collisions.
@@ -653,7 +654,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
     for (&state.fat_entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_tween)) {
             const total_duration = entity.tween_delay + entity.tween_duration;
-            entity.tween_time_passed += @intFromFloat(delta_time * 1000);
+            entity.tween_time_passed += @intFromFloat(delta_time_actual * 1000);
 
             if (entity.tween_time_passed <= total_duration and entity.tween_delay <= entity.tween_time_passed) {
                 const t: f32 =
@@ -671,10 +672,10 @@ pub export fn tick(state_ptr: *anyopaque) void {
                                 },
                                 *Color => {
                                     current_value.* = .{
-                                        math.lerpU8(entity.tween_start_value.color[0], entity.tween_end_value.color[0], t),
-                                        math.lerpU8(entity.tween_start_value.color[1], entity.tween_end_value.color[1], t),
-                                        math.lerpU8(entity.tween_start_value.color[2], entity.tween_end_value.color[2], t),
-                                        math.lerpU8(entity.tween_start_value.color[3], entity.tween_end_value.color[3], t),
+                                        math.lerpU8(entity.tween_start_value.color[R], entity.tween_end_value.color[R], t),
+                                        math.lerpU8(entity.tween_start_value.color[G], entity.tween_end_value.color[G], t),
+                                        math.lerpU8(entity.tween_start_value.color[B], entity.tween_end_value.color[B], t),
+                                        math.lerpU8(entity.tween_start_value.color[A], entity.tween_end_value.color[A], t),
                                     };
                                 },
                                 else => {},
