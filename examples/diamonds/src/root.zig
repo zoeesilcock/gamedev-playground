@@ -828,8 +828,8 @@ fn drawGameUI(state: *State) void {
     for (&state.fat_entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_sprite) and entity.hasFlag(.has_transform) and entity.hasFlag(.is_ui)) {
             if (entity.getTexture(&state.assets)) |texture| {
-                const title_position: Vector2 = entity.getTitlePosition(state.dest_rect, state.world_scale, &state.assets);
-                drawTextureAt(state, texture, title_position, entity.scale, entity.tint);
+                position = entity.getUIPosition(state.dest_rect, state.world_scale, &state.assets);
+                drawTextureAt(state, texture, position, entity.scale, entity.tint);
             }
         }
     }

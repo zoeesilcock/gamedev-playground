@@ -701,8 +701,8 @@ fn drawEntityHighlight(
             }
         }
 
-        if (entity.hasFlag(.has_title)) {
-            const title_position: Vector2 = entity.getTitlePosition(state.dest_rect, state.world_scale, &state.assets);
+        if (entity.hasFlag(.is_ui)) {
+            const title_position: Vector2 = entity.getUIPosition(state.dest_rect, state.world_scale, &state.assets);
             entity_rect.position = title_position + offset;
         }
 

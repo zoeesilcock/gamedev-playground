@@ -201,8 +201,8 @@ pub const Entity = struct {
             if (self.hasFlag(.has_transform)) {
                 position = self.position;
             }
-            if (self.hasFlag(.has_title)) {
-                position = self.getTitlePosition(dest_rect, world_scale, assets);
+            if (self.hasFlag(.is_ui)) {
+                position = self.getUIPosition(dest_rect, world_scale, assets);
             }
 
             const width: f32 = @floatFromInt(sprite_asset.document.header.width);
@@ -230,7 +230,7 @@ pub const Entity = struct {
         return result;
     }
 
-    pub fn getTitlePosition(
+    pub fn getUIPosition(
         self: *const Entity,
         dest_rect: sdl.SDL_FRect,
         world_scale: f32,
