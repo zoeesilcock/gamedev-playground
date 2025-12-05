@@ -285,20 +285,23 @@ fn getHoveredEntity(state: *State) ?EntityId {
         }
     }
 
-    for (&state.entities) |*entity| {
-        if (entity.is_in_use and entity.hasFlag(.has_collider) and entity.hasFlag(.has_sprite)) {
-            if (entityContainsPoint(state, mouse_position, entity)) |id| {
-                result = id;
-                break;
+    if (result == null) {
+        for (&state.entities) |*entity| {
+            if (entity.is_in_use and entity.hasFlag(.has_collider) and entity.hasFlag(.has_sprite)) {
+                if (entity.colliderContainsPoint(mouse_position)) {
+                    result = entity.id;
+                    break;
+                }
             }
         }
     }
-
-    for (&state.entities) |*entity| {
-        if (entity.is_in_use and entity.hasFlag(.has_sprite)) {
-            if (entityContainsPoint(state, mouse_position, entity)) |id| {
-                result = id;
-                break;
+    if (result == null) {
+        for (&state.entities) |*entity| {
+            if (entity.is_in_use and entity.hasFlag(.has_sprite)) {
+                if (entityContainsPoint(state, mouse_position, entity)) |id| {
+                    result = id;
+                    break;
+                }
             }
         }
     }
