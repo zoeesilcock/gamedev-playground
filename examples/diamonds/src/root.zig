@@ -981,6 +981,7 @@ fn isLevelCompleted(state: *State) bool {
         if (entity.is_in_use and entity.hasFlag(.has_block)) {
             if (entity.block_type == .Wall and entity.color != .Gray) {
                 result = false;
+                break;
             }
         }
     }
