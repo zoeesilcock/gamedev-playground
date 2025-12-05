@@ -952,8 +952,8 @@ pub fn loadLevel(state: *State, name: []const u8) !void {
 
         _ = try addWall(
             state,
-            @enumFromInt(color + 1),
-            @enumFromInt(block_type + 1),
+            @enumFromInt(color),
+            @enumFromInt(block_type),
             Vector2{ @floatFromInt(x), @floatFromInt(y) },
         );
     }
