@@ -643,15 +643,13 @@ pub export fn tick(state_ptr: *anyopaque) void {
         }
     }
 
-    // Update transforms.
     for (&state.entities) |*entity| {
+        // Update transforms.
         if (entity.is_in_use and entity.hasFlag(.has_transform)) {
             entity.position += entity.velocity * @as(Vector2, @splat(delta_time));
         }
-    }
 
-    // Update tweens.
-    for (&state.entities) |*entity| {
+        // Update tweens.
         if (entity.is_in_use and entity.hasFlag(.has_tween)) {
             const total_duration = entity.tween_delay + entity.tween_duration;
             entity.tween_time_passed += @intFromFloat(delta_time_actual * 1000);
@@ -688,10 +686,8 @@ pub export fn tick(state_ptr: *anyopaque) void {
                 state.removeEntity(entity);
             }
         }
-    }
 
-    // Update sprites.
-    for (&state.entities) |*entity| {
+        // Update sprites.
         if (entity.is_in_use and entity.hasFlag(.has_sprite)) {
             if (state.assets.getSpriteAsset(entity)) |sprite_asset| {
                 if (sprite_asset.document.frames.len > 1) {

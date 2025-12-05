@@ -276,34 +276,35 @@ fn getHoveredEntity(state: *State) ?EntityId {
     var result: ?EntityId = null;
     const mouse_position = state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale));
 
+    var title: ?EntityId = null;
+    var collider: ?EntityId = null;
+    var sprite: ?EntityId = null;
+
     for (&state.entities) |*entity| {
-        if (entity.is_in_use and entity.hasFlag(.has_title) and entity.hasFlag(.has_sprite)) {
+        if (title == null and entity.is_in_use and entity.hasFlag(.has_title) and entity.hasFlag(.has_sprite)) {
             if (entityContainsPoint(state, mouse_position, entity)) |id| {
-                result = id;
+                title = id;
                 break;
+            }
+        }
+        if (collider == null and entity.is_in_use and entity.hasFlag(.has_collider) and entity.hasFlag(.has_sprite)) {
+            if (entity.colliderContainsPoint(mouse_position)) {
+                collider = entity.id;
+            }
+        }
+        if (sprite == null and entity.is_in_use and entity.hasFlag(.has_sprite)) {
+            if (entityContainsPoint(state, mouse_position, entity)) |id| {
+                sprite = id;
             }
         }
     }
 
-    if (result == null) {
-        for (&state.entities) |*entity| {
-            if (entity.is_in_use and entity.hasFlag(.has_collider) and entity.hasFlag(.has_sprite)) {
-                if (entity.colliderContainsPoint(mouse_position)) {
-                    result = entity.id;
-                    break;
-                }
-            }
-        }
-    }
-    if (result == null) {
-        for (&state.entities) |*entity| {
-            if (entity.is_in_use and entity.hasFlag(.has_sprite)) {
-                if (entityContainsPoint(state, mouse_position, entity)) |id| {
-                    result = id;
-                    break;
-                }
-            }
-        }
+    if (title != null) {
+        result = title;
+    } else if (collider != null) {
+        result = collider;
+    } else if (sprite != null) {
+        result = sprite;
     }
 
     return result;
