@@ -3,7 +3,6 @@ const sdl = @import("sdl").c;
 const game = @import("root.zig");
 const math = @import("math");
 const aseprite = @import("aseprite");
-const pool = @import("pool");
 
 pub const MAX_ENTITY_COUNT = 1024;
 
@@ -14,8 +13,6 @@ const X = math.X;
 const Y = math.Y;
 const Z = math.Z;
 const AsepriteAsset = aseprite.AsepriteAsset;
-
-const PoolId = pool.PoolId;
 
 pub const EntityId = struct {
     index: u32 = 0,

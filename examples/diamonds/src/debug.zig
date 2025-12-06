@@ -3,7 +3,6 @@ const sdl = @import("sdl").c;
 const internal = @import("internal");
 const game = @import("root.zig");
 const entities = @import("entities.zig");
-const pool = @import("pool");
 const math = @import("math");
 const imgui = @import("imgui");
 const aseprite = @import("aseprite");
@@ -18,7 +17,6 @@ const Collision = entities.Collision;
 const ColliderComponent = entities.ColliderComponent;
 const ColorComponentValue = entities.ColorComponentValue;
 const BlockType = entities.BlockType;
-const PoolId = pool.PoolId;
 
 const Vector2 = math.Vector2;
 const X = math.X;
@@ -501,12 +499,6 @@ fn inputCustomTypes(
                 .{ entity_id.index, entity_id.generation },
             ) catch "";
             imgui.c.ImGui_LabelText("EntityId", id);
-        },
-        PoolId => {
-            const pool_id: *PoolId = @ptrCast(field_ptr);
-            var buf: [64]u8 = undefined;
-            const id = std.fmt.bufPrintZ(&buf, "pool index: {d}", .{pool_id.index}) catch "";
-            imgui.c.ImGui_Text(id.ptr);
         },
         else => handled = false,
     }

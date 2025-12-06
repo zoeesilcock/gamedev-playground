@@ -61,11 +61,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "sdl", .module = sdl_mod },
         },
     });
-    const pool_mod = b.createModule(.{
-        .root_source_file = b.path("../pool.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
 
     module.addImport("sdl", sdl_mod);
     module.addImport("imgui", imgui_mod);
@@ -73,7 +68,6 @@ pub fn build(b: *std.Build) void {
     module.addImport("aseprite", aseprite_mod);
     module.addImport("math", math_mod);
     module.addImport("logging_allocator", logging_allocator_mod);
-    module.addImport("pool", pool_mod);
 
     runtime.linkImgui(runtime_dep.builder, lib, target, optimize, internal);
 

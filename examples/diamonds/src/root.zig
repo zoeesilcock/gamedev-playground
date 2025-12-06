@@ -5,7 +5,6 @@ const internal = @import("internal");
 const aseprite = @import("aseprite");
 const entities = @import("entities.zig");
 const math = @import("math");
-const pool = @import("pool");
 const imgui = if (INTERNAL) @import("imgui") else struct {};
 const debug = if (INTERNAL) @import("debug.zig") else struct {
     pub const DebugState = void;
