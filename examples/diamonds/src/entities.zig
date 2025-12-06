@@ -17,12 +17,6 @@ const AsepriteAsset = aseprite.AsepriteAsset;
 
 const PoolId = pool.PoolId;
 
-pub const EntityType = enum(u8) {
-    Background,
-    Ball,
-    Wall,
-};
-
 pub const EntityId = struct {
     index: u32 = 0,
     generation: u32 = 0,

@@ -13,7 +13,6 @@ const Assets = game.Assets;
 const AsepriteAsset = aseprite.AsepriteAsset;
 const Entity = entities.Entity;
 const EntityId = entities.EntityId;
-const EntityType = entities.EntityType;
 const EntityIterator = entities.EntityIterator;
 const Collision = entities.Collision;
 const ColliderComponent = entities.ColliderComponent;
@@ -508,13 +507,6 @@ fn inputCustomTypes(
             var buf: [64]u8 = undefined;
             const id = std.fmt.bufPrintZ(&buf, "pool index: {d}", .{pool_id.index}) catch "";
             imgui.c.ImGui_Text(id.ptr);
-        },
-        EntityType => {
-            inline for (@typeInfo(EntityType).@"enum".fields, 0..) |field, i| {
-                if (@intFromEnum(field_ptr.*) == i) {
-                    imgui.c.ImGui_LabelText("Type", field.name);
-                }
-            }
         },
         else => handled = false,
     }
