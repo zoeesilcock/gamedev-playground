@@ -12,7 +12,7 @@ const debug = if (INTERNAL) @import("debug.zig") else struct {
 
 const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
 pub const std_options: std.Options = .{
-    .log_level = .warn,
+    .log_level = if (INTERNAL) .debug else .err,
 };
 
 const Entity = entities.Entity;
