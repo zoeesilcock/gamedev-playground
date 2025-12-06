@@ -44,6 +44,14 @@ pub const EntityFlags = enum(u16) {
     is_ui = (1 << 8),
 };
 
+pub const UIElement = enum(u8) {
+    none,
+    life_backdrop,
+    life1,
+    life2,
+    life3,
+};
+
 pub const Entity = struct {
     id: EntityId = .{},
     is_in_use: bool = false,
@@ -54,6 +62,10 @@ pub const Entity = struct {
     scale: Vector2 = .{ 0, 0 },
     velocity: Vector2 = .{ 0, 0 },
     next_velocity: Vector2 = .{ 0, 0 },
+
+    // UI.
+    alignment: Vector2 = .{ 0, 0 },
+    ui_element: UIElement = .none,
 
     // Collider.
     collider_offset: Vector2 = .{ 0, 0 },
@@ -102,10 +114,10 @@ pub const Entity = struct {
         return (self.flags & @intFromEnum(flag)) != 0;
     }
 
-    pub fn startAnimation(self: *Entity, name: []const u8, assets: *game.Assets) void {
+    pub fn startAnimation(self: *Entity, state: *State, name: []const u8, assets: *game.Assets) void {
         var opt_tag: ?*aseprite.AseTagsChunk = null;
 
-        if (assets.getSpriteAsset(self)) |sprite_asset| {
+        if (assets.getSpriteAsset(state, self)) |sprite_asset| {
             outer: for (sprite_asset.document.frames) |frame| {
                 for (frame.tags) |tag| {
                     if (std.mem.eql(u8, tag.tag_name, name)) {
@@ -189,6 +201,7 @@ pub const Entity = struct {
 
     pub fn spriteContainsPoint(
         self: *const Entity,
+        state: *State,
         point: Vector2,
         dest_rect: sdl.SDL_FRect,
         world_scale: f32,
@@ -197,12 +210,12 @@ pub const Entity = struct {
         var contains_point = false;
         var position: Vector2 = .{ 0, 0 };
 
-        if (assets.getSpriteAsset(self)) |sprite_asset| {
+        if (assets.getSpriteAsset(state, self)) |sprite_asset| {
             if (self.hasFlag(.has_transform)) {
                 position = self.position;
             }
             if (self.hasFlag(.is_ui)) {
-                position = self.getUIPosition(dest_rect, world_scale, assets);
+                position = self.getUIPosition(state, dest_rect, world_scale, assets);
             }
 
             const width: f32 = @floatFromInt(sprite_asset.document.header.width);
@@ -218,10 +231,10 @@ pub const Entity = struct {
         return contains_point;
     }
 
-    pub fn getTexture(self: *const Entity, assets: *game.Assets) ?*sdl.SDL_Texture {
+    pub fn getTexture(self: *const Entity, state: *State, assets: *game.Assets) ?*sdl.SDL_Texture {
         var result: ?*sdl.SDL_Texture = null;
 
-        if (assets.getSpriteAsset(self)) |sprite_asset| {
+        if (assets.getSpriteAsset(state, self)) |sprite_asset| {
             if (self.frame_index < sprite_asset.frames.len) {
                 result = sprite_asset.frames[self.frame_index];
             }
@@ -232,21 +245,21 @@ pub const Entity = struct {
 
     pub fn getUIPosition(
         self: *const Entity,
+        state: *State,
         dest_rect: sdl.SDL_FRect,
         world_scale: f32,
         assets: *game.Assets,
     ) Vector2 {
         var result: Vector2 = @splat(0);
-        const half: Vector2 = @splat(0.5);
         const scale: Vector2 = @splat(world_scale);
 
-        if (self.getTexture(assets)) |texture| {
+        if (self.getTexture(state, assets)) |texture| {
             const size: Vector2 = .{
                 (@as(f32, @floatFromInt(texture.w))),
                 (@as(f32, @floatFromInt(texture.h))),
             };
             result = Vector2{ dest_rect.w, dest_rect.h } / scale - size;
-            result *= half;
+            result *= self.alignment;
             result += self.position;
         }
 

@@ -19,6 +19,7 @@ pub const std_options: std.Options = .{
 const Entity = entities.Entity;
 const CollisionResult = entities.CollisionResult;
 const EntityId = entities.EntityId;
+const UIElement = entities.UIElement;
 const ColorComponentValue = entities.ColorComponentValue;
 const BlockType = entities.BlockType;
 const TitleType = entities.TitleType;
@@ -155,85 +156,17 @@ pub const State = struct {
     }
 
     pub fn showTitle(self: *State, title_type: TitleType) !void {
-        try self.spawnTitle(title_type, false, 0);
+        _ = try addTitle(self, title_type, false, 0);
     }
 
     pub fn showTitleForDuration(self: *State, title_type: TitleType, duration: u64) !void {
-        try self.spawnTitle(title_type, true, duration);
+        _ = try addTitle(self, title_type, true, duration);
     }
 
-    pub fn hideTitle(self: *State) void {
+    pub fn hideCurrentTitle(self: *State) void {
         if (self.getEntity(self.current_title_id)) |title_entity| {
             self.removeEntity(title_entity);
             self.current_title_id = null;
-        }
-    }
-
-    fn spawnTitle(self: *State, title_type: TitleType, has_duration: bool, duration: u64) !void {
-        self.hideTitle();
-        std.debug.assert(self.current_title_id == null);
-
-        var title = try addSprite(self, @splat(0));
-        title.addFlag(.is_ui);
-        title.addFlag(.has_title);
-
-        title.title_type = title_type;
-        title.has_title_duration = has_duration;
-        title.duration_remaining = duration;
-
-        self.current_title_id = title.id;
-
-        // Fade in tween.
-        _ = try addTween(
-            self,
-            title.id,
-            "sprite",
-            "tint",
-            .{ .color = .{ 255, 255, 255, 0 } },
-            .{ .color = .{ 255, 255, 255, 255 } },
-            0,
-            500,
-        );
-
-        if (duration > 0) {
-            // Fade out tween.
-            _ = try addTween(
-                self,
-                title.id,
-                "sprite",
-                "tint",
-                .{ .color = .{ 255, 255, 255, 255 } },
-                .{ .color = .{ 255, 255, 255, 0 } },
-                duration - 500,
-                500,
-            );
-        }
-    }
-
-    pub fn updateTitles(self: *State) void {
-        if (self.getEntity(self.current_title_id)) |title| {
-            if (title.has_title_duration) {
-                if (title.duration_remaining >= self.delta_time_actual) {
-                    title.duration_remaining -= self.delta_time_actual;
-                } else {
-                    title.duration_remaining = 0;
-                }
-
-                if (title.duration_remaining == 0) {
-                    self.titleDurationOver(title.title_type);
-                }
-            }
-        }
-    }
-
-    fn titleDurationOver(self: *State, title: TitleType) void {
-        self.hideTitle();
-
-        switch (title) {
-            .CLEARED => nextLevel(self),
-            .DEATH => resetBall(self),
-            .GAME_OVER => restart(self),
-            else => {},
         }
     }
 
@@ -274,11 +207,23 @@ pub const Assets = struct {
     title_death: ?AsepriteAsset = null,
     title_game_over: ?AsepriteAsset = null,
 
-    pub fn getSpriteAsset(self: *Assets, entity: *const Entity) ?*AsepriteAsset {
+    fn getLifeSprite(self: *Assets, state: *State, index: u32) ?*AsepriteAsset {
+        return if (state.lives_remaining > index) &self.life_filled.? else &self.life_outlined.?;
+    }
+
+    pub fn getSpriteAsset(self: *Assets, state: *State, entity: *const Entity) ?*AsepriteAsset {
         var result: ?*AsepriteAsset = null;
 
         if (entity.hasFlag(.player_controlled)) {
             result = self.getBall(entity.color);
+        } else if (entity.hasFlag(.is_ui) and entity.ui_element != .none) {
+            result = switch (entity.ui_element) {
+                .life_backdrop => &self.life_backdrop.?,
+                .life1 => self.getLifeSprite(state, 0),
+                .life2 => self.getLifeSprite(state, 1),
+                .life3 => self.getLifeSprite(state, 2),
+                else => unreachable,
+            };
         } else if (entity.hasFlag(.has_title)) {
             result = switch (entity.title_type) {
                 .PAUSED => &self.title_paused.?,
@@ -406,6 +351,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     spawnBackground(state) catch unreachable;
     spawnBall(state) catch unreachable;
     loadLevel(state, LEVELS[state.level_index]) catch unreachable;
+    try addGameUI(state);
 
     setupRenderTexture(state);
 
@@ -483,6 +429,7 @@ pub export fn reloaded(state_ptr: *anyopaque) void {
 
     unloadAssets(state);
     loadAssets(state);
+    try addGameUI(state);
 
     if (INTERNAL) {
         imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
@@ -540,7 +487,7 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
                         if (state.paused) {
                             state.showTitle(.PAUSED) catch @panic("Failed to show Paused title");
                         } else {
-                            state.hideTitle();
+                            state.hideCurrentTitle();
                         }
                     }
                 },
@@ -576,7 +523,27 @@ pub export fn tick(state_ptr: *anyopaque) void {
         debug.recordMemoryUsage(state);
     }
 
-    state.updateTitles();
+    // Update current title.
+    if (state.getEntity(state.current_title_id)) |title| {
+        if (title.has_title_duration) {
+            if (title.duration_remaining >= state.delta_time_actual) {
+                title.duration_remaining -= state.delta_time_actual;
+            } else {
+                title.duration_remaining = 0;
+            }
+
+            if (title.duration_remaining == 0) {
+                state.hideCurrentTitle();
+
+                switch (title.title_type) {
+                    .CLEARED => nextLevel(state),
+                    .DEATH => resetBall(state),
+                    .GAME_OVER => restart(state),
+                    else => {},
+                }
+            }
+        }
+    }
 
     const opt_ball: ?*Entity = state.getEntity(state.ball_id);
     if (opt_ball) |ball| {
@@ -604,7 +571,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
                     entity.next_velocity[Y] = -entity.next_velocity[Y];
 
                     const bounce_animation = if (entity.velocity[Y] < 0) "bounce_up" else "bounce_down";
-                    entity.startAnimation(bounce_animation, &state.assets);
+                    entity.startAnimation(state, bounce_animation, &state.assets);
                     entity.velocity[Y] = 0;
 
                     if (INTERNAL) {
@@ -639,7 +606,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
     if (opt_ball) |ball| {
         if (ball.animation_completed and (ball.isAnimating("bounce_up") or ball.isAnimating("bounce_down"))) {
             ball.velocity = ball.next_velocity;
-            ball.startAnimation("idle", &state.assets);
+            ball.startAnimation(state, "idle", &state.assets);
         }
     }
 
@@ -689,7 +656,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
 
         // Update sprites.
         if (entity.is_in_use and entity.hasFlag(.has_sprite)) {
-            if (state.assets.getSpriteAsset(entity)) |sprite_asset| {
+            if (state.assets.getSpriteAsset(state, entity)) |sprite_asset| {
                 if (sprite_asset.document.frames.len > 1) {
                     const current_frame = sprite_asset.document.frames[entity.frame_index];
                     var from_frame: u16 = 0;
@@ -782,7 +749,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
 fn drawWorld(state: *State) void {
     for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_sprite) and entity.hasFlag(.has_transform) and !entity.hasFlag(.is_ui)) {
-            if (entity.getTexture(&state.assets)) |texture| {
+            if (entity.getTexture(state, &state.assets)) |texture| {
                 drawTextureAt(state, texture, entity.position, entity.scale, entity.tint);
             }
         }
@@ -790,34 +757,10 @@ fn drawWorld(state: *State) void {
 }
 
 fn drawGameUI(state: *State) void {
-    const inner_offset: Vector2 = .{ 3, 2 };
-    const horizontal_space: u32 = 2;
-
-    var position = Vector2{ 0, 0 };
-    if (state.assets.life_backdrop) |backdrop| {
-        const texture = backdrop.frames[0];
-        position[X] =
-            (@as(f32, @floatFromInt(state.window_width)) / state.world_scale / 2) -
-            (@as(f32, @floatFromInt(texture.w)) / 2);
-        drawTextureAt(state, texture, position, @splat(1), @splat(255));
-    }
-
-    position += inner_offset;
-
-    if (state.assets.life_filled) |filled| {
-        if (state.assets.life_outlined) |outlined| {
-            for (0..MAX_LIVES) |i| {
-                const texture = (if (state.lives_remaining > i) filled else outlined).frames[0];
-                drawTextureAt(state, texture, position, @splat(1), @splat(255));
-                position[X] += @floatFromInt(texture.w + horizontal_space);
-            }
-        }
-    }
-
     for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_sprite) and entity.hasFlag(.has_transform) and entity.hasFlag(.is_ui)) {
-            if (entity.getTexture(&state.assets)) |texture| {
-                position = entity.getUIPosition(state.dest_rect, state.world_scale, &state.assets);
+            if (entity.getTexture(state, &state.assets)) |texture| {
+                const position: Vector2 = entity.getUIPosition(state, state.dest_rect, state.world_scale, &state.assets);
                 drawTextureAt(state, texture, position, entity.scale, entity.tint);
             }
         }
@@ -902,7 +845,7 @@ fn spawnBall(state: *State) !void {
     entity.collider_radius = 6;
     entity.collider_offset = @splat(1);
     entity.color = .Red;
-    entity.startAnimation("idle", &state.assets);
+    entity.startAnimation(state, "idle", &state.assets);
 
     state.ball_id = entity.id;
 
@@ -914,7 +857,7 @@ fn resetBall(state: *State) void {
         ball.position = BALL_SPAWN;
         ball.velocity[Y] = BALL_VELOCITY;
         ball.color = .Red;
-        ball.startAnimation("idle", &state.assets);
+        ball.startAnimation(state, "idle", &state.assets);
 
         state.showTitleForDuration(.GET_READY, 2000) catch @panic("Failed to show Get Ready title");
     }
@@ -985,6 +928,100 @@ fn isLevelCompleted(state: *State) bool {
     return result;
 }
 
+fn addSprite(state: *State, position: Vector2) !*Entity {
+    var entity: *Entity = state.addEntity();
+    entity.addFlag(.has_sprite);
+    entity.addFlag(.has_transform);
+
+    entity.tint = @splat(255);
+    entity.frame_index = 0;
+    entity.duration_shown = 0;
+    entity.loop_animation = false;
+    entity.animation_completed = false;
+    entity.current_animation = null;
+
+    entity = entity;
+    entity.position = position;
+    entity.scale = @splat(1);
+    entity.velocity = @splat(0);
+    entity.next_velocity = @splat(0);
+
+    return entity;
+}
+
+fn addUISprite(state: *State, offset: Vector2, alignment: Vector2) !*Entity {
+    var entity = try addSprite(state, offset);
+    entity.addFlag(.is_ui);
+    entity.alignment = alignment;
+
+    return entity;
+}
+
+fn addGameUI(state: *State) !void {
+    // Remove existing UI.
+    for (&state.entities) |*entity| {
+        if (entity.hasFlag(.is_ui) and !entity.hasFlag(.has_title)) {
+            state.removeEntity(entity);
+        }
+    }
+
+    var backdrop = try addUISprite(state, @splat(0), .{ 0.5, 0 });
+    backdrop.ui_element = .life_backdrop;
+
+    const life_width: f32 = 11;
+    const life_padding: Vector2 = .{ 3, 2 };
+    const life_step: Vector2 = .{ life_width + life_padding[X], 0 };
+
+    var position: Vector2 = .{ 0 - life_width - life_padding[X], life_padding[Y] };
+    for (0..MAX_LIVES) |i| {
+        var life = try addUISprite(state, position, .{ 0.5, 0 });
+        life.ui_element = @enumFromInt(@intFromEnum(UIElement.life1) + i);
+        position += life_step;
+    }
+}
+
+fn addTitle(state: *State, title_type: TitleType, has_duration: bool, duration: u64) !*Entity {
+    state.hideCurrentTitle();
+    std.debug.assert(state.current_title_id == null);
+
+    var entity = try addUISprite(state, @splat(0), @splat(0.5));
+    entity.addFlag(.has_title);
+
+    entity.title_type = title_type;
+    entity.has_title_duration = has_duration;
+    entity.duration_remaining = duration;
+
+    state.current_title_id = entity.id;
+
+    // Fade in tween.
+    _ = try addTween(
+        state,
+        entity.id,
+        "sprite",
+        "tint",
+        .{ .color = .{ 255, 255, 255, 0 } },
+        .{ .color = .{ 255, 255, 255, 255 } },
+        0,
+        500,
+    );
+
+    if (duration > 0) {
+        // Fade out tween.
+        _ = try addTween(
+            state,
+            entity.id,
+            "sprite",
+            "tint",
+            .{ .color = .{ 255, 255, 255, 255 } },
+            .{ .color = .{ 255, 255, 255, 0 } },
+            duration - 500,
+            500,
+        );
+    }
+
+    return entity;
+}
+
 fn addTween(
     state: *State,
     target: EntityId,
@@ -1008,27 +1045,6 @@ fn addTween(
 
     entity.tween_start_value = start_value;
     entity.tween_end_value = end_value;
-
-    return entity;
-}
-
-fn addSprite(state: *State, position: Vector2) !*Entity {
-    var entity: *Entity = state.addEntity();
-    entity.addFlag(.has_sprite);
-    entity.addFlag(.has_transform);
-
-    entity.tint = @splat(255);
-    entity.frame_index = 0;
-    entity.duration_shown = 0;
-    entity.loop_animation = false;
-    entity.animation_completed = false;
-    entity.current_animation = null;
-
-    entity = entity;
-    entity.position = position;
-    entity.scale = @splat(1);
-    entity.velocity = @splat(0);
-    entity.next_velocity = @splat(0);
 
     return entity;
 }

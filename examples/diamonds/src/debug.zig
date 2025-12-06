@@ -262,6 +262,7 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
 fn entityContainsPoint(state: *State, mouse_position: Vector2, entity: *Entity) ?EntityId {
     var result: ?EntityId = null;
     if (entity.spriteContainsPoint(
+        state,
         mouse_position,
         state.dest_rect,
         state.world_scale,
@@ -694,7 +695,7 @@ fn drawEntityHighlight(
                 },
             };
         } else if (entity.hasFlag(.has_sprite)) {
-            if (assets.getSpriteAsset(entity)) |sprite_asset| {
+            if (assets.getSpriteAsset(state, entity)) |sprite_asset| {
                 entity_rect = .{
                     .position = Vector2{ entity.position[X], entity.position[Y] } + offset,
                     .size = Vector2{
@@ -706,7 +707,7 @@ fn drawEntityHighlight(
         }
 
         if (entity.hasFlag(.is_ui)) {
-            const title_position: Vector2 = entity.getUIPosition(state.dest_rect, state.world_scale, &state.assets);
+            const title_position: Vector2 = entity.getUIPosition(state, state.dest_rect, state.world_scale, &state.assets);
             entity_rect.position = title_position + offset;
         }
 
@@ -725,7 +726,7 @@ fn getTiledPosition(position: Vector2, asset: *const AsepriteAsset) Vector2 {
 }
 
 fn openSprite(state: *State, allocator: std.mem.Allocator, entity: *Entity) void {
-    if (state.assets.getSpriteAsset(entity)) |sprite_asset| {
+    if (state.assets.getSpriteAsset(state, entity)) |sprite_asset| {
         const process_args = if (PLATFORM == .windows) [_][]const u8{
             "Aseprite.exe",
             sprite_asset.path,
