@@ -749,7 +749,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
 fn drawWorld(state: *State) void {
     for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_sprite) and entity.hasFlag(.has_transform) and !entity.hasFlag(.is_ui)) {
-            if (entity.getTexture(state, &state.assets)) |texture| {
+            if (entity.getTexture(state)) |texture| {
                 drawTextureAt(state, texture, entity.position, entity.scale, entity.tint);
             }
         }
@@ -759,8 +759,8 @@ fn drawWorld(state: *State) void {
 fn drawGameUI(state: *State) void {
     for (&state.entities) |*entity| {
         if (entity.is_in_use and entity.hasFlag(.has_sprite) and entity.hasFlag(.has_transform) and entity.hasFlag(.is_ui)) {
-            if (entity.getTexture(state, &state.assets)) |texture| {
-                const position: Vector2 = entity.getUIPosition(state, state.dest_rect, state.world_scale, &state.assets);
+            if (entity.getTexture(state)) |texture| {
+                const position: Vector2 = entity.getUIPosition(state);
                 drawTextureAt(state, texture, position, entity.scale, entity.tint);
             }
         }

@@ -203,19 +203,16 @@ pub const Entity = struct {
         self: *const Entity,
         state: *State,
         point: Vector2,
-        dest_rect: sdl.SDL_FRect,
-        world_scale: f32,
-        assets: *game.Assets,
     ) bool {
         var contains_point = false;
         var position: Vector2 = .{ 0, 0 };
 
-        if (assets.getSpriteAsset(state, self)) |sprite_asset| {
+        if (state.assets.getSpriteAsset(state, self)) |sprite_asset| {
             if (self.hasFlag(.has_transform)) {
                 position = self.position;
             }
             if (self.hasFlag(.is_ui)) {
-                position = self.getUIPosition(state, dest_rect, world_scale, assets);
+                position = self.getUIPosition(state);
             }
 
             const width: f32 = @floatFromInt(sprite_asset.document.header.width);
@@ -231,10 +228,10 @@ pub const Entity = struct {
         return contains_point;
     }
 
-    pub fn getTexture(self: *const Entity, state: *State, assets: *game.Assets) ?*sdl.SDL_Texture {
+    pub fn getTexture(self: *const Entity, state: *State) ?*sdl.SDL_Texture {
         var result: ?*sdl.SDL_Texture = null;
 
-        if (assets.getSpriteAsset(state, self)) |sprite_asset| {
+        if (state.assets.getSpriteAsset(state, self)) |sprite_asset| {
             if (self.frame_index < sprite_asset.frames.len) {
                 result = sprite_asset.frames[self.frame_index];
             }
@@ -246,19 +243,16 @@ pub const Entity = struct {
     pub fn getUIPosition(
         self: *const Entity,
         state: *State,
-        dest_rect: sdl.SDL_FRect,
-        world_scale: f32,
-        assets: *game.Assets,
     ) Vector2 {
         var result: Vector2 = @splat(0);
-        const scale: Vector2 = @splat(world_scale);
+        const scale: Vector2 = @splat(state.world_scale);
 
-        if (self.getTexture(state, assets)) |texture| {
+        if (self.getTexture(state)) |texture| {
             const size: Vector2 = .{
                 (@as(f32, @floatFromInt(texture.w))),
                 (@as(f32, @floatFromInt(texture.h))),
             };
-            result = Vector2{ dest_rect.w, dest_rect.h } / scale - size;
+            result = Vector2{ state.dest_rect.w, state.dest_rect.h } / scale - size;
             result *= self.alignment;
             result += self.position;
         }

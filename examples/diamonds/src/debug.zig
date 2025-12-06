@@ -261,13 +261,7 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
 
 fn entityContainsPoint(state: *State, mouse_position: Vector2, entity: *Entity) ?EntityId {
     var result: ?EntityId = null;
-    if (entity.spriteContainsPoint(
-        state,
-        mouse_position,
-        state.dest_rect,
-        state.world_scale,
-        &state.assets,
-    )) {
+    if (entity.spriteContainsPoint(state, mouse_position)) {
         result = entity.id;
     }
     return result;
@@ -707,7 +701,7 @@ fn drawEntityHighlight(
         }
 
         if (entity.hasFlag(.is_ui)) {
-            const title_position: Vector2 = entity.getUIPosition(state, state.dest_rect, state.world_scale, &state.assets);
+            const title_position: Vector2 = entity.getUIPosition(state);
             entity_rect.position = title_position + offset;
         }
 
