@@ -5,29 +5,26 @@ const internal = @import("internal");
 const aseprite = @import("aseprite");
 const entities = @import("entities.zig");
 const math = @import("math");
-const pool = @import("pool");
 const imgui = if (INTERNAL) @import("imgui") else struct {};
 const debug = if (INTERNAL) @import("debug.zig") else struct {
     pub const DebugState = void;
 };
 
 const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
+pub const std_options: std.Options = .{
+    .log_level = if (INTERNAL) .debug else .err,
+};
 
 const Entity = entities.Entity;
-const EntityId = entities.EntityId;
+const EntityArray = entities.EntityArray;
 const EntityIterator = entities.EntityIterator;
-const TransformComponent = entities.TransformComponent;
-const ColliderComponent = entities.ColliderComponent;
-const SpriteComponent = entities.SpriteComponent;
-const ColorComponent = entities.ColorComponent;
+const CollisionResult = entities.CollisionResult;
+const EntityId = entities.EntityId;
+const UIElement = entities.UIElement;
 const ColorComponentValue = entities.ColorComponentValue;
-const BlockComponent = entities.BlockComponent;
 const BlockType = entities.BlockType;
-const TitleComponent = entities.TitleComponent;
 const TitleType = entities.TitleType;
-const TweenComponent = entities.TweenComponent;
 const TweenedValue = entities.TweenedValue;
-const Pool = pool.Pool;
 const FPSState = internal.FPSState;
 const AsepriteAsset = aseprite.AsepriteAsset;
 
@@ -50,6 +47,7 @@ const DebugAllocator = std.heap.DebugAllocator(.{
 
 const INTERNAL: bool = @import("build_options").internal;
 const LOG_ALLOCATIONS: bool = @import("build_options").log_allocations;
+const MAX_ENTITY_COUNT = entities.MAX_ENTITY_COUNT;
 const WORLD_WIDTH: u32 = 200;
 const WORLD_HEIGHT: u32 = 150;
 const BALL_VELOCITY: f32 = 64;
@@ -101,19 +99,11 @@ pub const State = struct {
     lives_remaining: u32,
 
     // Entities.
-    entities: std.ArrayList(*Entity),
-    entities_free: std.ArrayList(u32),
-    entities_iterator: EntityIterator,
+    entities: EntityArray,
+    next_free_entity_index: u32,
+
     ball_id: ?EntityId,
     current_title_id: ?EntityId,
-
-    transform_pool: Pool(TransformComponent),
-    collider_pool: Pool(ColliderComponent),
-    sprite_pool: Pool(SpriteComponent),
-    color_pool: Pool(ColorComponent),
-    block_pool: Pool(BlockComponent),
-    title_pool: Pool(TitleComponent),
-    tween_pool: Pool(TweenComponent),
 
     pub fn deltaTime(self: *State) f32 {
         return @as(f32, @floatFromInt(self.delta_time)) / 1000;
@@ -127,7 +117,7 @@ pub const State = struct {
         var result: ?*Entity = null;
 
         if (opt_id) |id| {
-            const potential = self.entities.items[id.index];
+            const potential = &self.entities[id.index];
             if (potential.id.equals(id) and potential.is_in_use) {
                 result = potential;
             }
@@ -136,150 +126,55 @@ pub const State = struct {
         return result;
     }
 
-    pub fn addEntity(self: *State) !*Entity {
-        var result: *Entity = undefined;
+    pub fn addEntity(self: *State) *Entity {
+        var entity_index: u32 = self.next_free_entity_index;
+        var entity: *Entity = &self.entities[entity_index];
 
-        if (self.entities_free.pop()) |free_index| {
-            result = self.entities.items[free_index];
-            result.is_in_use = true;
-            result.id.generation += 1;
-        } else {
-            result = try Entity.init(self.allocator);
-            result.id.index = @intCast(self.entities.items.len);
-            result.id.generation = 0;
-            result.is_in_use = true;
-            self.entities.append(self.allocator, result) catch @panic("Failed to allocate entity");
+        while (entity.is_in_use) {
+            entity_index += 1;
+            entity = &self.entities[entity_index];
         }
 
-        return result;
+        std.debug.assert(entity.is_in_use == false);
+
+        const previous_generation = entity.id.generation;
+        entity.* = .{};
+        entity.is_in_use = true;
+        entity.id = .{
+            .index = self.next_free_entity_index,
+            .generation = previous_generation + 1,
+        };
+        self.next_free_entity_index = entity_index + 1;
+
+        return entity;
     }
 
     pub fn removeEntity(self: *State, entity: *Entity) void {
-        std.debug.assert(entity.is_in_use == true);
-
         entity.is_in_use = false;
-        self.entities_free.append(self.allocator, entity.id.index) catch @panic("Failed to allocate free index");
-
-        if (entity.transform) |transform| {
-            self.transform_pool.free(transform.pool_id, self.allocator) catch @panic("Failed to free transform component");
-            entity.transform = null;
-        }
-        if (entity.collider) |collider| {
-            self.collider_pool.free(collider.pool_id, self.allocator) catch @panic("Failed to free collider component");
-            entity.collider = null;
-        }
-        if (entity.sprite) |sprite| {
-            self.sprite_pool.free(sprite.pool_id, self.allocator) catch @panic("Failed to free sprite component");
-            entity.sprite = null;
-        }
-        if (entity.color) |color| {
-            self.color_pool.free(color.pool_id, self.allocator) catch @panic("Failed to free color component");
-            entity.color = null;
-        }
-        if (entity.block) |block| {
-            self.block_pool.free(block.pool_id, self.allocator) catch @panic("Failed to free block component");
-            entity.block = null;
-        }
-        if (entity.title) |title| {
-            self.title_pool.free(title.pool_id, self.allocator) catch @panic("Failed to free title component");
-            entity.title = null;
-        }
-        if (entity.tween) |tween| {
-            self.tween_pool.free(tween.pool_id, self.allocator) catch @panic("Failed to free tween component");
-            entity.tween = null;
+        if (entity.id.index < self.next_free_entity_index) {
+            self.next_free_entity_index = entity.id.index;
         }
     }
 
     pub fn showTitle(self: *State, title_type: TitleType) !void {
-        try self.spawnTitle(title_type, false, 0);
+        _ = try addTitle(self, title_type, false, 0);
     }
 
     pub fn showTitleForDuration(self: *State, title_type: TitleType, duration: u64) !void {
-        try self.spawnTitle(title_type, true, duration);
+        _ = try addTitle(self, title_type, true, duration);
     }
 
-    pub fn hideTitle(self: *State) void {
+    pub fn hideCurrentTitle(self: *State) void {
         if (self.getEntity(self.current_title_id)) |title_entity| {
             self.removeEntity(title_entity);
             self.current_title_id = null;
         }
     }
 
-    fn spawnTitle(self: *State, title_type: TitleType, has_duration: bool, duration: u64) !void {
-        self.hideTitle();
-        std.debug.assert(self.current_title_id == null);
-
-        if (addSprite(self, @splat(0)) catch null) |title_entity| {
-            var title_component: *TitleComponent = try self.title_pool.getOrCreate(self.allocator);
-            title_component.entity = title_entity;
-            title_component.type = title_type;
-            title_component.has_duration = has_duration;
-            title_component.duration_remaining = duration;
-
-            title_entity.title = title_component;
-            self.current_title_id = title_entity.id;
-
-            // Fade in tween.
-            _ = try addTween(
-                self,
-                title_entity.id,
-                "sprite",
-                "tint",
-                .{ .color = .{ 255, 255, 255, 0 } },
-                .{ .color = .{ 255, 255, 255, 255 } },
-                0,
-                500,
-            );
-
-            if (duration > 0) {
-                // Fade out tween.
-                _ = try addTween(
-                    self,
-                    title_entity.id,
-                    "sprite",
-                    "tint",
-                    .{ .color = .{ 255, 255, 255, 255 } },
-                    .{ .color = .{ 255, 255, 255, 0 } },
-                    duration - 500,
-                    500,
-                );
-            }
-        }
-    }
-
-    pub fn updateTitles(self: *State) void {
-        if (self.getEntity(self.current_title_id)) |title_entity| {
-            if (title_entity.title) |title| {
-                if (title.has_duration) {
-                    if (title.duration_remaining >= self.delta_time_actual) {
-                        title.duration_remaining -= self.delta_time_actual;
-                    } else {
-                        title.duration_remaining = 0;
-                    }
-
-                    if (title.duration_remaining == 0) {
-                        self.titleDurationOver(title.type);
-                    }
-                }
-            }
-        }
-    }
-
-    fn titleDurationOver(self: *State, title: TitleType) void {
-        self.hideTitle();
-
-        switch (title) {
-            .CLEARED => nextLevel(self),
-            .DEATH => resetBall(self),
-            .GAME_OVER => restart(self),
-            else => {},
-        }
-    }
-
     pub fn pausedDueToTitle(self: *State) bool {
         var result: bool = false;
         if (self.getEntity(self.current_title_id)) |title_entity| {
-            result = title_entity.title != null;
+            result = title_entity.hasFlag(.has_title);
         }
         return result;
     }
@@ -313,32 +208,38 @@ pub const Assets = struct {
     title_death: ?AsepriteAsset = null,
     title_game_over: ?AsepriteAsset = null,
 
-    pub fn getSpriteAsset(self: *Assets, sprite: *const SpriteComponent) ?*AsepriteAsset {
+    fn getLifeSprite(self: *Assets, state: *State, index: u32) ?*AsepriteAsset {
+        return if (state.lives_remaining > index) &self.life_filled.? else &self.life_outlined.?;
+    }
+
+    pub fn getSpriteAsset(self: *Assets, state: *State, entity: *const Entity) ?*AsepriteAsset {
         var result: ?*AsepriteAsset = null;
 
-        if (sprite.entity.title) |title| {
-            result = switch (title.type) {
+        if (entity.hasFlag(.player_controlled)) {
+            result = self.getBall(entity.color);
+        } else if (entity.hasFlag(.is_ui) and entity.ui_element != .none) {
+            result = switch (entity.ui_element) {
+                .life_backdrop => &self.life_backdrop.?,
+                .life1 => self.getLifeSprite(state, 0),
+                .life2 => self.getLifeSprite(state, 1),
+                .life3 => self.getLifeSprite(state, 2),
+                else => unreachable,
+            };
+        } else if (entity.hasFlag(.has_title)) {
+            result = switch (entity.title_type) {
                 .PAUSED => &self.title_paused.?,
                 .GET_READY => &self.title_get_ready.?,
                 .CLEARED => &self.title_cleared.?,
                 .DEATH => &self.title_death.?,
                 .GAME_OVER => &self.title_game_over.?,
+                .NONE => unreachable,
             };
-        } else if (sprite.entity.color) |color| {
-            switch (sprite.entity.entity_type) {
-                .Ball => result = self.getBall(color.color),
-                .Wall => {
-                    if (sprite.entity.block) |block| {
-                        result = self.getWall(color.color, block.type);
-                    }
-                },
-                else => unreachable,
-            }
+        } else if (entity.hasFlag(.has_block)) {
+            result = self.getWall(entity.color, entity.block_type);
+        } else if (entity.hasFlag(.is_background)) {
+            result = &self.background.?;
         } else {
-            result = switch (sprite.entity.entity_type) {
-                .Background => &self.background.?,
-                else => unreachable,
-            };
+            unreachable;
         }
 
         return result;
@@ -351,6 +252,7 @@ pub const Assets = struct {
                     .Red => &self.block_red.?,
                     .Blue => &self.block_blue.?,
                     .Gray => &self.block_gray.?,
+                    .None => unreachable,
                 };
             },
             .ColorChange => {
@@ -358,6 +260,7 @@ pub const Assets = struct {
                     .Red => &self.block_change_red.?,
                     .Blue => &self.block_change_blue.?,
                     .Gray => unreachable,
+                    .None => unreachable,
                 };
             },
             .Deadly => {
@@ -366,6 +269,7 @@ pub const Assets = struct {
                     else => unreachable,
                 };
             },
+            .None => unreachable,
         }
 
         unreachable;
@@ -376,6 +280,7 @@ pub const Assets = struct {
             .Red => &self.ball_red.?,
             .Blue => &self.ball_blue.?,
             .Gray => unreachable,
+            .None => unreachable,
         };
     }
 };
@@ -425,23 +330,12 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         .level_index = 0,
         .lives_remaining = MAX_LIVES,
 
-        .entities = .empty,
-        .entities_free = .empty,
-        .entities_iterator = .{ .entities = &state.entities },
+        .entities = [1]Entity{.{}} ** MAX_ENTITY_COUNT,
+        .next_free_entity_index = 0,
+
         .ball_id = null,
         .current_title_id = null,
-
-        .transform_pool = Pool(TransformComponent).init(100, state.allocator) catch @panic("Failed to create transform pool"),
-        .collider_pool = Pool(ColliderComponent).init(100, state.allocator) catch @panic("Failed to create collider pool"),
-        .sprite_pool = Pool(SpriteComponent).init(100, state.allocator) catch @panic("Failed to create sprite pool"),
-        .color_pool = Pool(ColorComponent).init(100, state.allocator) catch @panic("Failed to create color pool"),
-        .block_pool = Pool(BlockComponent).init(100, state.allocator) catch @panic("Failed to create block pool"),
-        .title_pool = Pool(TitleComponent).init(@typeInfo(TitleType).@"enum".fields.len, state.allocator) catch @panic("Failed to create title pool"),
-        .tween_pool = Pool(TweenComponent).init(100, state.allocator) catch @panic("Failed to create tween pool"),
     };
-
-    state.entities.ensureUnusedCapacity(state.allocator, 100) catch @panic("Failed to allocate space for entities.");
-    state.entities_free.ensureUnusedCapacity(state.allocator, 100) catch @panic("Failed to allocate space for free entities.");
 
     if (INTERNAL) {
         state.debug_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize debug allocator."));
@@ -458,6 +352,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     spawnBackground(state) catch unreachable;
     spawnBall(state) catch unreachable;
     loadLevel(state, LEVELS[state.level_index]) catch unreachable;
+    try addGameUI(state);
 
     setupRenderTexture(state);
 
@@ -535,15 +430,14 @@ pub export fn reloaded(state_ptr: *anyopaque) void {
 
     unloadAssets(state);
     loadAssets(state);
+    try addGameUI(state);
 
     if (INTERNAL) {
         imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
     }
 
     if (state.getEntity(state.ball_id)) |ball| {
-        if (ball.transform) |transform| {
-            transform.velocity[Y] = if (transform.velocity[Y] > 0) BALL_VELOCITY else -BALL_VELOCITY;
-        }
+        ball.velocity[Y] = if (ball.velocity[Y] > 0) BALL_VELOCITY else -BALL_VELOCITY;
     }
 }
 
@@ -594,7 +488,7 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
                         if (state.paused) {
                             state.showTitle(.PAUSED) catch @panic("Failed to show Paused title");
                         } else {
-                            state.hideTitle();
+                            state.hideCurrentTitle();
                         }
                     }
                 },
@@ -630,47 +524,62 @@ pub export fn tick(state_ptr: *anyopaque) void {
         debug.recordMemoryUsage(state);
     }
 
-    state.updateTitles();
+    // Update current title.
+    if (state.getEntity(state.current_title_id)) |title| {
+        if (title.has_title_duration) {
+            if (title.duration_remaining >= state.delta_time_actual) {
+                title.duration_remaining -= state.delta_time_actual;
+            } else {
+                title.duration_remaining = 0;
+            }
 
-    const opt_ball = state.getEntity(state.ball_id);
-    if (opt_ball) |ball| {
-        if (ball.transform) |transform| {
-            if ((state.ball_horizontal_bounce_start_time + BALL_HORIZONTAL_BOUNCE_TIME) < state.time) {
-                if (state.input.left) {
-                    transform.velocity[X] = -BALL_VELOCITY;
-                } else if (state.input.right) {
-                    transform.velocity[X] = BALL_VELOCITY;
-                } else {
-                    transform.velocity[X] = 0;
+            if (title.duration_remaining == 0) {
+                state.hideCurrentTitle();
+
+                switch (title.title_type) {
+                    .CLEARED => nextLevel(state),
+                    .DEATH => resetBall(state),
+                    .GAME_OVER => restart(state),
+                    else => {},
                 }
             }
         }
     }
 
-    var iter: EntityIterator = .{ .entities = &state.entities };
-    const collisions = ColliderComponent.checkForCollisions(&iter, state.deltaTime());
+    const opt_ball: ?*Entity = state.getEntity(state.ball_id);
+    if (opt_ball) |ball| {
+        if ((state.ball_horizontal_bounce_start_time + BALL_HORIZONTAL_BOUNCE_TIME) < state.time) {
+            if (state.input.left) {
+                ball.velocity[X] = -BALL_VELOCITY;
+            } else if (state.input.right) {
+                ball.velocity[X] = BALL_VELOCITY;
+            } else {
+                ball.velocity[X] = 0;
+            }
+        }
+    }
+
+    const delta_time = state.deltaTime();
+    const delta_time_actual = state.deltaTimeActual();
+    const collisions: CollisionResult = Entity.checkForCollisions(state, delta_time);
 
     // Handle vertical collisions.
     if (collisions.vertical) |collision| {
         if (collision.id.equals(state.ball_id)) {
             if (state.getEntity(collision.id)) |entity| {
                 if (state.getEntity(collision.other_id)) |other_entity| {
-                    if (entity.transform) |transform| {
-                        transform.next_velocity = transform.velocity;
-                        transform.next_velocity[Y] = -transform.next_velocity[Y];
+                    entity.next_velocity = entity.velocity;
+                    entity.next_velocity[Y] = -entity.next_velocity[Y];
 
-                        entity.sprite.?.startAnimation(
-                            if (transform.velocity[Y] < 0) "bounce_up" else "bounce_down",
-                            &state.assets,
-                        );
-                        transform.velocity[Y] = 0;
+                    const bounce_animation = if (entity.velocity[Y] < 0) "bounce_up" else "bounce_down";
+                    entity.startAnimation(state, bounce_animation, &state.assets);
+                    entity.velocity[Y] = 0;
 
-                        if (INTERNAL) {
-                            state.debug_state.addCollision(state.debug_allocator.allocator(), &collision, state.time);
-                        }
-
-                        handleBallCollision(state, entity, other_entity);
+                    if (INTERNAL) {
+                        state.debug_state.addCollision(state.debug_allocator.allocator(), &collision, state.time);
                     }
+
+                    handleBallCollision(state, entity, other_entity);
                 }
             }
         }
@@ -681,16 +590,14 @@ pub export fn tick(state_ptr: *anyopaque) void {
         if (collision.id.equals(state.ball_id)) {
             if (state.getEntity(collision.id)) |entity| {
                 if (state.getEntity(collision.other_id)) |other_entity| {
-                    if (entity.transform) |transform| {
-                        transform.velocity[X] = -transform.velocity[X];
-                        state.ball_horizontal_bounce_start_time = state.time;
+                    entity.velocity[X] = -entity.velocity[X];
+                    state.ball_horizontal_bounce_start_time = state.time;
 
-                        if (INTERNAL) {
-                            state.debug_state.addCollision(state.debug_allocator.allocator(), &collision, state.time);
-                        }
-
-                        handleBallCollision(state, entity, other_entity);
+                    if (INTERNAL) {
+                        state.debug_state.addCollision(state.debug_allocator.allocator(), &collision, state.time);
                     }
+
+                    handleBallCollision(state, entity, other_entity);
                 }
             }
         }
@@ -698,35 +605,90 @@ pub export fn tick(state_ptr: *anyopaque) void {
 
     // Handle ball specific animations.
     if (opt_ball) |ball| {
-        if (ball.sprite) |sprite| {
-            if (ball.transform) |transform| {
-                if (sprite.animation_completed and (sprite.isAnimating("bounce_up") or sprite.isAnimating("bounce_down"))) {
-                    transform.velocity = transform.next_velocity;
-                    sprite.startAnimation("idle", &state.assets);
+        if (ball.animation_completed and (ball.isAnimating("bounce_up") or ball.isAnimating("bounce_down"))) {
+            ball.velocity = ball.next_velocity;
+            ball.startAnimation(state, "idle", &state.assets);
+        }
+    }
+
+    var iter: EntityIterator = .init(&state.entities, .Start);
+    while (iter.next()) |entity| {
+        // Update transforms.
+        if (entity.hasFlag(.has_transform)) {
+            entity.position += entity.velocity * @as(Vector2, @splat(delta_time));
+        }
+
+        // Update tweens.
+        if (entity.hasFlag(.has_tween)) {
+            const total_duration = entity.tween_delay + entity.tween_duration;
+            entity.tween_time_passed += @intFromFloat(delta_time_actual * 1000);
+
+            if (entity.tween_time_passed <= total_duration and entity.tween_delay <= entity.tween_time_passed) {
+                const t: f32 =
+                    @as(f32, @floatFromInt(entity.tween_time_passed - entity.tween_delay)) /
+                    @as(f32, @floatFromInt(entity.tween_duration));
+
+                const type_info = @typeInfo(Entity);
+                if (state.getEntity(entity.tween_target)) |target| {
+                    inline for (type_info.@"struct".fields) |entity_field_info| {
+                        if (std.mem.eql(u8, entity_field_info.name, entity.tween_target_field)) {
+                            const current_value = &@field(target, entity_field_info.name);
+                            switch (@TypeOf(current_value)) {
+                                *f32 => {
+                                    current_value.* = math.lerp(entity.tween_start_value.f32, entity.tween_end_value.f32, t);
+                                },
+                                *Color => {
+                                    current_value.* = .{
+                                        math.lerpU8(entity.tween_start_value.color[R], entity.tween_end_value.color[R], t),
+                                        math.lerpU8(entity.tween_start_value.color[G], entity.tween_end_value.color[G], t),
+                                        math.lerpU8(entity.tween_start_value.color[B], entity.tween_end_value.color[B], t),
+                                        math.lerpU8(entity.tween_start_value.color[A], entity.tween_end_value.color[A], t),
+                                    };
+                                },
+                                else => {},
+                            }
+                        }
+                    }
+                }
+            } else if (entity.tween_time_passed > entity.tween_duration + entity.tween_delay) {
+                // Remove completed tweens.
+                state.removeEntity(entity);
+            }
+        }
+
+        // Update sprites.
+        if (entity.hasFlag(.has_sprite)) {
+            if (state.assets.getSpriteAsset(state, entity)) |sprite_asset| {
+                if (sprite_asset.document.frames.len > 1) {
+                    const current_frame = sprite_asset.document.frames[entity.frame_index];
+                    var from_frame: u16 = 0;
+                    var to_frame: u16 = @intCast(sprite_asset.document.frames.len);
+
+                    if (entity.current_animation) |tag| {
+                        from_frame = tag.from_frame;
+                        to_frame = tag.to_frame;
+                    }
+
+                    entity.duration_shown += delta_time;
+
+                    if (entity.duration_shown * 1000 >= @as(f64, @floatFromInt(current_frame.header.frame_duration))) {
+                        var next_frame = entity.frame_index + 1;
+                        if (next_frame > to_frame) {
+                            if (entity.loop_animation) {
+                                next_frame = from_frame;
+                            } else {
+                                entity.animation_completed = true;
+                                next_frame = to_frame;
+                                continue;
+                            }
+                        }
+
+                        entity.setFrame(next_frame, sprite_asset);
+                    }
                 }
             }
         }
     }
-
-    iter.reset();
-    TransformComponent.tick(&iter, state.deltaTime());
-
-    iter.reset();
-    TweenComponent.tick(state, &iter, state.deltaTimeActual());
-
-    // Remove any completed tweens.
-    iter.reset();
-    while (iter.next(&.{.tween})) |entity| {
-        const tween = entity.tween.?;
-        if (entity.is_in_use) {
-            if (tween.time_passed > tween.duration + tween.delay) {
-                state.removeEntity(entity);
-            }
-        }
-    }
-
-    iter.reset();
-    SpriteComponent.tick(&state.assets, &iter, state.deltaTime());
 
     if (isLevelCompleted(state) and state.getEntity(state.current_title_id) == null) {
         if (!INTERNAL) {
@@ -742,28 +704,22 @@ pub export fn tick(state_ptr: *anyopaque) void {
 }
 
 fn handleBallCollision(state: *State, ball: *Entity, block: *Entity) void {
-    if (ball.color) |ball_color| {
-        if (block.block) |other_block| {
-            if (other_block.type == .Deadly) {
-                if (state.lives_remaining > 0) {
-                    if (!INTERNAL or !state.debug_state.testing_level) {
-                        state.lives_remaining -= 1;
-                    }
-                    state.showTitleForDuration(.DEATH, 2000) catch @panic("Failed to show Death title");
-                } else {
-                    state.showTitleForDuration(.GAME_OVER, 2000) catch @panic("Failed to show Game Over title");
-                    return;
-                }
+    if (block.block_type == .Deadly) {
+        if (state.lives_remaining > 0) {
+            if (!INTERNAL or !state.debug_state.testing_level) {
+                state.lives_remaining -= 1;
             }
-
-            if (block.color) |other_color| {
-                if (other_block.type == .Wall and other_color.color == ball_color.color) {
-                    state.removeEntity(block);
-                } else if (other_block.type == .ColorChange and other_color.color != ball_color.color) {
-                    ball_color.color = other_color.color;
-                }
-            }
+            state.showTitleForDuration(.DEATH, 2000) catch @panic("Failed to show Death title");
+        } else {
+            state.showTitleForDuration(.GAME_OVER, 2000) catch @panic("Failed to show Game Over title");
+            return;
         }
+    }
+
+    if (block.block_type == .Wall and block.color == ball.color) {
+        state.removeEntity(block);
+    } else if (block.block_type == .ColorChange and block.color != ball.color) {
+        ball.color = block.color;
     }
 }
 
@@ -793,46 +749,24 @@ pub export fn draw(state_ptr: *anyopaque) void {
 }
 
 fn drawWorld(state: *State) void {
-    var iter: EntityIterator = .{ .entities = &state.entities };
-    while (iter.next(&.{ .sprite, .transform })) |entity| {
-        if (entity.title == null) {
-            if (entity.sprite.?.getTexture(&state.assets)) |texture| {
-                drawTextureAt(state, texture, entity.transform.?.position, entity.transform.?.scale, entity.sprite.?.tint);
+    var iter: EntityIterator = .init(&state.entities, .Start);
+    while (iter.next()) |entity| {
+        if (entity.hasFlag(.has_sprite) and entity.hasFlag(.has_transform) and !entity.hasFlag(.is_ui)) {
+            if (entity.getTexture(state)) |texture| {
+                drawTextureAt(state, texture, entity.position, entity.scale, entity.tint);
             }
         }
     }
 }
 
 fn drawGameUI(state: *State) void {
-    const inner_offset: Vector2 = .{ 3, 2 };
-    const horizontal_space: u32 = 2;
-
-    var position = Vector2{ 0, 0 };
-    if (state.assets.life_backdrop) |backdrop| {
-        const texture = backdrop.frames[0];
-        position[X] =
-            (@as(f32, @floatFromInt(state.window_width)) / state.world_scale / 2) -
-            (@as(f32, @floatFromInt(texture.w)) / 2);
-        drawTextureAt(state, texture, position, @splat(1), @splat(255));
-    }
-
-    position += inner_offset;
-
-    if (state.assets.life_filled) |filled| {
-        if (state.assets.life_outlined) |outlined| {
-            for (0..MAX_LIVES) |i| {
-                const texture = (if (state.lives_remaining > i) filled else outlined).frames[0];
-                drawTextureAt(state, texture, position, @splat(1), @splat(255));
-                position[X] += @floatFromInt(texture.w + horizontal_space);
+    var iter: EntityIterator = .init(&state.entities, .Start);
+    while (iter.next()) |entity| {
+        if (entity.hasFlag(.has_sprite) and entity.hasFlag(.has_transform) and entity.hasFlag(.is_ui)) {
+            if (entity.getTexture(state)) |texture| {
+                const position: Vector2 = entity.getUIPosition(state);
+                drawTextureAt(state, texture, position, entity.scale, entity.tint);
             }
-        }
-    }
-
-    var iter: EntityIterator = .{ .entities = &state.entities };
-    while (iter.next(&.{ .sprite, .title })) |entity| {
-        if (entity.sprite.?.getTexture(&state.assets)) |texture| {
-            const title_position: Vector2 = entity.title.?.getPosition(state.dest_rect, state.world_scale, &state.assets);
-            drawTextureAt(state, texture, title_position, entity.transform.?.scale, entity.sprite.?.tint);
         }
     }
 }
@@ -902,52 +836,43 @@ fn unloadAssets(state: *State) void {
 }
 
 fn spawnBackground(state: *State) !void {
-    if (addSprite(state, @splat(0)) catch null) |entity| {
-        entity.entity_type = .Background;
-    }
+    var entity = try addSprite(state, @splat(0));
+    entity.addFlag(.is_background);
 }
 
 fn spawnBall(state: *State) !void {
-    if (addSprite(state, BALL_SPAWN) catch null) |entity| {
-        var collider_component: *ColliderComponent = state.collider_pool.getOrCreate(state.allocator) catch undefined;
-        entity.entity_type = .Ball;
-        collider_component.entity = entity;
-        collider_component.shape = .Circle;
-        collider_component.radius = 6;
-        collider_component.offset = @splat(1);
+    var entity = try addSprite(state, BALL_SPAWN);
+    entity.addFlag(.player_controlled);
+    entity.addFlag(.has_collider);
 
-        var color_component: *ColorComponent = state.color_pool.getOrCreate(state.allocator) catch undefined;
-        color_component.entity = entity;
-        color_component.color = .Red;
+    entity.collider_shape = .Circle;
+    entity.collider_radius = 6;
+    entity.collider_offset = @splat(1);
+    entity.color = .Red;
+    entity.startAnimation(state, "idle", &state.assets);
 
-        entity.color = color_component;
-        entity.collider = collider_component;
+    state.ball_id = entity.id;
 
-        state.ball_id = entity.id;
-
-        if (entity.sprite) |ball_sprite| {
-            ball_sprite.startAnimation("idle", &state.assets);
-        }
-
-        resetBall(state);
-    }
+    resetBall(state);
 }
 
 fn resetBall(state: *State) void {
     if (state.getEntity(state.ball_id)) |ball| {
-        ball.transform.?.position = BALL_SPAWN;
-        ball.transform.?.velocity[Y] = BALL_VELOCITY;
-        ball.color.?.color = .Red;
-        ball.sprite.?.startAnimation("idle", &state.assets);
+        ball.position = BALL_SPAWN;
+        ball.velocity[Y] = BALL_VELOCITY;
+        ball.color = .Red;
+        ball.startAnimation(state, "idle", &state.assets);
 
         state.showTitleForDuration(.GET_READY, 2000) catch @panic("Failed to show Get Ready title");
     }
 }
 
 fn unloadLevel(state: *State) void {
-    var iter: EntityIterator = .{ .entities = &state.entities };
-    while (iter.next(&.{.block})) |entity| {
-        state.removeEntity(entity);
+    var iter: EntityIterator = .init(&state.entities, .Start);
+    while (iter.next()) |entity| {
+        if (entity.hasFlag(.has_block)) {
+            state.removeEntity(entity);
+        }
     }
 }
 
@@ -995,14 +920,113 @@ fn nextLevel(state: *State) void {
 
 fn isLevelCompleted(state: *State) bool {
     var result = true;
-    var iter: EntityIterator = .{ .entities = &state.entities };
-    while (iter.next(&.{ .block, .color })) |entity| {
-        if (entity.block.?.type == .Wall and entity.color.?.color != .Gray) {
-            result = false;
+
+    var iter: EntityIterator = .init(&state.entities, .Start);
+    while (iter.next()) |entity| {
+        if (entity.hasFlag(.has_block)) {
+            if (entity.block_type == .Wall and entity.color != .Gray) {
+                result = false;
+                break;
+            }
         }
     }
 
     return result;
+}
+
+fn addSprite(state: *State, position: Vector2) !*Entity {
+    var entity: *Entity = state.addEntity();
+    entity.addFlag(.has_sprite);
+    entity.addFlag(.has_transform);
+
+    entity.tint = @splat(255);
+    entity.frame_index = 0;
+    entity.duration_shown = 0;
+    entity.loop_animation = false;
+    entity.animation_completed = false;
+    entity.current_animation = null;
+
+    entity = entity;
+    entity.position = position;
+    entity.scale = @splat(1);
+    entity.velocity = @splat(0);
+    entity.next_velocity = @splat(0);
+
+    return entity;
+}
+
+fn addUISprite(state: *State, offset: Vector2, alignment: Vector2) !*Entity {
+    var entity = try addSprite(state, offset);
+    entity.addFlag(.is_ui);
+    entity.alignment = alignment;
+
+    return entity;
+}
+
+fn addGameUI(state: *State) !void {
+    // Remove existing UI.
+    var iter: EntityIterator = .init(&state.entities, .Start);
+    while (iter.next()) |entity| {
+        if (entity.hasFlag(.is_ui) and !entity.hasFlag(.has_title)) {
+            state.removeEntity(entity);
+        }
+    }
+
+    var backdrop = try addUISprite(state, @splat(0), .{ 0.5, 0 });
+    backdrop.ui_element = .life_backdrop;
+
+    const life_width: f32 = 11;
+    const life_padding: Vector2 = .{ 3, 2 };
+    const life_step: Vector2 = .{ life_width + life_padding[X], 0 };
+
+    var position: Vector2 = .{ 0 - life_width - life_padding[X], life_padding[Y] };
+    for (0..MAX_LIVES) |i| {
+        var life = try addUISprite(state, position, .{ 0.5, 0 });
+        life.ui_element = @enumFromInt(@intFromEnum(UIElement.life1) + i);
+        position += life_step;
+    }
+}
+
+fn addTitle(state: *State, title_type: TitleType, has_duration: bool, duration: u64) !*Entity {
+    state.hideCurrentTitle();
+    std.debug.assert(state.current_title_id == null);
+
+    var entity = try addUISprite(state, @splat(0), @splat(0.5));
+    entity.addFlag(.has_title);
+
+    entity.title_type = title_type;
+    entity.has_title_duration = has_duration;
+    entity.duration_remaining = duration;
+
+    state.current_title_id = entity.id;
+
+    // Fade in tween.
+    _ = try addTween(
+        state,
+        entity.id,
+        "sprite",
+        "tint",
+        .{ .color = .{ 255, 255, 255, 0 } },
+        .{ .color = .{ 255, 255, 255, 255 } },
+        0,
+        500,
+    );
+
+    if (duration > 0) {
+        // Fade out tween.
+        _ = try addTween(
+            state,
+            entity.id,
+            "sprite",
+            "tint",
+            .{ .color = .{ 255, 255, 255, 255 } },
+            .{ .color = .{ 255, 255, 255, 0 } },
+            duration - 500,
+            500,
+        );
+    }
+
+    return entity;
 }
 
 fn addTween(
@@ -1015,51 +1039,27 @@ fn addTween(
     delay: u64,
     duration: u64,
 ) !*Entity {
-    var entity: *Entity = try state.addEntity();
-    var tween: *TweenComponent = try state.tween_pool.getOrCreate(state.allocator);
+    var entity: *Entity = state.addEntity();
+    entity.addFlag(.has_tween);
 
-    tween.delay = delay;
-    tween.duration = duration;
-    tween.time_passed = 0;
+    entity.tween_delay = delay;
+    entity.tween_duration = duration;
+    entity.tween_time_passed = 0;
 
-    tween.target = target;
-    tween.target_component = component;
-    tween.target_field = field;
+    entity.tween_target = target;
+    entity.tween_target_component = component;
+    entity.tween_target_field = field;
 
-    tween.start_value = start_value;
-    tween.end_value = end_value;
-
-    entity.tween = tween;
-    return entity;
-}
-
-fn addSprite(state: *State, position: Vector2) !*Entity {
-    var entity: *Entity = try state.addEntity();
-    var sprite: *SpriteComponent = try state.sprite_pool.getOrCreate(state.allocator);
-    var transform: *TransformComponent = try state.transform_pool.getOrCreate(state.allocator);
-
-    sprite.entity = entity;
-    sprite.tint = @splat(255);
-    sprite.frame_index = 0;
-    sprite.duration_shown = 0;
-    sprite.loop_animation = false;
-    sprite.animation_completed = false;
-    sprite.current_animation = null;
-
-    transform.entity = entity;
-    transform.position = position;
-    transform.scale = @splat(1);
-    transform.velocity = @splat(0);
-    transform.next_velocity = @splat(0);
-
-    entity.transform = transform;
-    entity.sprite = sprite;
+    entity.tween_start_value = start_value;
+    entity.tween_end_value = end_value;
 
     return entity;
 }
 
 pub fn addWall(state: *State, color: ColorComponentValue, block_type: BlockType, position: Vector2) !*Entity {
     const new_entity = try addSprite(state, position);
+    new_entity.addFlag(.has_collider);
+    new_entity.addFlag(.has_block);
 
     if (block_type == .ColorChange and color == .Gray) {
         return error.InvalidColor;
@@ -1070,26 +1070,15 @@ pub fn addWall(state: *State, color: ColorComponentValue, block_type: BlockType,
     }
 
     const sprite_asset = state.assets.getWall(color, block_type);
-    var collider_component: *ColliderComponent = state.collider_pool.getOrCreate(state.allocator) catch undefined;
-    new_entity.entity_type = .Wall;
-    collider_component.entity = new_entity;
-    collider_component.shape = .Square;
-    collider_component.size = Vector2{
+    new_entity.collider_shape = .Square;
+    new_entity.collider_size = Vector2{
         @floatFromInt(sprite_asset.document.header.width),
         @floatFromInt(sprite_asset.document.header.height),
     };
-    collider_component.offset = @splat(0);
-    new_entity.collider = collider_component;
+    new_entity.collider_offset = @splat(0);
 
-    var color_component: *ColorComponent = try state.color_pool.getOrCreate(state.allocator);
-    color_component.entity = new_entity;
-    color_component.color = color;
-    new_entity.color = color_component;
-
-    var block_component: *BlockComponent = try state.block_pool.getOrCreate(state.allocator);
-    block_component.entity = new_entity;
-    block_component.type = block_type;
-    new_entity.block = block_component;
+    new_entity.color = color;
+    new_entity.block_type = block_type;
 
     return new_entity;
 }

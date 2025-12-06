@@ -119,3 +119,11 @@ pub const Matrix4x4 = extern struct {
         );
     }
 };
+
+pub fn lerpU8(min: u8, max: u8, t: f32) u8 {
+    return @intFromFloat(lerp(@floatFromInt(min), @floatFromInt(max), t));
+}
+
+pub fn lerp(min: f32, max: f32, t: f32) f32 {
+    return (1.0 - t) * min + t * max;
+}
