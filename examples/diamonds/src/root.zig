@@ -17,6 +17,8 @@ pub const std_options: std.Options = .{
 };
 
 const Entity = entities.Entity;
+const EntityArray = entities.EntityArray;
+const EntityIterator = entities.EntityIterator;
 const CollisionResult = entities.CollisionResult;
 const EntityId = entities.EntityId;
 const UIElement = entities.UIElement;
@@ -46,7 +48,7 @@ const DebugAllocator = std.heap.DebugAllocator(.{
 
 const INTERNAL: bool = @import("build_options").internal;
 const LOG_ALLOCATIONS: bool = @import("build_options").log_allocations;
-const MAX_ENTITY_COUNT = 1024;
+const MAX_ENTITY_COUNT = entities.MAX_ENTITY_COUNT;
 const WORLD_WIDTH: u32 = 200;
 const WORLD_HEIGHT: u32 = 150;
 const BALL_VELOCITY: f32 = 64;
@@ -98,7 +100,7 @@ pub const State = struct {
     lives_remaining: u32,
 
     // Entities.
-    entities: [MAX_ENTITY_COUNT]Entity,
+    entities: EntityArray,
     next_free_entity_index: u32,
 
     ball_id: ?EntityId,
@@ -610,14 +612,15 @@ pub export fn tick(state_ptr: *anyopaque) void {
         }
     }
 
-    for (&state.entities) |*entity| {
+    var iter: EntityIterator = .init(&state.entities, .Start);
+    while (iter.next()) |entity| {
         // Update transforms.
-        if (entity.is_in_use and entity.hasFlag(.has_transform)) {
+        if (entity.hasFlag(.has_transform)) {
             entity.position += entity.velocity * @as(Vector2, @splat(delta_time));
         }
 
         // Update tweens.
-        if (entity.is_in_use and entity.hasFlag(.has_tween)) {
+        if (entity.hasFlag(.has_tween)) {
             const total_duration = entity.tween_delay + entity.tween_duration;
             entity.tween_time_passed += @intFromFloat(delta_time_actual * 1000);
 
@@ -655,7 +658,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
         }
 
         // Update sprites.
-        if (entity.is_in_use and entity.hasFlag(.has_sprite)) {
+        if (entity.hasFlag(.has_sprite)) {
             if (state.assets.getSpriteAsset(state, entity)) |sprite_asset| {
                 if (sprite_asset.document.frames.len > 1) {
                     const current_frame = sprite_asset.document.frames[entity.frame_index];
@@ -747,8 +750,9 @@ pub export fn draw(state_ptr: *anyopaque) void {
 }
 
 fn drawWorld(state: *State) void {
-    for (&state.entities) |*entity| {
-        if (entity.is_in_use and entity.hasFlag(.has_sprite) and entity.hasFlag(.has_transform) and !entity.hasFlag(.is_ui)) {
+    var iter: EntityIterator = .init(&state.entities, .Start);
+    while (iter.next()) |entity| {
+        if (entity.hasFlag(.has_sprite) and entity.hasFlag(.has_transform) and !entity.hasFlag(.is_ui)) {
             if (entity.getTexture(state)) |texture| {
                 drawTextureAt(state, texture, entity.position, entity.scale, entity.tint);
             }
@@ -757,8 +761,9 @@ fn drawWorld(state: *State) void {
 }
 
 fn drawGameUI(state: *State) void {
-    for (&state.entities) |*entity| {
-        if (entity.is_in_use and entity.hasFlag(.has_sprite) and entity.hasFlag(.has_transform) and entity.hasFlag(.is_ui)) {
+    var iter: EntityIterator = .init(&state.entities, .Start);
+    while (iter.next()) |entity| {
+        if (entity.hasFlag(.has_sprite) and entity.hasFlag(.has_transform) and entity.hasFlag(.is_ui)) {
             if (entity.getTexture(state)) |texture| {
                 const position: Vector2 = entity.getUIPosition(state);
                 drawTextureAt(state, texture, position, entity.scale, entity.tint);
@@ -864,8 +869,9 @@ fn resetBall(state: *State) void {
 }
 
 fn unloadLevel(state: *State) void {
-    for (&state.entities) |*entity| {
-        if (entity.is_in_use and entity.hasFlag(.has_block)) {
+    var iter: EntityIterator = .init(&state.entities, .Start);
+    while (iter.next()) |entity| {
+        if (entity.hasFlag(.has_block)) {
             state.removeEntity(entity);
         }
     }
@@ -916,8 +922,9 @@ fn nextLevel(state: *State) void {
 fn isLevelCompleted(state: *State) bool {
     var result = true;
 
-    for (&state.entities) |*entity| {
-        if (entity.is_in_use and entity.hasFlag(.has_block)) {
+    var iter: EntityIterator = .init(&state.entities, .Start);
+    while (iter.next()) |entity| {
+        if (entity.hasFlag(.has_block)) {
             if (entity.block_type == .Wall and entity.color != .Gray) {
                 result = false;
                 break;
@@ -959,7 +966,8 @@ fn addUISprite(state: *State, offset: Vector2, alignment: Vector2) !*Entity {
 
 fn addGameUI(state: *State) !void {
     // Remove existing UI.
-    for (&state.entities) |*entity| {
+    var iter: EntityIterator = .init(&state.entities, .Start);
+    while (iter.next()) |entity| {
         if (entity.hasFlag(.is_ui) and !entity.hasFlag(.has_title)) {
             state.removeEntity(entity);
         }

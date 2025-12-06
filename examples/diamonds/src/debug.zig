@@ -14,6 +14,7 @@ const AsepriteAsset = aseprite.AsepriteAsset;
 const Entity = entities.Entity;
 const EntityId = entities.EntityId;
 const EntityType = entities.EntityType;
+const EntityIterator = entities.EntityIterator;
 const Collision = entities.Collision;
 const ColliderComponent = entities.ColliderComponent;
 const ColorComponentValue = entities.ColorComponentValue;
@@ -271,31 +272,32 @@ fn getHoveredEntity(state: *State) ?EntityId {
     var result: ?EntityId = null;
     const mouse_position = state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale));
 
-    var title: ?EntityId = null;
+    var ui: ?EntityId = null;
     var collider: ?EntityId = null;
     var sprite: ?EntityId = null;
 
-    for (&state.entities) |*entity| {
-        if (title == null and entity.is_in_use and entity.hasFlag(.has_title) and entity.hasFlag(.has_sprite)) {
+    var iter: EntityIterator = .init(&state.entities, .End);
+    while (iter.prev()) |entity| {
+        if (ui == null and entity.hasFlag(.is_ui) and entity.hasFlag(.has_sprite)) {
             if (entityContainsPoint(state, mouse_position, entity)) |id| {
-                title = id;
+                ui = id;
                 break;
             }
         }
-        if (collider == null and entity.is_in_use and entity.hasFlag(.has_collider) and entity.hasFlag(.has_sprite)) {
+        if (collider == null and entity.hasFlag(.has_collider) and entity.hasFlag(.has_sprite)) {
             if (entity.colliderContainsPoint(mouse_position)) {
                 collider = entity.id;
             }
         }
-        if (sprite == null and entity.is_in_use and entity.hasFlag(.has_sprite)) {
+        if (sprite == null and entity.hasFlag(.has_sprite)) {
             if (entityContainsPoint(state, mouse_position, entity)) |id| {
                 sprite = id;
             }
         }
     }
 
-    if (title != null) {
-        result = title;
+    if (ui != null) {
+        result = ui;
     } else if (collider != null) {
         result = collider;
     } else if (sprite != null) {
@@ -529,8 +531,9 @@ pub fn drawDebugOverlay(state: *State) void {
     };
 
     if (state.debug_state.show_colliders) {
-        for (&state.entities) |*entity| {
-            if (entity.is_in_use and entity.hasFlag(.has_collider)) {
+        var iter: EntityIterator = .init(&state.entities, .Start);
+        while (iter.next()) |entity| {
+            if (entity.hasFlag(.has_collider)) {
                 drawDebugCollider(state.renderer, entity, Color{ 0, 255, 0, 255 }, scale, offset);
             }
         }
@@ -747,15 +750,17 @@ fn saveLevel(state: *State, name: []const u8) !void {
     var writer: *std.Io.Writer = &file_writer.interface;
 
     var walls_count: u32 = 0;
-    for (&state.entities) |*entity| {
-        if (entity.is_in_use and entity.hasFlag(.has_block) and entity.hasFlag(.has_transform)) {
+    var iter: EntityIterator = .init(&state.entities, .Start);
+    while (iter.next()) |entity| {
+        if (entity.hasFlag(.has_block) and entity.hasFlag(.has_transform)) {
             walls_count += 1;
         }
     }
     try writer.writeInt(u32, walls_count, .little);
 
-    for (&state.entities) |*entity| {
-        if (entity.is_in_use and entity.hasFlag(.has_block) and entity.hasFlag(.has_transform)) {
+    iter.reset();
+    while (iter.next()) |entity| {
+        if (entity.hasFlag(.has_block) and entity.hasFlag(.has_transform)) {
             try writer.writeInt(u32, @intFromEnum(entity.color), .little);
             try writer.writeInt(u32, @intFromEnum(entity.block_type), .little);
             try writer.writeInt(i32, @intFromFloat(@round(entity.position[X])), .little);

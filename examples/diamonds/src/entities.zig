@@ -5,6 +5,8 @@ const math = @import("math");
 const aseprite = @import("aseprite");
 const pool = @import("pool");
 
+pub const MAX_ENTITY_COUNT = 1024;
+
 const State = @import("root.zig").State;
 const Color = math.Color;
 const Vector2 = math.Vector2;
@@ -51,6 +53,66 @@ pub const UIElement = enum(u8) {
     life2,
     life3,
 };
+
+const EntityIteratorBeginAt = enum {
+    Start,
+    End,
+};
+
+pub const EntityIterator = struct {
+    entities: *EntityArray,
+    begin_at: EntityIteratorBeginAt,
+    index: usize = 0,
+
+    pub fn init(entities: *EntityArray, begin_at: EntityIteratorBeginAt) EntityIterator {
+        var self: EntityIterator = .{
+            .entities = entities,
+            .begin_at = begin_at,
+        };
+
+        self.reset();
+
+        return self;
+    }
+
+    pub fn next(self: *EntityIterator) ?*Entity {
+        var result: ?*Entity = null;
+
+        while (self.index < self.entities.len) : (self.index += 1) {
+            if (self.entities[self.index].is_in_use) {
+                result = &self.entities[self.index];
+                self.index += 1;
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    pub fn prev(self: *EntityIterator) ?*Entity {
+        var result: ?*Entity = null;
+
+        while (self.index > 0) {
+            self.index -= 1;
+
+            if (self.entities[self.index].is_in_use) {
+                result = &self.entities[self.index];
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    pub fn reset(self: *EntityIterator) void {
+        switch (self.begin_at) {
+            .Start => self.index = 0,
+            .End => self.index = self.entities.len,
+        }
+    }
+};
+
+pub const EntityArray = [MAX_ENTITY_COUNT]Entity;
 
 pub const Entity = struct {
     id: EntityId = .{},
@@ -299,8 +361,9 @@ pub const Entity = struct {
     pub fn checkForCollisions(state: *State, delta_time: f32) CollisionResult {
         var result: CollisionResult = .{};
 
-        for (&state.entities) |*entity| {
-            if (entity.is_in_use and entity.hasFlag(.has_collider) and entity.hasFlag(.has_transform)) {
+        var iter: EntityIterator = .init(&state.entities, .Start);
+        while (iter.next()) |entity| {
+            if (entity.hasFlag(.has_collider) and entity.hasFlag(.has_transform)) {
                 // Check in the Y direction.
                 if (entity.velocity[Y] != 0) {
                     var next_entity = entity.*;
@@ -327,8 +390,9 @@ pub const Entity = struct {
     fn collidesWithAnyAt(self: *Entity, state: *State, at: Entity) ?*Entity {
         var result: ?*Entity = null;
 
-        for (&state.entities) |*entity| {
-            if (entity.is_in_use and entity.hasFlag(.has_collider)) {
+        var iter: EntityIterator = .init(&state.entities, .Start);
+        while (iter.next()) |entity| {
+            if (entity.hasFlag(.has_collider)) {
                 if (self != entity and self.collidesWithAt(entity, at)) {
                     result = entity;
                     break;
