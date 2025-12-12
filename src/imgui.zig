@@ -46,7 +46,6 @@ pub fn init(window: *sdl.SDL_Window, renderer: *sdl.SDL_Renderer, width: f32, he
     c.ImGui_SetCurrentContext(im_context);
     {
         var im_io: *c.ImGuiIO = @ptrCast(c.ImGui_GetIO());
-        im_io.IniFilename = null;
         im_io.ConfigFlags =
             c.ImGuiConfigFlags_NavEnableKeyboard |
             c.ImGuiConfigFlags_NavEnableGamepad |
@@ -66,7 +65,6 @@ pub fn initGPU(window: *sdl.SDL_Window, device: *sdl.SDL_GPUDevice, width: f32, 
     c.ImGui_SetCurrentContext(im_context);
     {
         var im_io: *c.ImGuiIO = @ptrCast(c.ImGui_GetIO());
-        im_io.IniFilename = null;
         im_io.ConfigFlags =
             c.ImGuiConfigFlags_NavEnableKeyboard |
             c.ImGuiConfigFlags_NavEnableGamepad |

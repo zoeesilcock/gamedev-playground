@@ -382,7 +382,7 @@ pub fn drawDebugUI(state: *State) void {
         const button_size: imgui.c.ImVec2 = imgui.c.ImVec2{ .x = 140, .y = 20 };
         const half_button_size: imgui.c.ImVec2 = imgui.c.ImVec2{ .x = 65, .y = 20 };
 
-        imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 160, .y = 200 }, 0);
+        imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 160, .y = 200 }, imgui.c.ImGuiCond_FirstUseEver);
 
         _ = imgui.c.ImGui_Begin(
             "Editor",
