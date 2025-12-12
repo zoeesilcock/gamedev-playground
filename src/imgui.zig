@@ -29,6 +29,8 @@ const ImGui_ImplSDLGPU3_InitInfo = struct {
     Device: ?*sdl.SDL_GPUDevice = null,
     ColorTargetFormat: sdl.SDL_GPUTextureFormat = sdl.SDL_GPU_TEXTUREFORMAT_INVALID,
     MSAASamples: sdl.SDL_GPUSampleCount = sdl.SDL_GPU_SAMPLECOUNT_1,
+    SwapchainComposition: sdl.SDL_GPUSwapchainComposition = sdl.SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+    PresentMode: sdl.SDL_GPUPresentMode = sdl.SDL_GPU_PRESENTMODE_VSYNC,
 };
 pub extern fn ImGui_ImplSDLGPU3_Init(info: ?*ImGui_ImplSDLGPU3_InitInfo) bool;
 pub extern fn ImGui_ImplSDLGPU3_Shutdown() void;
@@ -72,7 +74,6 @@ pub fn initGPU(window: *sdl.SDL_Window, device: *sdl.SDL_GPUDevice, width: f32, 
     var init_info: ImGui_ImplSDLGPU3_InitInfo = .{
         .Device = device,
         .ColorTargetFormat = sdl.SDL_GetGPUSwapchainTextureFormat(device, window),
-        .MSAASamples = sdl.SDL_GPU_SAMPLECOUNT_1,
     };
     _ = ImGui_ImplSDL3_InitForSDLGPU(window);
     _ = ImGui_ImplSDLGPU3_Init(&init_info);
