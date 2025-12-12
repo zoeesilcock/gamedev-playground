@@ -45,9 +45,12 @@ pub fn init(window: *sdl.SDL_Window, renderer: *sdl.SDL_Renderer, width: f32, he
     im_context = c.ImGui_CreateContext(null);
     c.ImGui_SetCurrentContext(im_context);
     {
-        var im_io = c.ImGui_GetIO()[0];
+        var im_io: *c.ImGuiIO = @ptrCast(c.ImGui_GetIO());
         im_io.IniFilename = null;
-        im_io.ConfigFlags = c.ImGuiConfigFlags_NavEnableKeyboard | c.ImGuiConfigFlags_NavEnableGamepad;
+        im_io.ConfigFlags =
+            c.ImGuiConfigFlags_NavEnableKeyboard |
+            c.ImGuiConfigFlags_NavEnableGamepad |
+            c.ImGuiConfigFlags_DockingEnable;
         im_io.DisplaySize.x = width;
         im_io.DisplaySize.y = height;
     }
@@ -62,9 +65,12 @@ pub fn initGPU(window: *sdl.SDL_Window, device: *sdl.SDL_GPUDevice, width: f32, 
     im_context = c.ImGui_CreateContext(null);
     c.ImGui_SetCurrentContext(im_context);
     {
-        var im_io = c.ImGui_GetIO()[0];
+        var im_io: *c.ImGuiIO = @ptrCast(c.ImGui_GetIO());
         im_io.IniFilename = null;
-        im_io.ConfigFlags = c.ImGuiConfigFlags_NavEnableKeyboard | c.ImGuiConfigFlags_NavEnableGamepad;
+        im_io.ConfigFlags =
+            c.ImGuiConfigFlags_NavEnableKeyboard |
+            c.ImGuiConfigFlags_NavEnableGamepad |
+            c.ImGuiConfigFlags_DockingEnable;
         im_io.DisplaySize.x = width;
         im_io.DisplaySize.y = height;
     }
@@ -112,6 +118,8 @@ pub fn newFrame() void {
     }
     ImGui_ImplSDL3_NewFrame();
     c.ImGui_NewFrame();
+
+    _ = c.ImGui_DockSpaceOverViewportEx(0, c.ImGui_GetMainViewport(), c.ImGuiDockNodeFlags_PassthruCentralNode, null);
 }
 
 pub fn render(renderer: *sdl.SDL_Renderer) void {
