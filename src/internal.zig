@@ -181,29 +181,28 @@ pub fn inputStruct(
     expand_sections: bool,
     optHandleCustomTypes: handleCustomTypesFn,
 ) void {
-    switch (@TypeOf(field_ptr.*)) {
-        bool => {
-            inputBool(struct_field.name, field_ptr);
-        },
-        f32 => {
-            inputF32(struct_field.name, field_ptr);
-        },
-        u32 => {
-            inputU32(struct_field.name, field_ptr);
-        },
-        i32 => {
-            inputI32(struct_field.name, field_ptr);
-        },
-        u64 => {
-            inputU64(struct_field.name, field_ptr);
-        },
-        else => {
-            var handled: bool = false;
-            if (optHandleCustomTypes) |handleCustomTypes| {
-                handled = handleCustomTypes(struct_field, field_ptr);
-            }
-
-            if (!handled) {
+    var handled: bool = false;
+    if (optHandleCustomTypes) |handleCustomTypes| {
+        handled = handleCustomTypes(struct_field, field_ptr);
+    }
+    if (!handled) {
+        switch (@TypeOf(field_ptr.*)) {
+            bool => {
+                inputBool(struct_field.name, field_ptr);
+            },
+            f32 => {
+                inputF32(struct_field.name, field_ptr);
+            },
+            u32 => {
+                inputU32(struct_field.name, field_ptr);
+            },
+            i32 => {
+                inputI32(struct_field.name, field_ptr);
+            },
+            u64 => {
+                inputU64(struct_field.name, field_ptr);
+            },
+            else => {
                 const field_info = @typeInfo(@TypeOf(field_ptr.*));
                 switch (field_info) {
                     .optional => |o| {
@@ -271,8 +270,8 @@ pub fn inputStruct(
                     },
                     else => {},
                 }
-            }
-        },
+            },
+        }
     }
 }
 
