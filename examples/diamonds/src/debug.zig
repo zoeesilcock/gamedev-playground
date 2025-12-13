@@ -11,6 +11,8 @@ const State = game.State;
 const Assets = game.Assets;
 const AsepriteAsset = aseprite.AsepriteAsset;
 const Entity = entities.Entity;
+const EntityFlags = entities.EntityFlags;
+const EntityFlagsType = entities.EntityFlagsType;
 const EntityId = entities.EntityId;
 const EntityIterator = entities.EntityIterator;
 const Collision = entities.Collision;
@@ -442,7 +444,7 @@ pub fn drawDebugUI(state: *State) void {
         _ = imgui.c.ImGui_Begin("Inspector", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
         defer imgui.c.ImGui_End();
 
-        internal.inspectStruct(selected_entity, &.{ "entity", "is_in_use" }, true, &inputCustomTypes);
+        internal.inspectStruct(selected_entity, &.{"is_in_use"}, true, &inputCustomTypes);
     }
 
     if (state.debug_state.show_state_inspector) {
@@ -499,6 +501,14 @@ fn inputCustomTypes(
                 .{ entity_id.index, entity_id.generation },
             ) catch "";
             imgui.c.ImGui_LabelText("EntityId", id);
+        },
+        EntityFlagsType => {
+            if (std.mem.eql(u8, struct_field.name, "flags")) {
+                internal.inputFlagsU32(struct_field.name, field_ptr, EntityFlags);
+                handled = true;
+            } else {
+                handled = false;
+            }
         },
         else => handled = false,
     }

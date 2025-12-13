@@ -355,6 +355,21 @@ pub fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
     }
 }
 
+pub fn inputFlagsU32(heading: ?[*:0]const u8, value: *u32, FlagsEnumType: type) void {
+    if (imgui.c.ImGui_CollapsingHeaderBoolPtr(heading, null, imgui.c.ImGuiTreeNodeFlags_None)) {
+        inline for (@typeInfo(FlagsEnumType).@"enum".fields) |flag| {
+            var bool_value: bool = (value.* & flag.value) != 0;
+
+            c_imgui.ImGui_PushIDPtr(&bool_value);
+            defer c_imgui.ImGui_PopID();
+
+            if (c_imgui.ImGui_Checkbox(flag.name, &bool_value)) {
+                value.* ^= flag.value;
+            }
+        }
+    }
+}
+
 pub fn displayConst(
     struct_field: std.builtin.Type.StructField,
     field_ptr: anytype,

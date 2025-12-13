@@ -25,6 +25,7 @@ pub const EntityId = struct {
     }
 };
 
+pub const EntityFlagsType = u32;
 pub const EntityFlags = enum(u16) {
     player_controlled = (1 << 0),
     has_transform = (1 << 1),
@@ -108,7 +109,7 @@ pub const EntityArray = [MAX_ENTITY_COUNT]Entity;
 pub const Entity = struct {
     id: EntityId = .{},
     is_in_use: bool = false,
-    flags: u32 = 0,
+    flags: EntityFlagsType = 0,
 
     // Transform.
     position: Vector2 = .{ 0, 0 },
