@@ -12,7 +12,7 @@ const debug = if (INTERNAL) @import("debug.zig") else struct {
 
 const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
 pub const std_options: std.Options = .{
-    .log_level = if (INTERNAL) .debug else .err,
+    .log_level = if (INTERNAL) .warn else .err,
 };
 
 const Entity = entities.Entity;
@@ -48,6 +48,8 @@ const DebugAllocator = std.heap.DebugAllocator(.{
 const INTERNAL: bool = @import("build_options").internal;
 const LOG_ALLOCATIONS: bool = @import("build_options").log_allocations;
 const MAX_ENTITY_COUNT = entities.MAX_ENTITY_COUNT;
+const WINDOW_WIDTH = 800;
+const WINDOW_HEIGHT = 600;
 const WORLD_WIDTH: u32 = 200;
 const WORLD_HEIGHT: u32 = 150;
 const BALL_VELOCITY: f32 = 64;
@@ -343,6 +345,10 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         state.debug_state = state.debug_allocator.allocator().create(debug.DebugState) catch @panic("Out of memory");
         state.debug_state.init() catch @panic("Failed to init DebugState");
 
+        if (state.debug_state.show_sidebar) {
+            debug.updateSidebarVisibility(state);
+        }
+
         state.fps_state =
             state.debug_allocator.allocator().create(FPSState) catch @panic("Failed to allocate FPS state");
         state.fps_state.?.init(sdl.SDL_GetPerformanceFrequency());
@@ -394,8 +400,15 @@ pub fn setupRenderTexture(state: *State) void {
     _ = sdl.SDL_GetWindowSize(state.window, @ptrCast(&state.window_width), @ptrCast(&state.window_height));
     state.world_scale = @as(f32, @floatFromInt(state.window_height)) / @as(f32, @floatFromInt(state.world_height));
 
-    const horizontal_offset: f32 =
-        (@as(f32, @floatFromInt(state.window_width)) - (@as(f32, @floatFromInt(state.world_width)) * state.world_scale)) / 2;
+    var horizontal_offset: f32 =
+        (@as(f32, @floatFromInt(state.window_width)) -
+            (@as(f32, @floatFromInt(state.world_width)) * state.world_scale)) / 2;
+
+    if (INTERNAL) {
+        // Align the game to the right in internal mode so we have space for editor windows on the left.
+        horizontal_offset *= 2;
+    }
+
     state.dest_rect = sdl.SDL_FRect{
         .x = horizontal_offset,
         .y = 0,
@@ -694,7 +707,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
         if (!INTERNAL) {
             state.showTitleForDuration(.CLEARED, 2000) catch @panic("Failed to show Cleared title");
         } else {
-            if (!state.debug_state.show_editor and !state.debug_state.testing_level) {
+            if (!state.debug_state.testing_level) {
                 state.showTitleForDuration(.CLEARED, 2000) catch @panic("Failed to show Cleared title");
             } else if (state.debug_state.testing_level) {
                 loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;

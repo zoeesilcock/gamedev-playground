@@ -37,6 +37,7 @@ const MAX_FRAME_TIME_COUNT: u32 = 300;
 const MAX_MEMORY_USAGE_COUNT: u32 = 1000;
 const MEMORY_USAGE_RECORD_INTERVAL: u64 = 16;
 const LEVEL_NAME_BUFFER_SIZE = game.LEVEL_NAME_BUFFER_SIZE;
+const WINDOW_WIDTH_ADDITIONAL = 300;
 
 pub const DebugState = struct {
     input: DebugInput,
@@ -44,15 +45,13 @@ pub const DebugState = struct {
         Select,
         Edit,
     },
-    show_editor: bool,
+    show_sidebar: bool,
     testing_level: bool,
     current_level_name: [LEVEL_NAME_BUFFER_SIZE:0]u8,
     current_block_color: ColorComponentValue,
     current_block_type: BlockType,
     hovered_entity_id: ?EntityId,
     selected_entity_id: ?EntityId,
-
-    show_state_inspector: bool,
 
     show_colliders: bool,
     collisions: std.ArrayList(DebugCollision),
@@ -67,15 +66,13 @@ pub const DebugState = struct {
             .input = DebugInput{},
 
             .mode = .Select,
-            .show_editor = false,
+            .show_sidebar = true,
             .testing_level = false,
             .current_level_name = undefined,
             .current_block_color = .Red,
             .current_block_type = .Wall,
             .hovered_entity_id = null,
             .selected_entity_id = null,
-
-            .show_state_inspector = false,
 
             .show_colliders = false,
             .collisions = .empty,
@@ -149,17 +146,12 @@ pub fn processInputEvent(state: *State, event: sdl.SDL_Event) void {
             sdl.SDLK_C => {
                 state.debug_state.show_colliders = !state.debug_state.show_colliders;
             },
-            sdl.SDLK_G => {
-                state.debug_state.show_state_inspector = !state.debug_state.show_state_inspector;
+            sdl.SDLK_TAB => {
+                state.debug_state.show_sidebar = !state.debug_state.show_sidebar;
+                updateSidebarVisibility(state);
             },
             sdl.SDLK_E => {
-                state.debug_state.show_editor = !state.debug_state.show_editor;
-                state.debug_state.mode = if (state.debug_state.show_editor) .Edit else .Select;
-
-                if (state.debug_state.show_editor) {
-                    state.debug_state.testing_level = false;
-                    state.paused = true;
-                }
+                state.debug_state.mode = if (state.debug_state.mode == .Select) .Edit else .Select;
             },
             sdl.SDLK_S => {
                 saveLevel(state, state.debug_state.currentLevelName()) catch unreachable;
@@ -183,6 +175,31 @@ pub fn processInputEvent(state: *State, event: sdl.SDL_Event) void {
                 input.left_mouse_down = is_down;
             },
             else => {},
+        }
+    }
+}
+
+pub fn updateSidebarVisibility(state: *State) void {
+    var current_x: c_int = 0;
+    var current_y: c_int = 0;
+    var current_width: c_int = 0;
+    var current_height: c_int = 0;
+
+    if (sdl.SDL_GetWindowPosition(state.window, &current_x, &current_y)) {
+        if (sdl.SDL_GetWindowSize(state.window, &current_width, &current_height)) {
+            var new_x = current_x;
+            var new_width = current_width;
+
+            if (state.debug_state.show_sidebar) {
+                new_x -= WINDOW_WIDTH_ADDITIONAL;
+                new_width += WINDOW_WIDTH_ADDITIONAL;
+            } else {
+                new_x += WINDOW_WIDTH_ADDITIONAL;
+                new_width -= WINDOW_WIDTH_ADDITIONAL;
+            }
+
+            _ = sdl.SDL_SetWindowPosition(state.window, current_x - WINDOW_WIDTH_ADDITIONAL, current_y);
+            _ = sdl.SDL_SetWindowSize(state.window, current_width + WINDOW_WIDTH_ADDITIONAL, current_height);
         }
     }
 }
@@ -337,7 +354,7 @@ pub fn drawDebugUI(state: *State) void {
 
     state.fps_state.?.draw();
 
-    if (state.debug_state.memory_usage_display) {
+    if (state.debug_state.show_sidebar) {
         _ = imgui.c.ImGui_Begin(
             "MemoryUsage",
             null,
@@ -378,9 +395,7 @@ pub fn drawDebugUI(state: *State) void {
         );
 
         imgui.c.ImGui_End();
-    }
 
-    if (state.debug_state.show_editor) {
         const button_size: imgui.c.ImVec2 = imgui.c.ImVec2{ .x = 140, .y = 20 };
         const half_button_size: imgui.c.ImVec2 = imgui.c.ImVec2{ .x = 65, .y = 20 };
 
@@ -412,7 +427,6 @@ pub fn drawDebugUI(state: *State) void {
         }
 
         if (imgui.c.ImGui_ButtonEx("Test level", button_size)) {
-            state.debug_state.show_editor = false;
             state.debug_state.testing_level = true;
             state.paused = false;
 
@@ -431,9 +445,7 @@ pub fn drawDebugUI(state: *State) void {
         internal.inputEnum("Color", &state.debug_state.current_block_color);
 
         imgui.c.ImGui_End();
-    }
 
-    if (state.getEntity(state.debug_state.selected_entity_id)) |selected_entity| {
         imgui.c.ImGui_SetNextWindowPosEx(
             imgui.c.ImVec2{ .x = 30, .y = 30 },
             imgui.c.ImGuiCond_FirstUseEver,
@@ -444,10 +456,8 @@ pub fn drawDebugUI(state: *State) void {
         _ = imgui.c.ImGui_Begin("Inspector", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
         defer imgui.c.ImGui_End();
 
-        internal.inspectStruct(selected_entity, &.{"is_in_use"}, true, &inputCustomTypes);
-    }
+        internal.inspectStructOptional(state.getEntity(state.debug_state.selected_entity_id), &.{"is_in_use"}, true, &inputCustomTypes);
 
-    if (state.debug_state.show_state_inspector) {
         imgui.c.ImGui_SetNextWindowPosEx(
             imgui.c.ImVec2{ .x = 350, .y = 30 },
             imgui.c.ImGuiCond_FirstUseEver,

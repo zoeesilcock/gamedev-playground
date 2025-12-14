@@ -22,8 +22,8 @@ Double clicking on an entity will open it's sprite in Aseprite. This works parti
 * C: Toggle collider outlines.
 * F1: Cycle between FPS display modes (none, number, or number and graph).
 * F2: Toggle the memory usage graph.
-* G: Toggle game state inspector.
-* E: Toggle level editor.
+* Tab: Toggles the sidebar with editor windows.
+* E: Toggle level editor mode.
 * S: Save level.
 * L: Load level.
 * Alt/Option + click: Grabs the color and/or type of the clicked element like an eye dropper tool.

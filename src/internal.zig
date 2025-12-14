@@ -122,6 +122,24 @@ const handleCustomTypesFn = ?*const fn (
     field_ptr: anytype,
 ) bool;
 
+pub fn inspectStructOptional(
+    struct_ptr: anytype,
+    ignored_fields: []const []const u8,
+    expand_sections: bool,
+    optHandleCustomTypes: handleCustomTypesFn,
+) void {
+    switch (@typeInfo(@TypeOf(struct_ptr))) {
+        .optional => {
+            if (struct_ptr) |ptr| {
+                inspectStruct(ptr, ignored_fields, expand_sections, optHandleCustomTypes);
+            }
+        },
+        else => {
+            inspectStruct(struct_ptr, ignored_fields, expand_sections, optHandleCustomTypes);
+        },
+    }
+}
+
 pub fn inspectStruct(
     struct_ptr: anytype,
     ignored_fields: []const []const u8,
