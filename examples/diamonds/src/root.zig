@@ -48,8 +48,8 @@ const DebugAllocator = std.heap.DebugAllocator(.{
 const INTERNAL: bool = @import("build_options").internal;
 const LOG_ALLOCATIONS: bool = @import("build_options").log_allocations;
 const MAX_ENTITY_COUNT = entities.MAX_ENTITY_COUNT;
-const WINDOW_WIDTH = 800;
-const WINDOW_HEIGHT = 600;
+pub const WINDOW_WIDTH = 800;
+pub const WINDOW_HEIGHT = 600;
 const WORLD_WIDTH: u32 = 200;
 const WORLD_HEIGHT: u32 = 150;
 const BALL_VELOCITY: f32 = 64;
@@ -345,19 +345,19 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         .current_title_id = null,
     };
 
+    _ = sdl.SDL_SetWindowSize(state.window, WINDOW_WIDTH, WINDOW_HEIGHT);
+
     if (INTERNAL) {
         state.debug_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize debug allocator."));
         state.debug_allocator.* = .init;
         state.debug_state = state.debug_allocator.allocator().create(debug.DebugState) catch @panic("Out of memory");
         state.debug_state.init() catch @panic("Failed to init DebugState");
 
-        if (state.debug_state.show_sidebar) {
-            debug.updateSidebarVisibility(state);
-        }
-
         state.fps_state =
             state.debug_allocator.allocator().create(FPSState) catch @panic("Failed to allocate FPS state");
         state.fps_state.?.init(sdl.SDL_GetPerformanceFrequency());
+
+        debug.updateWindowSize(state);
     }
 
     loadAssets(state);
@@ -396,6 +396,7 @@ pub export fn deinit(state_ptr: *anyopaque) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     if (INTERNAL) {
+        debug.resetWindowPosition(state);
         imgui.deinit();
     }
 

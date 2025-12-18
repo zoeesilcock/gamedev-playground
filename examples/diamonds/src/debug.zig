@@ -37,6 +37,8 @@ const MAX_FRAME_TIME_COUNT: u32 = 300;
 const MAX_MEMORY_USAGE_COUNT: u32 = 1000;
 const MEMORY_USAGE_RECORD_INTERVAL: u64 = 16;
 const LEVEL_NAME_BUFFER_SIZE = game.LEVEL_NAME_BUFFER_SIZE;
+const WINDOW_WIDTH = game.WINDOW_WIDTH;
+const WINDOW_HEIGHT = game.WINDOW_HEIGHT;
 const WINDOW_WIDTH_ADDITIONAL = 300;
 
 pub const DebugState = struct {
@@ -148,7 +150,9 @@ pub fn processInputEvent(state: *State, event: sdl.SDL_Event) void {
             },
             sdl.SDLK_TAB => {
                 state.debug_state.show_sidebar = !state.debug_state.show_sidebar;
-                updateSidebarVisibility(state);
+                if (!state.fullscreen) {
+                    updateWindowSize(state);
+                }
             },
             sdl.SDLK_E => {
                 state.debug_state.mode = if (state.debug_state.mode == .Select) .Edit else .Select;
@@ -179,27 +183,41 @@ pub fn processInputEvent(state: *State, event: sdl.SDL_Event) void {
     }
 }
 
-pub fn updateSidebarVisibility(state: *State) void {
-    var current_x: c_int = 0;
-    var current_y: c_int = 0;
-    var current_width: c_int = 0;
-    var current_height: c_int = 0;
+pub fn updateWindowSize(state: *State) void {
+    var x: c_int = 0;
+    var y: c_int = 0;
+    var width: c_int = 0;
+    var height: c_int = 0;
+    const show_sidebar: bool = state.debug_state.show_sidebar;
 
-    if (sdl.SDL_GetWindowPosition(state.window, &current_x, &current_y)) {
-        if (sdl.SDL_GetWindowSize(state.window, &current_width, &current_height)) {
-            var new_x = current_x;
-            var new_width = current_width;
+    if (sdl.SDL_GetWindowPosition(state.window, &x, &y)) {
+        if (sdl.SDL_GetWindowSize(state.window, &width, &height)) {
+            var needs_change: bool = false;
 
-            if (state.debug_state.show_sidebar) {
-                new_x -= WINDOW_WIDTH_ADDITIONAL;
-                new_width += WINDOW_WIDTH_ADDITIONAL;
-            } else {
-                new_x += WINDOW_WIDTH_ADDITIONAL;
-                new_width -= WINDOW_WIDTH_ADDITIONAL;
+            if (show_sidebar and width == WINDOW_WIDTH) {
+                needs_change = true;
+                x -= WINDOW_WIDTH_ADDITIONAL;
+                width += WINDOW_WIDTH_ADDITIONAL;
+            } else if (!show_sidebar and width > WINDOW_WIDTH) {
+                needs_change = true;
+                x += WINDOW_WIDTH_ADDITIONAL;
+                width -= WINDOW_WIDTH_ADDITIONAL;
             }
 
-            _ = sdl.SDL_SetWindowPosition(state.window, current_x - WINDOW_WIDTH_ADDITIONAL, current_y);
-            _ = sdl.SDL_SetWindowSize(state.window, current_width + WINDOW_WIDTH_ADDITIONAL, current_height);
+            if (needs_change) {
+                _ = sdl.SDL_SetWindowPosition(state.window, x, y);
+                _ = sdl.SDL_SetWindowSize(state.window, width, height);
+            }
+        }
+    }
+}
+
+pub fn resetWindowPosition(state: *State) void {
+    if (state.debug_state.show_sidebar) {
+        var x: c_int = 0;
+        var y: c_int = 0;
+        if (sdl.SDL_GetWindowPosition(state.window, &x, &y)) {
+            _ = sdl.SDL_SetWindowPosition(state.window, x + WINDOW_WIDTH_ADDITIONAL, y);
         }
     }
 }
