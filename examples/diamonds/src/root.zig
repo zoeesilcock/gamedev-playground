@@ -188,6 +188,8 @@ const Input = struct {
 };
 
 pub const Assets = struct {
+    missing_sprite: ?AsepriteAsset = null,
+
     life_filled: ?AsepriteAsset = null,
     life_outlined: ?AsepriteAsset = null,
     life_backdrop: ?AsepriteAsset = null,
@@ -225,7 +227,7 @@ pub const Assets = struct {
                 .life1 => self.getLifeSprite(state, 0),
                 .life2 => self.getLifeSprite(state, 1),
                 .life3 => self.getLifeSprite(state, 2),
-                else => unreachable,
+                else => null,
             };
         } else if (entity.hasFlag(.has_title)) {
             result = switch (entity.title_type) {
@@ -234,55 +236,59 @@ pub const Assets = struct {
                 .CLEARED => &self.title_cleared.?,
                 .DEATH => &self.title_death.?,
                 .GAME_OVER => &self.title_game_over.?,
-                .NONE => unreachable,
+                .NONE => null,
             };
         } else if (entity.hasFlag(.has_block)) {
             result = self.getWall(entity.color, entity.block_type);
         } else if (entity.hasFlag(.is_background)) {
             result = &self.background.?;
-        } else {
-            unreachable;
+        }
+
+        if (result == null) {
+            if (INTERNAL) {
+                result = &self.missing_sprite.?;
+            } else {
+                unreachable;
+            }
         }
 
         return result;
     }
 
     pub fn getWall(self: *Assets, color: ColorComponentValue, block_type: BlockType) *AsepriteAsset {
-        switch (block_type) {
+        return switch (block_type) {
             .Wall => {
                 return switch (color) {
                     .Red => &self.block_red.?,
                     .Blue => &self.block_blue.?,
                     .Gray => &self.block_gray.?,
-                    .None => unreachable,
+                    .None => &self.missing_sprite.?,
                 };
             },
             .ColorChange => {
                 return switch (color) {
                     .Red => &self.block_change_red.?,
                     .Blue => &self.block_change_blue.?,
-                    .Gray => unreachable,
-                    .None => unreachable,
+                    .Gray => &self.missing_sprite.?,
+                    .None => &self.missing_sprite.?,
                 };
             },
             .Deadly => {
                 return switch (color) {
                     .Gray => &self.block_deadly.?,
-                    else => unreachable,
+                    else => &self.missing_sprite.?,
                 };
             },
-            .None => unreachable,
-        }
-
-        unreachable;
+            .None => &self.missing_sprite.?,
+        };
     }
 
     pub fn getBall(self: *Assets, color: ColorComponentValue) *AsepriteAsset {
         return switch (color) {
             .Red => &self.ball_red.?,
             .Blue => &self.ball_blue.?,
-            .Gray => unreachable,
-            .None => unreachable,
+            .Gray => &self.missing_sprite.?,
+            .None => &self.missing_sprite.?,
         };
     }
 };
@@ -799,6 +805,8 @@ fn drawTextureAt(state: *State, texture: *sdl.SDL_Texture, position: Vector2, sc
 }
 
 fn loadAssets(state: *State) void {
+    state.assets.missing_sprite = .load("assets/missing_sprite.aseprite", state.renderer, state.allocator);
+
     state.assets.life_filled = .load("assets/life_filled.aseprite", state.renderer, state.allocator);
     state.assets.life_outlined = .load("assets/life_outlined.aseprite", state.renderer, state.allocator);
     state.assets.life_backdrop = .load("assets/life_backdrop.aseprite", state.renderer, state.allocator);
