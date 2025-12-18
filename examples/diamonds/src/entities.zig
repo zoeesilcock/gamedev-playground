@@ -233,7 +233,7 @@ pub const Entity = struct {
             .Circle => {
                 return self.collider_offset[Y] + self.collider_radius * 2;
             },
-            .None => unreachable,
+            .None => return 0,
         }
     }
 
@@ -249,7 +249,7 @@ pub const Entity = struct {
             .Circle => {
                 return self.collider_offset[X] + self.collider_radius * 2;
             },
-            .None => unreachable,
+            .None => return 0,
         }
     }
 
@@ -328,7 +328,7 @@ pub const Entity = struct {
                     transform.position[Y] + self.collider_offset[Y] + self.collider_radius,
                 };
             },
-            .None => unreachable,
+            .None => return .{ 0, 0 },
         }
     }
 
@@ -346,7 +346,7 @@ pub const Entity = struct {
                     self.position[Y] + self.collider_offset[Y] + self.collider_radius,
                 };
             },
-            .None => unreachable,
+            .None => return .{ 0, 0 },
         }
     }
 
