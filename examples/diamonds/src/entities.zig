@@ -314,18 +314,18 @@ pub const Entity = struct {
         return result;
     }
 
-    pub fn colliderCenter(self: *const Entity, transform: *const Entity) Vector2 {
+    pub fn colliderCenter(self: *const Entity, position: Vector2) Vector2 {
         switch (self.collider_shape) {
             .Square => {
                 return Vector2{
-                    transform.position[X] + self.collider_offset[X] + self.collider_size[X] * 0.5,
-                    transform.position[Y] + self.collider_offset[Y] + self.collider_size[Y] * 0.5,
+                    position[X] + self.collider_offset[X] + self.collider_size[X] * 0.5,
+                    position[Y] + self.collider_offset[Y] + self.collider_size[Y] * 0.5,
                 };
             },
             .Circle => {
                 return Vector2{
-                    transform.position[X] + self.collider_offset[X] + self.collider_radius,
-                    transform.position[Y] + self.collider_offset[Y] + self.collider_radius,
+                    position[X] + self.collider_offset[X] + self.collider_radius,
+                    position[Y] + self.collider_offset[Y] + self.collider_radius,
                 };
             },
             .None => return .{ 0, 0 },
@@ -358,18 +358,18 @@ pub const Entity = struct {
             if (entity.hasFlag(.has_collider) and entity.hasFlag(.has_transform)) {
                 // Check in the Y direction.
                 if (entity.velocity[Y] != 0) {
-                    var next_entity = entity.*;
-                    next_entity.position[Y] += next_entity.velocity[Y] * delta_time;
-                    if (entity.collidesWithAnyAt(state, next_entity)) |other_entity| {
+                    var next_position = entity.position;
+                    next_position[Y] += entity.velocity[Y] * delta_time;
+                    if (entity.collidesWithAnyAt(state, next_position)) |other_entity| {
                         result.vertical = .{ .id = entity.id, .other_id = other_entity.id };
                     }
                 }
 
                 // Check in the X direction.
                 if (entity.velocity[X] != 0) {
-                    var next_entity = entity.*;
-                    next_entity.position[X] += next_entity.velocity[X] * delta_time;
-                    if (entity.collidesWithAnyAt(state, next_entity)) |other_entity| {
+                    var next_position = entity.position;
+                    next_position[X] += entity.velocity[X] * delta_time;
+                    if (entity.collidesWithAnyAt(state, next_position)) |other_entity| {
                         result.horizontal = .{ .id = entity.id, .other_id = other_entity.id };
                     }
                 }
@@ -379,7 +379,7 @@ pub const Entity = struct {
         return result;
     }
 
-    fn collidesWithAnyAt(self: *Entity, state: *State, at: Entity) ?*Entity {
+    fn collidesWithAnyAt(self: *Entity, state: *State, at: Vector2) ?*Entity {
         var result: ?*Entity = null;
 
         var iter: EntityIterator = .init(&state.entities, .Start);
@@ -395,21 +395,21 @@ pub const Entity = struct {
         return result;
     }
 
-    pub fn collidesWithAt(self: *Entity, other: *Entity, at: Entity) bool {
+    pub fn collidesWithAt(self: *Entity, other: *Entity, at: Vector2) bool {
         var collides = false;
 
         if (self.collider_shape == other.collider_shape) {
             switch (self.collider_shape) {
                 .Circle => unreachable,
                 .Square => {
-                    if (((at.position[X] + self.colliderLeft() >= other.position[X] + other.colliderLeft() and
-                        at.position[X] + self.colliderLeft() <= other.position[X] + other.colliderRight()) or
-                        (at.position[X] + self.colliderRight() >= other.position[X] + other.colliderLeft() and
-                            at.position[X] + self.colliderRight() <= other.position[X] + other.colliderRight())) and
-                        ((at.position[Y] + self.colliderBottom() >= other.position[Y] + other.colliderTop() and
-                            at.position[Y] + self.colliderBottom() <= other.position[Y] + other.colliderBottom()) or
-                            (at.position[Y] + self.colliderTop() <= other.position[Y] + other.colliderBottom() and
-                                at.position[Y] + self.colliderTop() >= other.position[Y] + other.colliderTop())))
+                    if (((at[X] + self.colliderLeft() >= other.position[X] + other.colliderLeft() and
+                        at[X] + self.colliderLeft() <= other.position[X] + other.colliderRight()) or
+                        (at[X] + self.colliderRight() >= other.position[X] + other.colliderLeft() and
+                            at[X] + self.colliderRight() <= other.position[X] + other.colliderRight())) and
+                        ((at[Y] + self.colliderBottom() >= other.position[Y] + other.colliderTop() and
+                            at[Y] + self.colliderBottom() <= other.position[Y] + other.colliderBottom()) or
+                            (at[Y] + self.colliderTop() <= other.position[Y] + other.colliderBottom() and
+                                at[Y] + self.colliderTop() >= other.position[Y] + other.colliderTop())))
                     {
                         collides = true;
                     }
@@ -418,44 +418,44 @@ pub const Entity = struct {
             }
         } else {
             var circle_radius: f32 = 0;
-            var circle_transform: ?*const Entity = null;
+            var circle_position: ?Vector2 = null;
             var circle_collider: *const Entity = undefined;
-            var square_transform: ?*const Entity = null;
+            var square_position: ?Vector2 = null;
             var square_collider: *const Entity = undefined;
 
             if (self.collider_shape == .Circle) {
                 circle_collider = self;
-                circle_transform = &at;
+                circle_position = at;
                 circle_radius = self.collider_radius;
             } else {
                 square_collider = self;
-                square_transform = &at;
+                square_position = at;
             }
 
             if (other.collider_shape == .Circle) {
                 circle_collider = other;
-                circle_transform = other;
+                circle_position = other.position;
                 circle_radius = other.collider_radius;
             } else {
                 square_collider = other;
-                square_transform = other;
+                square_position = other.position;
             }
 
-            if (circle_transform) |circle| {
-                if (square_transform) |square| {
-                    const circle_position = circle_collider.colliderCenter(circle);
+            if (circle_position) |circle| {
+                if (square_position) |square| {
+                    const circle_center = circle_collider.colliderCenter(circle);
                     const closest_x: f32 = std.math.clamp(
-                        circle_position[X],
-                        square.position[X] + square_collider.colliderLeft(),
-                        square.position[X] + square_collider.colliderRight(),
+                        circle_center[X],
+                        square[X] + square_collider.colliderLeft(),
+                        square[X] + square_collider.colliderRight(),
                     );
                     const closest_y: f32 = std.math.clamp(
-                        circle_position[Y],
-                        square.position[Y] + square_collider.colliderTop(),
-                        square.position[Y] + square_collider.colliderBottom(),
+                        circle_center[Y],
+                        square[Y] + square_collider.colliderTop(),
+                        square[Y] + square_collider.colliderBottom(),
                     );
-                    const distance_x: f32 = circle_position[X] - closest_x;
-                    const distance_y: f32 = circle_position[Y] - closest_y;
+                    const distance_x: f32 = circle_center[X] - closest_x;
+                    const distance_y: f32 = circle_center[Y] - closest_y;
                     const distance: f32 = (distance_x * distance_x) + (distance_y * distance_y);
 
                     if (distance < circle_radius * circle_radius) {
