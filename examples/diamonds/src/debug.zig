@@ -54,7 +54,9 @@ pub const DebugState = struct {
     current_block_type: BlockType,
     hovered_entity_id: ?EntityId,
     selected_entity_id: ?EntityId,
+
     selected_entity_changed: bool,
+    selected_entity_cleared: bool,
 
     show_colliders: bool,
     collisions: std.ArrayList(DebugCollision),
@@ -77,6 +79,7 @@ pub const DebugState = struct {
             .hovered_entity_id = null,
             .selected_entity_id = null,
             .selected_entity_changed = false,
+            .selected_entity_cleared = false,
 
             .show_colliders = false,
             .collisions = .empty,
@@ -274,6 +277,7 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
                             state.debug_state.selected_entity_changed = true;
                         } else {
                             state.debug_state.selected_entity_id = null;
+                            state.debug_state.selected_entity_cleared = true;
                         }
                     }
                 }
@@ -489,6 +493,11 @@ pub fn drawDebugUI(state: *State) void {
         }
 
         {
+            if (state.debug_state.selected_entity_cleared) {
+                imgui.c.ImGui_SetNextWindowFocus();
+                state.debug_state.selected_entity_cleared = false;
+            }
+
             imgui.c.ImGui_SetNextWindowPosEx(
                 imgui.c.ImVec2{ .x = 350, .y = 30 },
                 imgui.c.ImGuiCond_FirstUseEver,
