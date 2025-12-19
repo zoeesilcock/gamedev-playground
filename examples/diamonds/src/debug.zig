@@ -376,125 +376,131 @@ pub fn drawDebugUI(state: *State) void {
     state.fps_state.?.draw();
 
     if (state.debug_state.show_sidebar) {
-        _ = imgui.c.ImGui_Begin(
-            "MemoryUsage",
-            null,
-            imgui.c.ImGuiWindowFlags_NoFocusOnAppearing |
-                imgui.c.ImGuiWindowFlags_NoNavFocus |
-                imgui.c.ImGuiWindowFlags_NoNavInputs,
-        );
+        {
+            _ = imgui.c.ImGui_Begin(
+                "MemoryUsage",
+                null,
+                imgui.c.ImGuiWindowFlags_NoFocusOnAppearing |
+                    imgui.c.ImGuiWindowFlags_NoNavFocus |
+                    imgui.c.ImGuiWindowFlags_NoNavInputs,
+            );
+            defer imgui.c.ImGui_End();
 
-        _ = imgui.c.ImGui_Text(
-            "Bytes: %d",
-            state.debug_state.memory_usage[state.debug_state.memory_usage_current_index],
-        );
+            _ = imgui.c.ImGui_Text(
+                "Bytes: %d",
+                state.debug_state.memory_usage[state.debug_state.memory_usage_current_index],
+            );
 
-        var memory_usage: [MAX_MEMORY_USAGE_COUNT]f32 = [1]f32{0} ** MAX_MEMORY_USAGE_COUNT;
-        var max_value: f32 = 0;
-        var min_value: f32 = std.math.floatMax(f32);
-        for (0..MAX_MEMORY_USAGE_COUNT) |i| {
-            memory_usage[i] = @floatFromInt(state.debug_state.memory_usage[i]);
-            if (memory_usage[i] > max_value) {
-                max_value = memory_usage[i];
+            var memory_usage: [MAX_MEMORY_USAGE_COUNT]f32 = [1]f32{0} ** MAX_MEMORY_USAGE_COUNT;
+            var max_value: f32 = 0;
+            var min_value: f32 = std.math.floatMax(f32);
+            for (0..MAX_MEMORY_USAGE_COUNT) |i| {
+                memory_usage[i] = @floatFromInt(state.debug_state.memory_usage[i]);
+                if (memory_usage[i] > max_value) {
+                    max_value = memory_usage[i];
+                }
+                if (memory_usage[i] < min_value and memory_usage[i] > 0) {
+                    min_value = memory_usage[i];
+                }
             }
-            if (memory_usage[i] < min_value and memory_usage[i] > 0) {
-                min_value = memory_usage[i];
+            var buf: [100]u8 = undefined;
+            const min_text = std.fmt.bufPrintZ(&buf, "min: {d}", .{min_value}) catch "";
+            imgui.c.ImGui_PlotHistogramEx(
+                "##MemoryUsageGraph",
+                &memory_usage,
+                memory_usage.len,
+                @intCast(state.debug_state.memory_usage_current_index + 1),
+                min_text.ptr,
+                min_value,
+                max_value,
+                imgui.c.ImVec2{ .x = 300, .y = 100 },
+                @sizeOf(f32),
+            );
+        }
+
+        {
+            const button_size: imgui.c.ImVec2 = imgui.c.ImVec2{ .x = 140, .y = 20 };
+            const half_button_size: imgui.c.ImVec2 = imgui.c.ImVec2{ .x = 65, .y = 20 };
+
+            imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 160, .y = 200 }, imgui.c.ImGuiCond_FirstUseEver);
+
+            _ = imgui.c.ImGui_Begin(
+                "Editor",
+                null,
+                imgui.c.ImGuiWindowFlags_NoFocusOnAppearing |
+                    imgui.c.ImGuiWindowFlags_NoNavFocus |
+                    imgui.c.ImGuiWindowFlags_NoNavInputs,
+            );
+            defer imgui.c.ImGui_End();
+
+            _ = imgui.c.ImGui_InputTextEx(
+                "Name",
+                @ptrCast(&state.debug_state.current_level_name),
+                state.debug_state.current_level_name.len,
+                0,
+                null,
+                null,
+            );
+
+            if (imgui.c.ImGui_ButtonEx("Load", half_button_size)) {
+                game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
             }
-        }
-        var buf: [100]u8 = undefined;
-        const min_text = std.fmt.bufPrintZ(&buf, "min: {d}", .{min_value}) catch "";
-        imgui.c.ImGui_PlotHistogramEx(
-            "##MemoryUsageGraph",
-            &memory_usage,
-            memory_usage.len,
-            @intCast(state.debug_state.memory_usage_current_index + 1),
-            min_text.ptr,
-            min_value,
-            max_value,
-            imgui.c.ImVec2{ .x = 300, .y = 100 },
-            @sizeOf(f32),
-        );
+            imgui.c.ImGui_SameLineEx(0, 10);
+            if (imgui.c.ImGui_ButtonEx("Save", half_button_size)) {
+                saveLevel(state, state.debug_state.currentLevelName()) catch unreachable;
+            }
 
-        imgui.c.ImGui_End();
+            if (imgui.c.ImGui_ButtonEx("Test level", button_size)) {
+                state.debug_state.testing_level = true;
+                state.paused = false;
 
-        const button_size: imgui.c.ImVec2 = imgui.c.ImVec2{ .x = 140, .y = 20 };
-        const half_button_size: imgui.c.ImVec2 = imgui.c.ImVec2{ .x = 65, .y = 20 };
+                game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
+            }
 
-        imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 160, .y = 200 }, imgui.c.ImGuiCond_FirstUseEver);
+            if (imgui.c.ImGui_ButtonEx("Restart", button_size)) {
+                imgui.c.ImGui_End();
 
-        _ = imgui.c.ImGui_Begin(
-            "Editor",
-            null,
-            imgui.c.ImGuiWindowFlags_NoFocusOnAppearing |
-                imgui.c.ImGuiWindowFlags_NoNavFocus |
-                imgui.c.ImGuiWindowFlags_NoNavInputs,
-        );
+                game.restart(state);
+                return;
+            }
 
-        _ = imgui.c.ImGui_InputTextEx(
-            "Name",
-            @ptrCast(&state.debug_state.current_level_name),
-            state.debug_state.current_level_name.len,
-            0,
-            null,
-            null,
-        );
-
-        if (imgui.c.ImGui_ButtonEx("Load", half_button_size)) {
-            game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
-        }
-        imgui.c.ImGui_SameLineEx(0, 10);
-        if (imgui.c.ImGui_ButtonEx("Save", half_button_size)) {
-            saveLevel(state, state.debug_state.currentLevelName()) catch unreachable;
+            internal.inputEnum("Mode", &state.debug_state.mode);
+            internal.inputEnum("Type", &state.debug_state.current_block_type);
+            internal.inputEnum("Color", &state.debug_state.current_block_color);
         }
 
-        if (imgui.c.ImGui_ButtonEx("Test level", button_size)) {
-            state.debug_state.testing_level = true;
-            state.paused = false;
+        {
+            imgui.c.ImGui_SetNextWindowPosEx(
+                imgui.c.ImVec2{ .x = 30, .y = 30 },
+                imgui.c.ImGuiCond_FirstUseEver,
+                imgui.c.ImVec2{ .x = 0, .y = 0 },
+            );
+            imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 300, .y = 540 }, imgui.c.ImGuiCond_FirstUseEver);
 
-            game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
+            if (state.debug_state.selected_entity_changed) {
+                imgui.c.ImGui_SetNextWindowFocus();
+                state.debug_state.selected_entity_changed = false;
+            }
+
+            _ = imgui.c.ImGui_Begin("Inspector", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
+            defer imgui.c.ImGui_End();
+
+            internal.inspectStructOptional(state.getEntity(state.debug_state.selected_entity_id), &.{"is_in_use"}, true, &inputCustomTypes);
         }
 
-        if (imgui.c.ImGui_ButtonEx("Restart", button_size)) {
-            imgui.c.ImGui_End();
+        {
+            imgui.c.ImGui_SetNextWindowPosEx(
+                imgui.c.ImVec2{ .x = 350, .y = 30 },
+                imgui.c.ImGuiCond_FirstUseEver,
+                imgui.c.ImVec2{ .x = 0, .y = 0 },
+            );
+            imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 300, .y = 540 }, imgui.c.ImGuiCond_FirstUseEver);
 
-            game.restart(state);
-            return;
+            _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
+            defer imgui.c.ImGui_End();
+
+            internal.inspectStruct(state, &.{"entity"}, false, &inputCustomTypes);
         }
-
-        internal.inputEnum("Mode", &state.debug_state.mode);
-        internal.inputEnum("Type", &state.debug_state.current_block_type);
-        internal.inputEnum("Color", &state.debug_state.current_block_color);
-
-        imgui.c.ImGui_End();
-
-        imgui.c.ImGui_SetNextWindowPosEx(
-            imgui.c.ImVec2{ .x = 30, .y = 30 },
-            imgui.c.ImGuiCond_FirstUseEver,
-            imgui.c.ImVec2{ .x = 0, .y = 0 },
-        );
-        imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 300, .y = 540 }, imgui.c.ImGuiCond_FirstUseEver);
-
-        if (state.debug_state.selected_entity_changed) {
-            imgui.c.ImGui_SetNextWindowFocus();
-            state.debug_state.selected_entity_changed = false;
-        }
-
-        _ = imgui.c.ImGui_Begin("Inspector", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
-        defer imgui.c.ImGui_End();
-
-        internal.inspectStructOptional(state.getEntity(state.debug_state.selected_entity_id), &.{"is_in_use"}, true, &inputCustomTypes);
-
-        imgui.c.ImGui_SetNextWindowPosEx(
-            imgui.c.ImVec2{ .x = 350, .y = 30 },
-            imgui.c.ImGuiCond_FirstUseEver,
-            imgui.c.ImVec2{ .x = 0, .y = 0 },
-        );
-        imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 300, .y = 540 }, imgui.c.ImGuiCond_FirstUseEver);
-
-        _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
-        defer imgui.c.ImGui_End();
-
-        internal.inspectStruct(state, &.{"entity"}, false, &inputCustomTypes);
     }
 
     imgui.render(state.renderer);
