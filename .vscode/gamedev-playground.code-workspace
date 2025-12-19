@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../examples/diamonds"
+		},
+		{
+			"path": "../examples/cube"
+		}
+	],
+	"settings": {}
+}
