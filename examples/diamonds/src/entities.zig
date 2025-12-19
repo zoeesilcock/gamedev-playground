@@ -417,51 +417,40 @@ pub const Entity = struct {
                 .None => unreachable,
             }
         } else {
-            var circle_radius: f32 = 0;
-            var circle_position: ?Vector2 = null;
-            var circle_collider: *const Entity = undefined;
-            var square_position: ?Vector2 = null;
-            var square_collider: *const Entity = undefined;
+            var circle: *Entity = undefined;
+            var square: *Entity = undefined;
+            var circle_position: Vector2 = undefined;
+            var square_position: Vector2 = undefined;
 
             if (self.collider_shape == .Circle) {
-                circle_collider = self;
+                circle = self;
                 circle_position = at;
-                circle_radius = self.collider_radius;
+                square = other;
+                square_position = other.position;
             } else {
-                square_collider = self;
+                circle = other;
+                circle_position = other.position;
+                square = self;
                 square_position = at;
             }
 
-            if (other.collider_shape == .Circle) {
-                circle_collider = other;
-                circle_position = other.position;
-                circle_radius = other.collider_radius;
-            } else {
-                square_collider = other;
-                square_position = other.position;
-            }
+            const circle_center = circle.colliderCenter(circle_position);
+            const closest_x: f32 = std.math.clamp(
+                circle_center[X],
+                square_position[X] + square.colliderLeft(),
+                square_position[X] + square.colliderRight(),
+            );
+            const closest_y: f32 = std.math.clamp(
+                circle_center[Y],
+                square_position[Y] + square.colliderTop(),
+                square_position[Y] + square.colliderBottom(),
+            );
+            const distance_x: f32 = circle_center[X] - closest_x;
+            const distance_y: f32 = circle_center[Y] - closest_y;
+            const distance_squared: f32 = (distance_x * distance_x) + (distance_y * distance_y);
 
-            if (circle_position) |circle| {
-                if (square_position) |square| {
-                    const circle_center = circle_collider.colliderCenter(circle);
-                    const closest_x: f32 = std.math.clamp(
-                        circle_center[X],
-                        square[X] + square_collider.colliderLeft(),
-                        square[X] + square_collider.colliderRight(),
-                    );
-                    const closest_y: f32 = std.math.clamp(
-                        circle_center[Y],
-                        square[Y] + square_collider.colliderTop(),
-                        square[Y] + square_collider.colliderBottom(),
-                    );
-                    const distance_x: f32 = circle_center[X] - closest_x;
-                    const distance_y: f32 = circle_center[Y] - closest_y;
-                    const distance: f32 = (distance_x * distance_x) + (distance_y * distance_y);
-
-                    if (distance < circle_radius * circle_radius) {
-                        collides = true;
-                    }
-                }
+            if (distance_squared < circle.collider_radius * circle.collider_radius) {
+                collides = true;
             }
         }
 
