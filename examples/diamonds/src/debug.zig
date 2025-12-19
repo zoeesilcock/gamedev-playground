@@ -54,6 +54,7 @@ pub const DebugState = struct {
     current_block_type: BlockType,
     hovered_entity_id: ?EntityId,
     selected_entity_id: ?EntityId,
+    selected_entity_changed: bool,
 
     show_colliders: bool,
     collisions: std.ArrayList(DebugCollision),
@@ -75,6 +76,7 @@ pub const DebugState = struct {
             .current_block_type = .Wall,
             .hovered_entity_id = null,
             .selected_entity_id = null,
+            .selected_entity_changed = false,
 
             .show_colliders = false,
             .collisions = .empty,
@@ -269,6 +271,7 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
                             state.debug_state.selected_entity_id == null)
                         {
                             state.debug_state.selected_entity_id = hovered_entity.id;
+                            state.debug_state.selected_entity_changed = true;
                         } else {
                             state.debug_state.selected_entity_id = null;
                         }
@@ -470,6 +473,11 @@ pub fn drawDebugUI(state: *State) void {
             imgui.c.ImVec2{ .x = 0, .y = 0 },
         );
         imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 300, .y = 540 }, imgui.c.ImGuiCond_FirstUseEver);
+
+        if (state.debug_state.selected_entity_changed) {
+            imgui.c.ImGui_SetNextWindowFocus();
+            state.debug_state.selected_entity_changed = false;
+        }
 
         _ = imgui.c.ImGui_Begin("Inspector", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
         defer imgui.c.ImGui_End();
