@@ -212,6 +212,12 @@ pub fn updateWindowSize(state: *State) void {
             if (needs_change) {
                 _ = sdl.SDL_SetWindowPosition(state.window, x, y);
                 _ = sdl.SDL_SetWindowSize(state.window, width, height);
+
+                state.fps_state.?.position =
+                    if (state.debug_state.show_sidebar)
+                        .{ .x = 225, .y = -5 }
+                    else
+                        .{ .x = 5, .y = 5 };
             }
         }
     }

@@ -17,6 +17,7 @@ pub const FPSState = struct {
     frame_times: [MAX_FRAME_TIME_COUNT]u64,
     average: f32,
     display_mode: FPSDisplayMode,
+    position: c_imgui.ImVec2,
 
     pub fn init(self: *FPSState, frequency: u64) void {
         self.current_frame_index = 0;
@@ -24,6 +25,7 @@ pub const FPSState = struct {
         self.frame_times = [1]u64{0} ** MAX_FRAME_TIME_COUNT;
         self.average = 0;
         self.display_mode = .Number;
+        self.position = c_imgui.ImVec2{ .x = 5, .y = 5 };
     }
 
     pub fn toggleMode(self: *FPSState) void {
@@ -71,7 +73,7 @@ pub const FPSState = struct {
 
     pub fn draw(self: *FPSState) void {
         if (self.display_mode != .None) {
-            c_imgui.ImGui_SetNextWindowPosEx(c_imgui.ImVec2{ .x = 5, .y = 5 }, 0, c_imgui.ImVec2{ .x = 0, .y = 0 });
+            c_imgui.ImGui_SetNextWindowPosEx(self.position, 0, c_imgui.ImVec2{ .x = 0, .y = 0 });
             c_imgui.ImGui_SetNextWindowSize(c_imgui.ImVec2{ .x = 300, .y = 160 }, 0);
 
             _ = c_imgui.ImGui_Begin(
