@@ -71,6 +71,7 @@ pub const State = struct {
 
     debug_allocator: *DebugAllocator = undefined,
     debug_state: *debug.DebugState = undefined,
+    debug_output: *internal.DebugOutput = undefined,
     fps_state: ?*FPSState = null,
 
     window: *sdl.SDL_Window,
@@ -352,6 +353,9 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         state.debug_allocator.* = .init;
         state.debug_state = state.debug_allocator.allocator().create(debug.DebugState) catch @panic("Out of memory");
         state.debug_state.init() catch @panic("Failed to init DebugState");
+
+        state.debug_output = state.debug_allocator.allocator().create(internal.DebugOutput) catch @panic("Out of memory");
+        state.debug_output.init();
 
         state.fps_state =
             state.debug_allocator.allocator().create(FPSState) catch @panic("Failed to allocate FPS state");

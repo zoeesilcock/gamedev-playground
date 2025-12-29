@@ -377,6 +377,7 @@ pub fn drawDebugUI(state: *State) void {
     imgui.newFrame();
 
     state.fps_state.?.draw();
+    state.debug_output.draw();
 
     if (state.debug_state.show_sidebar) {
         {

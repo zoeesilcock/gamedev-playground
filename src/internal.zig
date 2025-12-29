@@ -119,6 +119,205 @@ pub const FPSState = struct {
     }
 };
 
+/// This window is used to print out arbitrary data at any point. Use the `print` and `printStruct` functions to append
+/// to the output and then call the `draw` function in your imgui draw function.
+pub const DebugOutput = struct {
+    arena: std.heap.ArenaAllocator,
+    data: std.ArrayList([]const u8),
+
+    pub fn init(self: *DebugOutput) void {
+        self.* = .{
+            .arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
+            .data = .empty,
+        };
+    }
+
+    pub fn deinit(self: *DebugOutput) void {
+        self.data.clearRetainingCapacity();
+        self.arena.deinit();
+    }
+
+    /// Call this function along with any other imgui drawing code. The window will only be displayed if there is
+    /// any data in the array. Data is cleared and memory is freed after every draw.
+    pub fn draw(self: *DebugOutput) void {
+        if (self.data.items.len > 0) {
+            imgui.c.ImGui_SetNextWindowPosEx(
+                imgui.c.ImVec2{ .x = 350, .y = 30 },
+                imgui.c.ImGuiCond_FirstUseEver,
+                imgui.c.ImVec2{ .x = 0, .y = 0 },
+            );
+            imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 300, .y = 540 }, imgui.c.ImGuiCond_FirstUseEver);
+
+            _ = imgui.c.ImGui_Begin("Debug output", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
+            defer imgui.c.ImGui_End();
+
+            for (self.data.items) |line| {
+                imgui.c.ImGui_TextWrapped("%s", @as([*:0]const u8, @ptrCast(line)));
+            }
+        }
+
+        self.deinit();
+        self.init();
+    }
+
+    /// Print out a string using the familiar fmt + args approach.
+    pub fn print(
+        self: *DebugOutput,
+        comptime fmt: []const u8,
+        args: anytype,
+    ) void {
+        self.data.append(
+            self.arena.allocator(),
+            std.fmt.allocPrintSentinel(self.arena.allocator(), fmt, args, 0x0) catch "",
+        ) catch undefined;
+    }
+
+    /// Print out the contents of a struct. Either pass some struct you are interested in looking at or construct an
+    /// anonymous struct containing specific values if you only want certain parts of a struct or parts of multiple
+    /// different structs.
+    pub fn printStruct(
+        self: *DebugOutput,
+        message: []const u8,
+        value: anytype,
+    ) void {
+        self.data.append(
+            self.arena.allocator(),
+            std.fmt.allocPrintSentinel(
+                self.arena.allocator(),
+                "{s} {s}",
+                .{ message, self.structToString(value) },
+                0x0,
+            ) catch "",
+        ) catch undefined;
+    }
+
+    fn structToString(self: *DebugOutput, value: anytype) []const u8 {
+        var value_string: []u8 = "";
+
+        const struct_info = @typeInfo(@TypeOf(value));
+        switch (struct_info) {
+            .@"struct" => {
+                inline for (struct_info.@"struct".fields, 0..) |struct_field, i| {
+                    value_string = std.fmt.allocPrintSentinel(
+                        self.arena.allocator(),
+                        "{s}{s}",
+                        .{ value_string, self.structFieldToString(@field(value, struct_field.name), struct_field) },
+                        0x0,
+                    ) catch "";
+
+                    if (i < struct_info.@"struct".fields.len - 1) {
+                        value_string = std.fmt.allocPrintSentinel(
+                            self.arena.allocator(),
+                            "{s}, ",
+                            .{value_string},
+                            0x0,
+                        ) catch "";
+                    }
+                }
+            },
+            else => {},
+        }
+
+        return value_string;
+    }
+
+    fn structFieldToString(
+        self: *DebugOutput,
+        field_value: anytype,
+        struct_field: std.builtin.Type.StructField,
+    ) []const u8 {
+        const field_info = @typeInfo(@TypeOf(field_value));
+
+        switch (field_info) {
+            .@"struct" => {
+                return self.structToString(field_value);
+            },
+            .int, .float => {
+                return std.fmt.allocPrint(
+                    self.arena.allocator(),
+                    "{s}: {d}",
+                    .{ struct_field.name, field_value },
+                ) catch "";
+            },
+            .bool => {
+                return std.fmt.allocPrint(
+                    self.arena.allocator(),
+                    "{s}: {s}",
+                    .{ struct_field.name, if (field_value) "true" else "false" },
+                ) catch "";
+            },
+            .pointer => |pointer_info| {
+                switch (pointer_info.size) {
+                    .one, .slice => {
+                        return std.fmt.allocPrint(
+                            self.arena.allocator(),
+                            "{s}: {s}",
+                            .{ struct_field.name, field_value },
+                        ) catch "";
+                    },
+                    .many, .c => {
+                        return std.fmt.allocPrint(
+                            self.arena.allocator(),
+                            "{s}: {s}",
+                            .{ struct_field.name, std.mem.span(field_value) },
+                        ) catch "";
+                    },
+                }
+            },
+            .vector => |vector_info| {
+                comptime var format: []const u8 = "{s}: {{ ";
+                comptime for (0..vector_info.len) |i| {
+                    format = format ++ "{d}";
+                    if (i < vector_info.len - 1) {
+                        format = format ++ ", ";
+                    }
+                };
+                format = format ++ " }}";
+
+                const ArgsType = makeVectorFormatArgsType(vector_info);
+                var args: ArgsType = undefined;
+                @field(args, "name") = struct_field.name;
+                inline for (1..vector_info.len + 1) |i| {
+                    @field(args, std.fmt.comptimePrint("vector_field_{d}", .{i})) = field_value[i - 1];
+                }
+
+                return std.fmt.allocPrint(self.arena.allocator(), format, args) catch "";
+            },
+            else => return "unhandled data type",
+        }
+    }
+
+    fn makeVectorFormatArgsType(vector_info: std.builtin.Type.Vector) type {
+        var struct_fields: [vector_info.len + 1]std.builtin.Type.StructField = undefined;
+        struct_fields[0] = .{
+            .name = "name",
+            .type = []const u8,
+            .default_value_ptr = null,
+            .is_comptime = false,
+            .alignment = @alignOf([]const u8),
+        };
+
+        for (1..vector_info.len + 1) |i| {
+            struct_fields[i] = .{
+                .name = std.fmt.comptimePrint("vector_field_{d}", .{i}),
+                .type = vector_info.child,
+                .default_value_ptr = null,
+                .is_comptime = false,
+                .alignment = @alignOf(vector_info.child),
+            };
+        }
+
+        return @Type(.{
+            .@"struct" = .{
+                .layout = .auto,
+                .fields = &struct_fields,
+                .decls = &.{},
+                .is_tuple = false,
+            },
+        });
+    }
+};
+
 const handleCustomTypesFn = ?*const fn (
     struct_field: std.builtin.Type.StructField,
     field_ptr: anytype,
