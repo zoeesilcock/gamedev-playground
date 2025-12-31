@@ -42,6 +42,9 @@ pub fn buildExecutable(
         .target = target,
         .optimize = optimize,
     });
+    const sdl_tests = client_b.addTest(.{ .root_module = sdl_mod });
+    const run_sdl_tests = client_b.addRunArtifact(sdl_tests);
+    test_step.dependOn(&run_sdl_tests.step);
 
     var imgui_mod = b.addModule("imgui", .{
         .root_source_file = b.path("src/imgui.zig"),
@@ -51,6 +54,9 @@ pub fn buildExecutable(
             .{ .name = "sdl", .module = sdl_mod },
         },
     });
+    const imgui_tests = client_b.addTest(.{ .root_module = imgui_mod });
+    const run_imgui_tests = client_b.addRunArtifact(imgui_tests);
+    test_step.dependOn(&run_imgui_tests.step);
 
     const internal_mod = b.addModule("internal", .{
         .root_source_file = b.path("src/internal.zig"),
@@ -60,6 +66,9 @@ pub fn buildExecutable(
             .{ .name = "imgui", .module = imgui_mod },
         },
     });
+    const internal_tests = client_b.addTest(.{ .root_module = internal_mod });
+    const run_internal_tests = client_b.addRunArtifact(internal_tests);
+    test_step.dependOn(&run_internal_tests.step);
 
     const aseprite_mod = b.addModule("aseprite", .{
         .root_source_file = b.path("src/aseprite.zig"),
@@ -69,6 +78,9 @@ pub fn buildExecutable(
             .{ .name = "sdl", .module = sdl_mod },
         },
     });
+    const aseprite_tests = client_b.addTest(.{ .root_module = aseprite_mod });
+    const run_aseprite_tests = client_b.addRunArtifact(aseprite_tests);
+    test_step.dependOn(&run_aseprite_tests.step);
 
     if (getSDLIncludePath(b, target, optimize)) |sdl_include_path| {
         sdl_mod.addIncludePath(sdl_include_path);
