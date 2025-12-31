@@ -95,8 +95,12 @@ pub fn build(b: *std.Build) !void {
 
     b.installArtifact(lib);
 
+    const test_step = b.step("test", "Run unit tests");
+    const lib_tests = b.addTest(.{ .root_module = lib.root_module });
+    const run_lib_tests = b.addRunArtifact(lib_tests);
+    test_step.dependOn(&run_lib_tests.step);
+
     if (!lib_only) {
-        const test_step = b.step("test", "Run unit tests");
         const exe = runtime.buildExecutable(
             runtime_dep.builder,
             b,
@@ -104,7 +108,7 @@ pub fn build(b: *std.Build) !void {
             build_options,
             target,
             optimize,
-            test_step,
+            null,
         );
         b.installArtifact(exe);
     }

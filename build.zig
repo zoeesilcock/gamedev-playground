@@ -14,6 +14,10 @@ pub fn build(b: *std.Build) !void {
     const exe = buildExecutable(b, b, "gamedev-playground", build_options, target, optimize, test_step);
     b.installArtifact(exe);
 
+    const exe_tests = b.addTest(.{ .root_module = exe.root_module });
+    const run_exe_tests = b.addRunArtifact(exe_tests);
+    test_step.dependOn(&run_exe_tests.step);
+
     generateImGuiBindingsStep(b, target, optimize);
 }
 
@@ -24,7 +28,7 @@ pub fn buildExecutable(
     build_options: *std.Build.Step.Options,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    test_step: *std.Build.Step,
+    opt_test_step: ?*std.Build.Step,
 ) *std.Build.Step.Compile {
     const module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -42,9 +46,6 @@ pub fn buildExecutable(
         .target = target,
         .optimize = optimize,
     });
-    const sdl_tests = client_b.addTest(.{ .root_module = sdl_mod });
-    const run_sdl_tests = client_b.addRunArtifact(sdl_tests);
-    test_step.dependOn(&run_sdl_tests.step);
 
     var imgui_mod = b.addModule("imgui", .{
         .root_source_file = b.path("src/imgui.zig"),
@@ -54,9 +55,11 @@ pub fn buildExecutable(
             .{ .name = "sdl", .module = sdl_mod },
         },
     });
-    const imgui_tests = client_b.addTest(.{ .root_module = imgui_mod });
-    const run_imgui_tests = client_b.addRunArtifact(imgui_tests);
-    test_step.dependOn(&run_imgui_tests.step);
+    if (opt_test_step) |test_step| {
+        const imgui_tests = client_b.addTest(.{ .root_module = imgui_mod });
+        const run_imgui_tests = client_b.addRunArtifact(imgui_tests);
+        test_step.dependOn(&run_imgui_tests.step);
+    }
 
     const internal_mod = b.addModule("internal", .{
         .root_source_file = b.path("src/internal.zig"),
@@ -66,9 +69,11 @@ pub fn buildExecutable(
             .{ .name = "imgui", .module = imgui_mod },
         },
     });
-    const internal_tests = client_b.addTest(.{ .root_module = internal_mod });
-    const run_internal_tests = client_b.addRunArtifact(internal_tests);
-    test_step.dependOn(&run_internal_tests.step);
+    if (opt_test_step) |test_step| {
+        const internal_tests = client_b.addTest(.{ .root_module = internal_mod });
+        const run_internal_tests = client_b.addRunArtifact(internal_tests);
+        test_step.dependOn(&run_internal_tests.step);
+    }
 
     const aseprite_mod = b.addModule("aseprite", .{
         .root_source_file = b.path("src/aseprite.zig"),
@@ -78,9 +83,11 @@ pub fn buildExecutable(
             .{ .name = "sdl", .module = sdl_mod },
         },
     });
-    const aseprite_tests = client_b.addTest(.{ .root_module = aseprite_mod });
-    const run_aseprite_tests = client_b.addRunArtifact(aseprite_tests);
-    test_step.dependOn(&run_aseprite_tests.step);
+    if (opt_test_step) |test_step| {
+        const aseprite_tests = client_b.addTest(.{ .root_module = aseprite_mod });
+        const run_aseprite_tests = client_b.addRunArtifact(aseprite_tests);
+        test_step.dependOn(&run_aseprite_tests.step);
+    }
 
     if (getSDLIncludePath(b, target, optimize)) |sdl_include_path| {
         sdl_mod.addIncludePath(sdl_include_path);
@@ -100,10 +107,6 @@ pub fn buildExecutable(
         run_cmd.addArgs(args);
     }
     run_step.dependOn(&run_cmd.step);
-
-    const exe_tests = client_b.addTest(.{ .root_module = module });
-    const run_exe_tests = client_b.addRunArtifact(exe_tests);
-    test_step.dependOn(&run_exe_tests.step);
 
     return exe;
 }
