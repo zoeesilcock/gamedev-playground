@@ -1,12 +1,22 @@
 name: Tests
 on: [push]
 jobs:
-  tests:
+  main_tests:
     runs-on: ubuntu-latest
     name: Run tests
     steps:
       - uses: actions/checkout@v3
       - uses: mlugg/setup-zig@v2
         with:
-            version: 0.15.1
-      - run: zig build test
+            version: 0.15.2
+
+      - name: Main tests
+        run: zig build test --summary all
+
+      - name: Diamonds example tests
+        run: zig build test --summary all
+        working-directory: examples/diamonds
+
+      - name: Cube example tests
+        run: zig build test --summary all
+        working-directory: examples/cube
