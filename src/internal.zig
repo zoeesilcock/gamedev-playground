@@ -180,189 +180,79 @@ pub const DebugOutput = struct {
         message: []const u8,
         value: anytype,
     ) void {
-        self.data.append(
-            self.arena.allocator(),
-            std.fmt.allocPrintSentinel(
-                self.arena.allocator(),
-                "{s} {s}",
-                .{ message, self.structToString(value) },
-                0x0,
-            ) catch "",
-        ) catch undefined;
+        var allocating_writer = std.Io.Writer.Allocating.init(self.arena.allocator());
+        var writer = &allocating_writer.writer;
+        defer allocating_writer.deinit();
+
+        writer.print("{s} ", .{message}) catch return;
+        self.writeValue(value, writer) catch return;
+
+        self.data.append(self.arena.allocator(), allocating_writer.toOwnedSliceSentinel(0x0) catch "") catch undefined;
     }
 
-    fn structToString(self: *DebugOutput, value: anytype) []const u8 {
-        var value_string: []u8 = "";
+    fn writeValue(
+        self: *DebugOutput,
+        value: anytype,
+        writer: *std.Io.Writer,
+    ) !void {
+        switch (@typeInfo(@TypeOf(value))) {
+            .@"struct" => |struct_info| {
+                inline for (struct_info.fields, 0..) |struct_field, i| {
+                    try writer.print("{s}: ", .{struct_field.name});
+                    try self.writeValue(@field(value, struct_field.name), writer);
 
-        const struct_info = @typeInfo(@TypeOf(value));
-        switch (struct_info) {
-            .@"struct" => {
-                inline for (struct_info.@"struct".fields, 0..) |struct_field, i| {
-                    value_string = std.fmt.allocPrintSentinel(
-                        self.arena.allocator(),
-                        "{s}{s}",
-                        .{ value_string, self.structFieldToString(@field(value, struct_field.name), struct_field.name) },
-                        0x0,
-                    ) catch "";
-
-                    if (i < struct_info.@"struct".fields.len - 1) {
-                        value_string = std.fmt.allocPrintSentinel(
-                            self.arena.allocator(),
-                            "{s}, ",
-                            .{value_string},
-                            0x0,
-                        ) catch "";
+                    if (i < struct_info.fields.len - 1) {
+                        try writer.print(", ", .{});
                     }
                 }
             },
-            else => {},
-        }
+            .array => {
+                try writer.print("[", .{});
+                for (value, 0..) |item, i| {
+                    try self.writeValue(item, writer);
 
-        return value_string;
-    }
-
-    fn structFieldToString(
-        self: *DebugOutput,
-        field_value: anytype,
-        field_name: []const u8,
-    ) []const u8 {
-        const field_info = @typeInfo(@TypeOf(field_value));
-
-        switch (field_info) {
-            else => {
-                return std.fmt.allocPrint(
-                    self.arena.allocator(),
-                    "{s}: {s}",
-                    .{ field_name, self.valueToString(field_value) },
-                ) catch "";
+                    if (i < value.len - 1) {
+                        try writer.print(", ", .{});
+                    }
+                }
+                try writer.print("]", .{});
             },
-        }
-    }
-
-    fn valueToString(
-        self: *DebugOutput,
-        value: anytype,
-    ) []const u8 {
-        const field_info = @typeInfo(@TypeOf(value));
-
-        switch (field_info) {
-            .@"struct" => {
-                return self.structToString(value);
-            },
-            .int, .float, .comptime_int, .comptime_float => {
-                return std.fmt.allocPrint(
-                    self.arena.allocator(),
-                    "{d}",
-                    .{value},
-                ) catch "";
-            },
-            .bool => {
-                return std.fmt.allocPrint(
-                    self.arena.allocator(),
-                    "{s}",
-                    .{if (value) "true" else "false"},
-                ) catch "";
+            .optional => {
+                if (value) |unwrapped| {
+                    try self.writeValue(unwrapped, writer);
+                } else {
+                    try writer.print("null", .{});
+                }
             },
             .pointer => |pointer_info| {
                 switch (pointer_info.size) {
                     .one, .slice => {
-                        return std.fmt.allocPrint(
-                            self.arena.allocator(),
-                            "{s}",
-                            .{value},
-                        ) catch "";
+                        try writer.print("{s}", .{value});
                     },
                     .many, .c => {
-                        return std.fmt.allocPrint(
-                            self.arena.allocator(),
-                            "{s}",
-                            .{std.mem.span(value)},
-                        ) catch "";
+                        try writer.print("{s}", .{std.mem.span(value)});
                     },
                 }
             },
+            .int, .float, .comptime_int, .comptime_float => {
+                try writer.print("{d}", .{value});
+            },
+            .bool => {
+                try writer.print("{s}", .{if (value) "true" else "false"});
+            },
             .vector => |vector_info| {
-                comptime var format: []const u8 = "{{";
-                comptime for (0..vector_info.len) |i| {
-                    format = format ++ "{d}";
+                try writer.print("{{", .{});
+                for (0..vector_info.len) |i| {
+                    try writer.print("{d}", .{value[i]});
+
                     if (i < vector_info.len - 1) {
-                        format = format ++ ", ";
-                    }
-                };
-                format = format ++ "}}";
-
-                const ArgsType = makeVectorFormatArgsType(vector_info);
-                var args: ArgsType = undefined;
-                inline for (0..vector_info.len) |i| {
-                    @field(args, std.fmt.comptimePrint("vector_field_{d}", .{i})) = value[i];
-                }
-
-                return std.fmt.allocPrint(self.arena.allocator(), format, args) catch "";
-            },
-            .array => {
-                var output = std.fmt.allocPrint(
-                    self.arena.allocator(),
-                    "[",
-                    .{},
-                ) catch "";
-
-                for (value, 0..) |item, i| {
-                    output = std.fmt.allocPrint(
-                        self.arena.allocator(),
-                        "{s}{s}",
-                        .{ output, self.valueToString(item) },
-                    ) catch "";
-
-                    if (i < value.len - 1) {
-                        output = std.fmt.allocPrintSentinel(
-                            self.arena.allocator(),
-                            "{s}, ",
-                            .{output},
-                            0x0,
-                        ) catch "";
+                        try writer.print(", ", .{});
                     }
                 }
-
-                output = std.fmt.allocPrint(
-                    self.arena.allocator(),
-                    "{s}]",
-                    .{output},
-                ) catch "";
-
-                return output;
+                try writer.print("}}", .{});
             },
-            .optional => {
-                if (value) |unwrapped| {
-                    return self.valueToString(unwrapped);
-                } else {
-                    return "null";
-                }
-            },
-            else => return "unhandled data type",
+            else => try writer.print("unhandled data type", .{}),
         }
-    }
-
-    fn makeVectorFormatArgsType(vector_info: std.builtin.Type.Vector) type {
-        var struct_fields: [vector_info.len]std.builtin.Type.StructField = undefined;
-
-        for (0..vector_info.len) |i| {
-            struct_fields[i] = .{
-                .name = std.fmt.comptimePrint("vector_field_{d}", .{i}),
-                .type = vector_info.child,
-                .default_value_ptr = null,
-                .is_comptime = false,
-                .alignment = @alignOf(vector_info.child),
-            };
-        }
-
-        return @Type(.{
-            .@"struct" = .{
-                .layout = .auto,
-                .fields = &struct_fields,
-                .decls = &.{},
-                .is_tuple = false,
-            },
-        });
     }
 };
 
