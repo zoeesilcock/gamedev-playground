@@ -1,0 +1,33 @@
+name: Docs
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build docs site
+    steps:
+      - uses: actions/checkout@v3
+      - uses: mlugg/setup-zig@v2
+        with:
+            version: 0.15.2
+
+      - name: Build
+        run: zig build docs
+
+      - name: Upload
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "zig-out/docs/"
+  publish:
+    runs-on: ubuntu-latest
+    name: Publish docs site
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
