@@ -63,6 +63,15 @@ zig build generate_imgui_bindings
 ## Usage
 To use this in your own projects you include it as a dependency and then integrate it into your `build.zig` and then import any modules you want to use. See the examples for more details.
 
+### Documentation
+The documentation is generated using the zig autodoc system. It can be generated locally or [viewed online](https://zoeesilcock.github.io/gamedev-playground/).
+
+To generate and run locally:
+```
+zig build docs
+python -m http.server -b 127.0.0.1 8000 -d zig-out/docs/
+```
+
 ### Build
 Building the runtime executable in a different project works by importing the dependency in the `build.zig` file and using the `buildExecutable` function to create the runtime executable which can then be installed using `installArtifact`.
 
