@@ -1,5 +1,7 @@
 const std = @import("std");
-const sdl = @import("sdl").c;
+const playground = @import("playground");
+const sdl = playground.sdl.c;
+const GameLib = playground.GameLib;
 
 const DEBUG = @import("builtin").mode == std.builtin.OptimizeMode.Debug;
 const PLATFORM = @import("builtin").os.tag;
@@ -22,21 +24,12 @@ const WINDOW_DECORATIONS_HEIGHT = if (PLATFORM == .windows) 31 else 0;
 const TARGET_FPS = 120;
 const TARGET_FRAME_TIME: f32 = 1000 / TARGET_FPS;
 
-const GameStatePtr = *anyopaque;
-
+var game: GameLib = .{};
 var opt_dyn_lib: ?std.DynLib = null;
 var build_process: ?std.process.Child = null;
 var dyn_lib_last_modified: i128 = 0;
 var src_last_modified: i128 = 0;
 var assets_last_modified: i128 = 0;
-
-var gameInit: *const fn (u32, u32, *sdl.SDL_Window) callconv(.c) GameStatePtr = undefined;
-var gameDeinit: *const fn (GameStatePtr) callconv(.c) void = undefined;
-var gameWillReload: *const fn (GameStatePtr) callconv(.c) void = undefined;
-var gameReloaded: *const fn (GameStatePtr) callconv(.c) void = undefined;
-var gameProcessInput: *const fn (GameStatePtr) callconv(.c) bool = undefined;
-var gameTick: *const fn (GameStatePtr) callconv(.c) void = undefined;
-var gameDraw: *const fn (GameStatePtr) callconv(.c) void = undefined;
 
 pub fn main() !void {
     var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
@@ -69,7 +62,7 @@ pub fn main() !void {
         return err;
     };
 
-    const state = gameInit(WINDOW_WIDTH, WINDOW_HEIGHT, window.?);
+    const state = game.init(WINDOW_WIDTH, WINDOW_HEIGHT, window.?);
 
     if (DEBUG) {
         initChangeTimes(allocator);
@@ -84,12 +77,12 @@ pub fn main() !void {
             checkForChanges(state, allocator);
         }
 
-        if (!gameProcessInput(state)) {
+        if (!game.processInput(state)) {
             break;
         }
 
-        gameTick(state);
-        gameDraw(state);
+        game.tick(state);
+        game.draw(state);
 
         frame_elapsed_time = sdl.SDL_GetTicks() - frame_start_time;
 
@@ -100,7 +93,7 @@ pub fn main() !void {
         }
     }
 
-    gameDeinit(state);
+    game.deinit(state);
 
     sdl.SDL_DestroyWindow(window);
     sdl.SDL_Quit();
@@ -115,18 +108,18 @@ fn initChangeTimes(allocator: std.mem.Allocator) void {
     _ = assetsHaveChanged(allocator);
 }
 
-fn checkForChanges(state: GameStatePtr, allocator: std.mem.Allocator) void {
+fn checkForChanges(state: GameLib.GameStatePtr, allocator: std.mem.Allocator) void {
     const assetsChanged = assetsHaveChanged(allocator);
     if (dllHasChanged()) {
-        gameWillReload(state);
+        game.willReload(state);
 
         unloadDll() catch unreachable;
         loadDll() catch @panic("Failed to load the game lib.");
 
-        gameReloaded(state);
+        game.reloaded(state);
     } else if (assetsChanged) {
-        gameWillReload(state);
-        gameReloaded(state);
+        game.willReload(state);
+        game.reloaded(state);
     }
 }
 
@@ -194,13 +187,7 @@ fn loadDll() !void {
     }
 
     if (opt_dyn_lib) |*dyn_lib| {
-        gameInit = dyn_lib.lookup(@TypeOf(gameInit), "init") orelse return error.LookupFail;
-        gameDeinit = dyn_lib.lookup(@TypeOf(gameDeinit), "deinit") orelse return error.LookupFail;
-        gameWillReload = dyn_lib.lookup(@TypeOf(gameWillReload), "willReload") orelse return error.LookupFail;
-        gameReloaded = dyn_lib.lookup(@TypeOf(gameReloaded), "reloaded") orelse return error.LookupFail;
-        gameProcessInput = dyn_lib.lookup(@TypeOf(gameProcessInput), "processInput") orelse return error.LookupFail;
-        gameTick = dyn_lib.lookup(@TypeOf(gameTick), "tick") orelse return error.LookupFail;
-        gameDraw = dyn_lib.lookup(@TypeOf(gameDraw), "draw") orelse return error.LookupFail;
+        try game.load(dyn_lib);
     }
 
     std.log.info("Game DLL loaded.", .{});

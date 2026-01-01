@@ -1,11 +1,12 @@
 const std = @import("std");
-const sdl = @import("sdl").c;
-const internal = @import("internal");
+const playground = @import("playground");
+const sdl = playground.sdl.c;
+const internal = playground.internal;
+const imgui = playground.imgui;
+const aseprite = playground.aseprite;
 const game = @import("root.zig");
 const entities = @import("entities.zig");
 const math = @import("math");
-const imgui = @import("imgui");
-const aseprite = @import("aseprite");
 
 const State = game.State;
 const Assets = game.Assets;
@@ -140,7 +141,7 @@ pub fn processInputEvent(state: *State, event: sdl.SDL_Event) void {
     if (event.type == sdl.SDL_EVENT_KEY_DOWN) {
         switch (event.key.key) {
             sdl.SDLK_F1 => {
-                state.fps_state.?.toggleMode();
+                state.fps_window.?.cycleMode();
             },
             sdl.SDLK_F2 => {
                 state.debug_state.memory_usage_display = !state.debug_state.memory_usage_display;
@@ -208,7 +209,7 @@ pub fn updateWindowSize(state: *State) void {
                 _ = sdl.SDL_SetWindowPosition(state.window, x, y);
                 _ = sdl.SDL_SetWindowSize(state.window, width, height);
 
-                state.fps_state.?.position =
+                state.fps_window.?.position =
                     if (state.debug_state.show_sidebar)
                         .{ .x = 225, .y = -5 }
                     else
@@ -347,20 +348,6 @@ fn getHoveredEntity(state: *State) ?EntityId {
     return result;
 }
 
-pub fn calculateFPS(state: *State) void {
-    state.debug_state.current_frame_index += 1;
-    if (state.debug_state.current_frame_index >= MAX_FRAME_TIME_COUNT) {
-        state.debug_state.current_frame_index = 0;
-    }
-    state.debug_state.frame_times[state.debug_state.current_frame_index] = sdl.SDL_GetPerformanceCounter();
-
-    var average: f32 = 0;
-    for (0..MAX_FRAME_TIME_COUNT) |i| {
-        average += state.debug_state.getFrameTime(@intCast(i));
-    }
-    state.debug_state.fps_average = 1 / (average / @as(f32, @floatFromInt(MAX_FRAME_TIME_COUNT)));
-}
-
 pub fn recordMemoryUsage(state: *State) void {
     if (state.debug_state.memory_usage_last_collected_at + MEMORY_USAGE_RECORD_INTERVAL < state.time) {
         state.debug_state.memory_usage_last_collected_at = state.time;
@@ -376,7 +363,7 @@ pub fn recordMemoryUsage(state: *State) void {
 pub fn drawDebugUI(state: *State) void {
     imgui.newFrame();
 
-    state.fps_state.?.draw();
+    state.fps_window.?.draw();
     state.debug_output.draw();
 
     if (state.debug_state.show_sidebar) {
@@ -484,7 +471,7 @@ pub fn drawDebugUI(state: *State) void {
             _ = imgui.c.ImGui_Begin("Inspector", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
             defer imgui.c.ImGui_End();
 
-            internal.inspectStructOptional(state.getEntity(state.debug_state.selected_entity_id), &.{"is_in_use"}, true, &inputCustomTypes);
+            internal.inspectStruct(state.getEntity(state.debug_state.selected_entity_id), &.{"is_in_use"}, true, &inputCustomTypes);
         }
 
         {
@@ -741,6 +728,20 @@ fn drawEntityHighlight(
         if (entity.hasFlag(.is_ui)) {
             const title_position: Vector2 = entity.getUIPosition(state);
             entity_rect.position = title_position + offset;
+        }
+
+        if (entity.id.equals(state.debug_state.selected_entity_id)) {
+            state.debug_output.printStruct(
+                "Highlight rect:",
+                .{
+                    .rect = entity_rect,
+                    .color = color,
+                    .boo = true,
+                    .string = "hai",
+                    .array = @as([2][]const u8, .{ "foo", "bar" }),
+                },
+            );
+            state.debug_output.print("Hello :) (id: {d}, {d})", .{ entity.id.index, entity.id.generation });
         }
 
         _ = sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);

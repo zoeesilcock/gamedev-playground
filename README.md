@@ -40,7 +40,7 @@ This project aims to identify and implement tools needed to create bespoke game 
 ## Hot reloading
 Both the code and the assets automatically update in-game when modified. For code this is achieved by having the entire game code inside a shared library with a thin executable that takes care of reloading the shared library when it changes. For assets the executable lets the game know when assets have changed so that it can react to that in whatever way that makes sense, in this case it simply reloads the assets without interrupting the game.
 
-Examples are setup to allow automatically rebuild the shared library when you change the code by keeping the following command running in a separate terminal:
+Examples are setup to allow for automatically rebuilding the shared library when you change the code by keeping the following command running in a separate terminal:
 ```
 zig build -Dlib_only --watch
 ```
@@ -62,6 +62,15 @@ zig build generate_imgui_bindings
 
 ## Usage
 To use this in your own projects you include it as a dependency and then integrate it into your `build.zig` and then import any modules you want to use. See the examples for more details.
+
+### Documentation
+The documentation is generated using the zig autodoc system. It can be generated locally or [viewed online](https://zoeesilcock.github.io/gamedev-playground/).
+
+To generate and run locally:
+```
+zig build docs
+python -m http.server -b 127.0.0.1 8000 -d zig-out/docs/
+```
 
 ### Build
 Building the runtime executable in a different project works by importing the dependency in the `build.zig` file and using the `buildExecutable` function to create the runtime executable which can then be installed using `installArtifact`.

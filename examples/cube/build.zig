@@ -1,5 +1,5 @@
 const std = @import("std");
-const runtime = @import("runtime");
+const gamedev_playground = @import("gamedev_playground");
 
 const SHADER_FORMATS: []const []const u8 = &.{ "spv", "msl", "dxil" };
 const SHADERS: []const []const u8 = &.{
@@ -28,6 +28,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
     module.addOptions("build_options", build_options);
+
     const lib = b.addLibrary(.{
         .linkage = .dynamic,
         .name = lib_base_name,
@@ -42,6 +43,55 @@ pub fn build(b: *std.Build) !void {
     const check = b.step("check", "Check if it compiles");
     check.dependOn(&lib_check.step);
 
+    // Integrate gamedev_playground.
+    const playground_dep = b.dependency("gamedev_playground", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const playground_mod = playground_dep.module("playground");
+    module.addImport("playground", playground_mod);
+    gamedev_playground.linkSDL(playground_dep.builder, lib, target, optimize);
+
+    if (!lib_only) {
+        const exe = gamedev_playground.buildExecutable(
+            playground_dep.builder,
+            b,
+            "diamonds",
+            build_options,
+            target,
+            optimize,
+            playground_mod,
+        );
+        b.installArtifact(exe);
+    }
+    // End of integration.
+
+    const logging_allocator_mod = b.createModule(.{
+        .root_source_file = b.path("../logging_allocator.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const math_mod = b.createModule(.{
+        .root_source_file = b.path("../math.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "playground", .module = playground_mod },
+        },
+    });
+
+    module.addImport("math", math_mod);
+    module.addImport("logging_allocator", logging_allocator_mod);
+
+    b.installArtifact(lib);
+
+    // Tests.
+    const test_step = b.step("test", "Run unit tests");
+    const lib_tests = b.addTest(.{ .root_module = lib.root_module });
+    const run_lib_tests = b.addRunArtifact(lib_tests);
+    test_step.dependOn(&run_lib_tests.step);
+
+    // Shader compilation.
     const compile_shaders_step = b.step("compile_shaders", "Compile SHADERS. (requires a working shadercross installation on the path)");
     inline for (SHADERS) |shader| {
         inline for (SHADER_FORMATS) |shader_output_format| {
@@ -58,58 +108,4 @@ pub fn build(b: *std.Build) !void {
     }
 
     b.getInstallStep().dependOn(compile_shaders_step);
-
-    const runtime_dep = b.dependency("runtime", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    if (runtime.getSDL(runtime_dep.builder, target, optimize)) |sdl_lib| {
-        module.linkLibrary(sdl_lib);
-        b.installArtifact(sdl_lib);
-    }
-
-    const sdl_mod = runtime_dep.module("sdl");
-    const imgui_mod = runtime_dep.module("imgui");
-    const internal_mod = runtime_dep.module("internal");
-    const logging_allocator_mod = b.createModule(.{
-        .root_source_file = b.path("../logging_allocator.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const math_mod = b.createModule(.{
-        .root_source_file = b.path("../math.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "sdl", .module = sdl_mod },
-        },
-    });
-
-    module.addImport("sdl", sdl_mod);
-    module.addImport("imgui", imgui_mod);
-    module.addImport("internal", internal_mod);
-    module.addImport("math", math_mod);
-    module.addImport("logging_allocator", logging_allocator_mod);
-
-    runtime.linkImgui(runtime_dep.builder, lib, target, optimize, internal);
-
-    b.installArtifact(lib);
-
-    const test_step = b.step("test", "Run unit tests");
-    const lib_tests = b.addTest(.{ .root_module = lib.root_module });
-    const run_lib_tests = b.addRunArtifact(lib_tests);
-    test_step.dependOn(&run_lib_tests.step);
-
-    if (!lib_only) {
-        const exe = runtime.buildExecutable(
-            runtime_dep.builder,
-            b,
-            "cube",
-            build_options,
-            target,
-            optimize,
-            null,
-        );
-        b.installArtifact(exe);
-    }
 }

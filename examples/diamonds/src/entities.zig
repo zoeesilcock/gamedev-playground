@@ -1,8 +1,9 @@
 const std = @import("std");
-const sdl = @import("sdl").c;
+const playground = @import("playground");
+const sdl = playground.sdl.c;
+const aseprite = playground.aseprite;
 const game = @import("root.zig");
 const math = @import("math");
-const aseprite = @import("aseprite");
 
 pub const MAX_ENTITY_COUNT = 1024;
 

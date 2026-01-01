@@ -1,11 +1,12 @@
 const std = @import("std");
-const sdl_utils = @import("sdl");
-const sdl = @import("sdl").c;
-const internal = @import("internal");
-const aseprite = @import("aseprite");
+const playground = @import("playground");
+const sdl_utils = playground.sdl;
+const sdl = playground.sdl.c;
+const imgui = if (INTERNAL) playground.imgui else struct {};
+const internal = playground.internal;
+const aseprite = playground.aseprite;
 const entities = @import("entities.zig");
 const math = @import("math");
-const imgui = if (INTERNAL) @import("imgui") else struct {};
 const debug = if (INTERNAL) @import("debug.zig") else struct {
     pub const DebugState = void;
 };
@@ -15,6 +16,7 @@ pub const std_options: std.Options = .{
     .log_level = if (INTERNAL) .warn else .err,
 };
 
+const GameLib = playground.GameLib;
 const Entity = entities.Entity;
 const EntityArray = entities.EntityArray;
 const EntityIterator = entities.EntityIterator;
@@ -25,7 +27,7 @@ const ColorComponentValue = entities.ColorComponentValue;
 const BlockType = entities.BlockType;
 const TitleType = entities.TitleType;
 const TweenedValue = entities.TweenedValue;
-const FPSState = internal.FPSState;
+const FPSWindow = internal.FPSWindow;
 const AsepriteAsset = aseprite.AsepriteAsset;
 
 const Vector2 = math.Vector2;
@@ -71,8 +73,8 @@ pub const State = struct {
 
     debug_allocator: *DebugAllocator = undefined,
     debug_state: *debug.DebugState = undefined,
-    debug_output: *internal.DebugOutput = undefined,
-    fps_state: ?*FPSState = null,
+    debug_output: *internal.DebugOutputWindow = undefined,
+    fps_window: ?*FPSWindow = null,
 
     window: *sdl.SDL_Window,
     renderer: *sdl.SDL_Renderer,
@@ -294,7 +296,7 @@ pub const Assets = struct {
     }
 };
 
-pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) *anyopaque {
+pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) GameLib.GameStatePtr {
     sdl_utils.logError(sdl.SDL_SetWindowTitle(window, "Diamonds"), "Failed to set window title");
 
     var backing_allocator = std.heap.page_allocator;
@@ -349,17 +351,19 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     _ = sdl.SDL_SetWindowSize(state.window, WINDOW_WIDTH, WINDOW_HEIGHT);
 
     if (INTERNAL) {
-        state.debug_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize debug allocator."));
+        state.debug_allocator =
+            (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize debug allocator."));
         state.debug_allocator.* = .init;
         state.debug_state = state.debug_allocator.allocator().create(debug.DebugState) catch @panic("Out of memory");
         state.debug_state.init() catch @panic("Failed to init DebugState");
 
-        state.debug_output = state.debug_allocator.allocator().create(internal.DebugOutput) catch @panic("Out of memory");
+        state.debug_output =
+            state.debug_allocator.allocator().create(internal.DebugOutputWindow) catch @panic("Out of memory");
         state.debug_output.init();
 
-        state.fps_state =
-            state.debug_allocator.allocator().create(FPSState) catch @panic("Failed to allocate FPS state");
-        state.fps_state.?.init(sdl.SDL_GetPerformanceFrequency());
+        state.fps_window =
+            state.debug_allocator.allocator().create(FPSWindow) catch @panic("Failed to allocate FPS state");
+        state.fps_window.?.init(sdl.SDL_GetPerformanceFrequency());
 
         debug.updateWindowSize(state);
     }
@@ -396,7 +400,7 @@ pub fn restart(state: *State) void {
     ).*;
 }
 
-pub export fn deinit(state_ptr: *anyopaque) void {
+pub export fn deinit(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     if (INTERNAL) {
@@ -441,18 +445,19 @@ pub fn setupRenderTexture(state: *State) void {
     );
 }
 
-pub export fn willReload(state_ptr: *anyopaque) void {
-    _ = state_ptr;
+pub export fn willReload(state_ptr: GameLib.GameStatePtr) void {
+    const state: *State = @ptrCast(@alignCast(state_ptr));
+
+    unloadAssets(state);
 
     if (INTERNAL) {
         imgui.deinit();
     }
 }
 
-pub export fn reloaded(state_ptr: *anyopaque) void {
+pub export fn reloaded(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    unloadAssets(state);
     loadAssets(state);
     try addGameUI(state);
 
@@ -465,7 +470,7 @@ pub export fn reloaded(state_ptr: *anyopaque) void {
     }
 }
 
-pub export fn processInput(state_ptr: *anyopaque) bool {
+pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     if (INTERNAL) {
@@ -532,7 +537,7 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
     return continue_running;
 }
 
-pub export fn tick(state_ptr: *anyopaque) void {
+pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     state.delta_time_actual = sdl.SDL_GetTicks() - state.time;
@@ -544,7 +549,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
     state.time = sdl.SDL_GetTicks();
 
     if (INTERNAL) {
-        state.fps_state.?.addFrameTime(sdl.SDL_GetPerformanceCounter());
+        state.fps_window.?.addFrameTime(sdl.SDL_GetPerformanceCounter());
         debug.recordMemoryUsage(state);
     }
 
@@ -747,7 +752,7 @@ fn handleBallCollision(state: *State, ball: *Entity, block: *Entity) void {
     }
 }
 
-pub export fn draw(state_ptr: *anyopaque) void {
+pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     sdl_utils.panic(sdl.SDL_SetRenderTarget(state.renderer, state.render_texture), "Failed to set render target.");

@@ -4,7 +4,7 @@
     .minimum_zig_version = "0.15.2",
     .fingerprint = 0x5b4abc708109fe2f,
     .dependencies = .{
-        .runtime = .{
+        .gamedev_playground = .{
             .path = "../../",
         },
     },

@@ -1,8 +1,9 @@
+//! Exposes tools for loading Aseprite documents.
 const std = @import("std");
-const sdl = @import("sdl").c;
-const sdl_utils = @import("sdl");
+const sdl = @import("sdl.zig").c;
+const sdl_utils = @import("sdl.zig");
 
-// Public API.
+/// All data and metadata contained in an Aseprite document.
 pub const AseDocument = struct {
     header: *const AseHeader,
     frames: []const AseFrame,
@@ -17,6 +18,7 @@ pub const AseDocument = struct {
     }
 };
 
+/// All data and matadata contained in an Aseprite frame.
 const AseFrame = struct {
     header: *AseFrameHeader,
     cel_chunks: []*AseCelChunk,
@@ -39,6 +41,7 @@ const AseFrame = struct {
     }
 };
 
+/// Wrapper which loads an Aseprite document and generates textures that can be rendered with SDL.
 pub const AsepriteAsset = struct {
     document: AseDocument,
     frames: []*sdl.SDL_Texture,
@@ -49,6 +52,7 @@ pub const AsepriteAsset = struct {
         allocator.free(self.frames);
     }
 
+    // Loads an Aseprite document from the specified path and generates SDL textures for each frame.
     pub fn load(path: []const u8, renderer: *sdl.SDL_Renderer, allocator: std.mem.Allocator) ?AsepriteAsset {
         var result: ?AsepriteAsset = null;
 
@@ -120,6 +124,7 @@ pub const AsepriteAsset = struct {
     }
 };
 
+/// Load an Aseprite document from the specified path.
 pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocument {
     var result: ?AseDocument = null;
 

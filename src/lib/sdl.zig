@@ -1,4 +1,7 @@
+//! Exposes the SDL 3 C API and some helper functions for handling errors from SDL.
 const std = @import("std");
+
+/// The SDL 3 C API.
 pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
     @cInclude("SDL3/SDL.h");
