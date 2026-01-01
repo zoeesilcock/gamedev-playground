@@ -16,6 +16,7 @@ const Matrix4x4 = math.Matrix4x4;
 const X = math.X;
 const Y = math.Y;
 const Z = math.Z;
+const GameLib = playground.GameLib;
 const FPSWindow = internal.FPSWindow;
 const ScreenEffect = enum(u32) {
     None = 0,
@@ -248,7 +249,7 @@ const FragmentUniforms = struct {
     screen_effect: u32,
 };
 
-pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) *anyopaque {
+pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) GameLib.GameStatePtr {
     sdl_utils.logError(sdl.SDL_SetWindowTitle(window, "Cube"), "Failed to set window title");
 
     var backing_allocator = std.heap.page_allocator;
@@ -312,7 +313,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     return state;
 }
 
-pub export fn deinit(state_ptr: *anyopaque) void {
+pub export fn deinit(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     if (INTERNAL) {
@@ -326,7 +327,7 @@ pub export fn deinit(state_ptr: *anyopaque) void {
     sdl.SDL_DestroyGPUDevice(state.device);
 }
 
-pub export fn willReload(state_ptr: *anyopaque) void {
+pub export fn willReload(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     if (INTERNAL) {
@@ -336,7 +337,7 @@ pub export fn willReload(state_ptr: *anyopaque) void {
     deinitPipeline(state);
 }
 
-pub export fn reloaded(state_ptr: *anyopaque) void {
+pub export fn reloaded(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     initPipeline(state);
@@ -349,7 +350,7 @@ pub export fn reloaded(state_ptr: *anyopaque) void {
     submitQuadData(state);
 }
 
-pub export fn processInput(state_ptr: *anyopaque) bool {
+pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     var continue_running: bool = true;
@@ -401,7 +402,7 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
     return continue_running;
 }
 
-pub export fn tick(state_ptr: *anyopaque) void {
+pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     const new_time: u64 = sdl.SDL_GetTicks();
@@ -420,7 +421,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
     }
 }
 
-pub export fn draw(state_ptr: *anyopaque) void {
+pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     // Draw to texture.

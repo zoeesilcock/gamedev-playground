@@ -16,6 +16,7 @@ pub const std_options: std.Options = .{
     .log_level = if (INTERNAL) .warn else .err,
 };
 
+const GameLib = playground.GameLib;
 const Entity = entities.Entity;
 const EntityArray = entities.EntityArray;
 const EntityIterator = entities.EntityIterator;
@@ -295,7 +296,7 @@ pub const Assets = struct {
     }
 };
 
-pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) *anyopaque {
+pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) GameLib.GameStatePtr {
     sdl_utils.logError(sdl.SDL_SetWindowTitle(window, "Diamonds"), "Failed to set window title");
 
     var backing_allocator = std.heap.page_allocator;
@@ -399,7 +400,7 @@ pub fn restart(state: *State) void {
     ).*;
 }
 
-pub export fn deinit(state_ptr: *anyopaque) void {
+pub export fn deinit(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     if (INTERNAL) {
@@ -444,18 +445,19 @@ pub fn setupRenderTexture(state: *State) void {
     );
 }
 
-pub export fn willReload(state_ptr: *anyopaque) void {
-    _ = state_ptr;
+pub export fn willReload(state_ptr: GameLib.GameStatePtr) void {
+    const state: *State = @ptrCast(@alignCast(state_ptr));
+
+    unloadAssets(state);
 
     if (INTERNAL) {
         imgui.deinit();
     }
 }
 
-pub export fn reloaded(state_ptr: *anyopaque) void {
+pub export fn reloaded(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    unloadAssets(state);
     loadAssets(state);
     try addGameUI(state);
 
@@ -468,7 +470,7 @@ pub export fn reloaded(state_ptr: *anyopaque) void {
     }
 }
 
-pub export fn processInput(state_ptr: *anyopaque) bool {
+pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     if (INTERNAL) {
@@ -535,7 +537,7 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
     return continue_running;
 }
 
-pub export fn tick(state_ptr: *anyopaque) void {
+pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     state.delta_time_actual = sdl.SDL_GetTicks() - state.time;
@@ -750,7 +752,7 @@ fn handleBallCollision(state: *State, ball: *Entity, block: *Entity) void {
     }
 }
 
-pub export fn draw(state_ptr: *anyopaque) void {
+pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     sdl_utils.panic(sdl.SDL_SetRenderTarget(state.renderer, state.render_texture), "Failed to set render target.");

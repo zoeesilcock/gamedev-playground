@@ -40,7 +40,7 @@ This project aims to identify and implement tools needed to create bespoke game 
 ## Hot reloading
 Both the code and the assets automatically update in-game when modified. For code this is achieved by having the entire game code inside a shared library with a thin executable that takes care of reloading the shared library when it changes. For assets the executable lets the game know when assets have changed so that it can react to that in whatever way that makes sense, in this case it simply reloads the assets without interrupting the game.
 
-Examples are setup to allow automatically rebuild the shared library when you change the code by keeping the following command running in a separate terminal:
+Examples are setup to allow for automatically rebuilding the shared library when you change the code by keeping the following command running in a separate terminal:
 ```
 zig build -Dlib_only --watch
 ```
