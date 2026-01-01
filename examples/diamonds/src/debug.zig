@@ -1,11 +1,12 @@
 const std = @import("std");
-const sdl = @import("sdl").c;
-const internal = @import("internal");
+const playground = @import("playground");
+const sdl = playground.sdl.c;
+const internal = playground.internal;
+const imgui = playground.imgui;
+const aseprite = playground.aseprite;
 const game = @import("root.zig");
 const entities = @import("entities.zig");
 const math = @import("math");
-const imgui = @import("imgui");
-const aseprite = @import("aseprite");
 
 const State = game.State;
 const Assets = game.Assets;

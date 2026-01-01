@@ -10,14 +10,33 @@ pub fn build(b: *std.Build) !void {
     build_options.addOption(bool, "internal", internal);
     build_options.addOption([]const u8, "lib_base_name", lib_base_name);
 
-    const test_step = b.step("test", "Run unit tests");
-    const exe = buildExecutable(b, b, "gamedev-playground", build_options, target, optimize, test_step);
+    // Exposed module.
+    const playground_mod = b.addModule("playground", .{
+        .root_source_file = b.path("src/lib/playground.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    if (getSDLIncludePath(b, target, optimize)) |sdl_include_path| {
+        playground_mod.addIncludePath(sdl_include_path);
+    }
+    linkImgui(b, playground_mod, target, optimize, internal);
+
+    // Main executable.
+    const exe = buildExecutable(b, b, "gamedev-playground", build_options, target, optimize, playground_mod);
     b.installArtifact(exe);
+
+    // Tests.
+    const test_step = b.step("test", "Run unit tests");
 
     const exe_tests = b.addTest(.{ .root_module = exe.root_module });
     const run_exe_tests = b.addRunArtifact(exe_tests);
     test_step.dependOn(&run_exe_tests.step);
 
+    const lib_tests = b.addTest(.{ .root_module = playground_mod });
+    const run_lib_tests = b.addRunArtifact(lib_tests);
+    test_step.dependOn(&run_lib_tests.step);
+
+    // Imgui C bindings.
     generateImGuiBindingsStep(b, target, optimize);
 }
 
@@ -28,12 +47,15 @@ pub fn buildExecutable(
     build_options: *std.Build.Step.Options,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    opt_test_step: ?*std.Build.Step,
+    playground_mod: *std.Build.Module,
 ) *std.Build.Step.Compile {
     const module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{
+            .{ .name = "playground", .module = playground_mod },
+        },
     });
     module.addOptions("build_options", build_options);
     const exe = b.addExecutable(.{
@@ -41,64 +63,7 @@ pub fn buildExecutable(
         .root_module = module,
     });
 
-    var sdl_mod = b.addModule("sdl", .{
-        .root_source_file = b.path("src/sdl.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    var imgui_mod = b.addModule("imgui", .{
-        .root_source_file = b.path("src/imgui.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "sdl", .module = sdl_mod },
-        },
-    });
-    if (opt_test_step) |test_step| {
-        const imgui_tests = client_b.addTest(.{ .root_module = imgui_mod });
-        const run_imgui_tests = client_b.addRunArtifact(imgui_tests);
-        test_step.dependOn(&run_imgui_tests.step);
-    }
-
-    const internal_mod = b.addModule("internal", .{
-        .root_source_file = b.path("src/internal.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "imgui", .module = imgui_mod },
-        },
-    });
-    if (opt_test_step) |test_step| {
-        const internal_tests = client_b.addTest(.{ .root_module = internal_mod });
-        const run_internal_tests = client_b.addRunArtifact(internal_tests);
-        test_step.dependOn(&run_internal_tests.step);
-    }
-
-    const aseprite_mod = b.addModule("aseprite", .{
-        .root_source_file = b.path("src/aseprite.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "sdl", .module = sdl_mod },
-        },
-    });
-    if (opt_test_step) |test_step| {
-        const aseprite_tests = client_b.addTest(.{ .root_module = aseprite_mod });
-        const run_aseprite_tests = client_b.addRunArtifact(aseprite_tests);
-        test_step.dependOn(&run_aseprite_tests.step);
-    }
-
-    if (getSDLIncludePath(b, target, optimize)) |sdl_include_path| {
-        sdl_mod.addIncludePath(sdl_include_path);
-        imgui_mod.addIncludePath(sdl_include_path);
-        internal_mod.addIncludePath(sdl_include_path);
-        aseprite_mod.addIncludePath(sdl_include_path);
-
-        exe.root_module.addImport("sdl", sdl_mod);
-    }
-
-    linkExeLibraries(b, exe, target, optimize);
+    linkSDL(b, exe, target, optimize);
 
     const run_step = client_b.step("run", "Run the app");
     const run_cmd = client_b.addRunArtifact(exe);
@@ -111,7 +76,7 @@ pub fn buildExecutable(
     return exe;
 }
 
-fn linkExeLibraries(
+pub fn linkSDL(
     b: *std.Build,
     obj: *std.Build.Step.Compile,
     target: std.Build.ResolvedTarget,
@@ -125,7 +90,7 @@ fn linkExeLibraries(
 
 pub fn linkImgui(
     b: *std.Build,
-    obj: *std.Build.Step.Compile,
+    module: *std.Build.Module,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     internal: bool,
@@ -136,11 +101,9 @@ pub fn linkImgui(
             .optimize = optimize,
         })) |imgui_dep| {
             if (createImGuiLib(b, target, optimize, imgui_dep)) |imgui_lib| {
-                if (obj.root_module.import_table.get("imgui")) |imgui_mod| {
-                    imgui_mod.addIncludePath(b.path("src/dcimgui"));
-                    imgui_mod.addIncludePath(imgui_dep.path("."));
-                    imgui_mod.linkLibrary(imgui_lib);
-                }
+                module.addIncludePath(b.path("src/lib/dcimgui"));
+                module.addIncludePath(imgui_dep.path("."));
+                module.linkLibrary(imgui_lib);
             }
         }
     }
@@ -216,10 +179,10 @@ fn createImGuiLib(
         dcimgui_sdl.addIncludePath(sdl_dep.path("include"));
         dcimgui_sdl.addIncludePath(imgui_dep.path("."));
         dcimgui_sdl.addIncludePath(imgui_dep.path("backends/"));
-        dcimgui_sdl.addIncludePath(b.path("src/dcimgui/"));
+        dcimgui_sdl.addIncludePath(b.path("src/lib/dcimgui/"));
 
         const imgui_sources: []const std.Build.LazyPath = &.{
-            b.path("src/dcimgui/dcimgui.cpp"),
+            b.path("src/lib/dcimgui/dcimgui.cpp"),
             imgui_dep.path("imgui.cpp"),
             imgui_dep.path("imgui_demo.cpp"),
             imgui_dep.path("imgui_draw.cpp"),
@@ -269,7 +232,7 @@ fn generateImGuiBindingsStep(
             });
             dear_bindings.setCwd(dear_bindings_dep.path("."));
             dear_bindings.addArg("-o");
-            dear_bindings.addFileArg(b.path("src/dcimgui/dcimgui"));
+            dear_bindings.addFileArg(b.path("src/lib/dcimgui/dcimgui"));
             dear_bindings.addFileArg(imgui_dep.path("imgui.h"));
             generate_bindings_step.dependOn(&dear_bindings.step);
         }

@@ -1,5 +1,5 @@
 const std = @import("std");
-const sdl = @import("sdl").c;
+const sdl = @import("playground").sdl.c;
 
 const DEBUG = @import("builtin").mode == std.builtin.OptimizeMode.Debug;
 const PLATFORM = @import("builtin").os.tag;

@@ -1,5 +1,6 @@
+//! This module contains tools used in internal builds of your game.
 const std = @import("std");
-const imgui = @import("imgui");
+const imgui = @import("imgui.zig");
 
 const c_imgui = imgui.c;
 
@@ -598,7 +599,7 @@ pub fn inputFlagsU32(heading: ?[*:0]const u8, value: *u32, FlagsEnumType: type) 
     }
 }
 
-pub fn displayConst(
+fn displayConst(
     struct_field: std.builtin.Type.StructField,
     field_ptr: anytype,
 ) void {
@@ -612,7 +613,7 @@ pub fn displayConst(
     }
 }
 
-pub fn displayNull(comptime heading: [:0]const u8) void {
+fn displayNull(comptime heading: [:0]const u8) void {
     c_imgui.ImGui_PushIDPtr(@ptrCast(heading));
     defer c_imgui.ImGui_PopID();
 

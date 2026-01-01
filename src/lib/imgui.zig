@@ -1,7 +1,8 @@
+///! This module contains functions for integrating imgui into your game.
 pub const c = @cImport({
     @cInclude("dcimgui.h");
 });
-const sdl = @import("sdl").c;
+const sdl = @import("sdl.zig").c;
 const std = @import("std");
 
 const Backend = enum {

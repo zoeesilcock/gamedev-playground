@@ -1,3 +1,4 @@
+//! This module exposes SDL and some helper functions.
 const std = @import("std");
 pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});

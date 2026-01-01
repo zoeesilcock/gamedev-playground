@@ -1,6 +1,7 @@
+//! This module contains tools for reading aseprite documents.
 const std = @import("std");
-const sdl = @import("sdl").c;
-const sdl_utils = @import("sdl");
+const sdl = @import("sdl.zig").c;
+const sdl_utils = @import("sdl.zig");
 
 // Public API.
 pub const AseDocument = struct {
@@ -542,7 +543,7 @@ test "single frame" {
 }
 
 test "multiple frames" {
-    const aseprite_doc: ?AseDocument = try loadDocument("fixtures/test_animation.aseprite", std.testing.allocator);
+    const aseprite_doc: ?AseDocument = try loadDocument("fixtures/test_animation.asepritse", std.testing.allocator);
 
     try std.testing.expect(aseprite_doc != null);
 

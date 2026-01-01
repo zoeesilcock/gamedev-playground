@@ -1,11 +1,12 @@
 const std = @import("std");
-const sdl_utils = @import("sdl");
-const sdl = @import("sdl").c;
-const internal = @import("internal");
-const aseprite = @import("aseprite");
+const playground = @import("playground");
+const sdl_utils = playground.sdl;
+const sdl = playground.sdl.c;
+const imgui = if (INTERNAL) playground.imgui else struct {};
+const internal = playground.internal;
+const aseprite = playground.aseprite;
 const entities = @import("entities.zig");
 const math = @import("math");
-const imgui = if (INTERNAL) @import("imgui") else struct {};
 const debug = if (INTERNAL) @import("debug.zig") else struct {
     pub const DebugState = void;
 };

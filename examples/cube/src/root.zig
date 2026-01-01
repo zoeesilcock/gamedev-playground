@@ -1,8 +1,9 @@
 const std = @import("std");
-const sdl_utils = @import("sdl");
-const sdl = @import("sdl").c;
-const imgui = @import("imgui");
-const internal = @import("internal");
+const playground = @import("playground");
+const sdl_utils = playground.sdl;
+const sdl = playground.sdl.c;
+const imgui = playground.imgui;
+const internal = playground.internal;
 const math = @import("math");
 const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
 
