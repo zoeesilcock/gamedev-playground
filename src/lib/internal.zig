@@ -3,15 +3,8 @@
 const std = @import("std");
 const imgui = @import("imgui.zig").c;
 
-const MAX_FRAME_TIME_COUNT: u32 = 300;
-
-const FPSDisplayMode = enum {
-    None,
-    Number,
-    NumberAndGraph,
-};
-
-pub const FPSState = struct {
+/// This window displays a rolling average of frame times over the last 300 frames.
+pub const FPSWindow = struct {
     current_frame_index: u32,
     performance_frequency: u64,
     frame_times: [MAX_FRAME_TIME_COUNT]u64,
@@ -19,7 +12,15 @@ pub const FPSState = struct {
     display_mode: FPSDisplayMode,
     position: imgui.ImVec2,
 
-    pub fn init(self: *FPSState, frequency: u64) void {
+    const MAX_FRAME_TIME_COUNT: u32 = 300;
+
+    pub const FPSDisplayMode = enum {
+        None,
+        Number,
+        NumberAndGraph,
+    };
+
+    pub fn init(self: *FPSWindow, frequency: u64) void {
         self.current_frame_index = 0;
         self.performance_frequency = frequency;
         self.frame_times = [1]u64{0} ** MAX_FRAME_TIME_COUNT;
@@ -28,7 +29,8 @@ pub const FPSState = struct {
         self.position = imgui.ImVec2{ .x = 5, .y = 5 };
     }
 
-    pub fn toggleMode(self: *FPSState) void {
+    /// Cycle through the display modes, see `FPSWindow.FPSDisplayMode`.
+    pub fn cycleMode(self: *FPSWindow) void {
         var mode: u32 = @intFromEnum(self.display_mode) + 1;
         if (mode >= @typeInfo(FPSDisplayMode).@"enum".fields.len) {
             mode = 0;
@@ -36,7 +38,7 @@ pub const FPSState = struct {
         self.display_mode = @enumFromInt(mode);
     }
 
-    pub fn getPreviousFrameIndex(frame_index: u32) u32 {
+    fn getPreviousFrameIndex(frame_index: u32) u32 {
         var previous_frame_index: u32 = frame_index -% 1;
         if (previous_frame_index > MAX_FRAME_TIME_COUNT) {
             previous_frame_index = MAX_FRAME_TIME_COUNT - 1;
@@ -44,7 +46,7 @@ pub const FPSState = struct {
         return previous_frame_index;
     }
 
-    pub fn getFrameTime(self: *FPSState, frame_index: u32) f32 {
+    fn getFrameTime(self: *FPSWindow, frame_index: u32) f32 {
         var elapsed: u64 = 0;
         const previous_frame_index = getPreviousFrameIndex(frame_index);
 
@@ -57,7 +59,8 @@ pub const FPSState = struct {
         return @as(f32, @floatFromInt(elapsed)) / @as(f32, @floatFromInt(self.performance_frequency));
     }
 
-    pub fn addFrameTime(self: *FPSState, frame_time: u64) void {
+    /// Call this on every frame with the current time from `SDL_GetPerformanceCounter`.
+    pub fn addFrameTime(self: *FPSWindow, frame_time: u64) void {
         self.current_frame_index += 1;
         if (self.current_frame_index >= MAX_FRAME_TIME_COUNT) {
             self.current_frame_index = 0;
@@ -71,7 +74,8 @@ pub const FPSState = struct {
         self.average = 1 / (average / @as(f32, @floatFromInt(MAX_FRAME_TIME_COUNT)));
     }
 
-    pub fn draw(self: *FPSState) void {
+    /// Display the FPS window, call this function along with any other imgui drawing code.
+    pub fn draw(self: *FPSWindow) void {
         if (self.display_mode != .None) {
             imgui.ImGui_SetNextWindowPosEx(self.position, 0, imgui.ImVec2{ .x = 0, .y = 0 });
             imgui.ImGui_SetNextWindowSize(imgui.ImVec2{ .x = 300, .y = 160 }, 0);
@@ -79,7 +83,8 @@ pub const FPSState = struct {
             _ = imgui.ImGui_Begin(
                 "FPS",
                 null,
-                imgui.ImGuiWindowFlags_NoMove |
+                imgui.ImGuiWindowFlags_NoFocusOnAppearing |
+                    imgui.ImGuiWindowFlags_NoMove |
                     imgui.ImGuiWindowFlags_NoResize |
                     imgui.ImGuiWindowFlags_NoBackground |
                     imgui.ImGuiWindowFlags_NoTitleBar |
@@ -121,25 +126,25 @@ pub const FPSState = struct {
 
 /// This window is used to print out arbitrary data at any point. Use the `print` and `printStruct` functions to append
 /// to the output and then call the `draw` function in your imgui draw function.
-pub const DebugOutput = struct {
+pub const DebugOutputWindow = struct {
     arena: std.heap.ArenaAllocator,
     data: std.ArrayList([]const u8),
 
-    pub fn init(self: *DebugOutput) void {
+    pub fn init(self: *DebugOutputWindow) void {
         self.* = .{
             .arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
             .data = .empty,
         };
     }
 
-    pub fn deinit(self: *DebugOutput) void {
+    pub fn deinit(self: *DebugOutputWindow) void {
         self.data.clearRetainingCapacity();
         self.arena.deinit();
     }
 
-    /// Call this function along with any other imgui drawing code. The window will only be displayed if there is
-    /// any data in the array. Data is cleared and memory is freed after every draw.
-    pub fn draw(self: *DebugOutput) void {
+    /// Display the debug output window, call this function along with any other imgui drawing code. The window will
+    /// only be displayed if there is any data in the array. Data is cleared and memory is freed after every draw.
+    pub fn draw(self: *DebugOutputWindow) void {
         if (self.data.items.len > 0) {
             imgui.ImGui_SetNextWindowPosEx(
                 imgui.ImVec2{ .x = 350, .y = 30 },
@@ -162,7 +167,7 @@ pub const DebugOutput = struct {
 
     /// Print out a string using the familiar fmt + args approach.
     pub fn print(
-        self: *DebugOutput,
+        self: *DebugOutputWindow,
         comptime fmt: []const u8,
         args: anytype,
     ) void {
@@ -176,7 +181,7 @@ pub const DebugOutput = struct {
     /// anonymous struct containing specific values if you only want certain parts of a struct or parts of multiple
     /// different structs.
     pub fn printStruct(
-        self: *DebugOutput,
+        self: *DebugOutputWindow,
         message: []const u8,
         value: anytype,
     ) void {
@@ -191,7 +196,7 @@ pub const DebugOutput = struct {
     }
 
     fn writeValue(
-        self: *DebugOutput,
+        self: *DebugOutputWindow,
         value: anytype,
         writer: *std.Io.Writer,
     ) !void {
@@ -256,8 +261,8 @@ pub const DebugOutput = struct {
     }
 };
 
-test "DebugOutput can output a formatted string using the print function" {
-    var output: DebugOutput = undefined;
+test "DebugOutputWindow can output a formatted string using the print function" {
+    var output: DebugOutputWindow = undefined;
     output.init();
 
     output.print("This is a {s} that supports formatting: {d}", .{ "test", 0.5 });
@@ -269,8 +274,8 @@ test "DebugOutput can output a formatted string using the print function" {
     try std.testing.expectEqual(0, output.data.items.len);
 }
 
-test "DebugOutput can output a text representation of an arbitrary struct using the printStruct function" {
-    var output: DebugOutput = undefined;
+test "DebugOutputWindow can output a text representation of an arbitrary struct using the printStruct function" {
+    var output: DebugOutputWindow = undefined;
     output.init();
 
     output.printStruct("Title:", .{
@@ -293,8 +298,8 @@ test "DebugOutput can output a text representation of an arbitrary struct using 
     try std.testing.expectEqual(0, output.data.items.len);
 }
 
-test "DebugOutput.printStruct handles optional types" {
-    var output: DebugOutput = undefined;
+test "DebugOutputWindow.printStruct handles optional types" {
+    var output: DebugOutputWindow = undefined;
     output.init();
 
     const ExampleStruct = struct {

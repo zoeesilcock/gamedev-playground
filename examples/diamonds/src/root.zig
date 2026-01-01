@@ -26,7 +26,7 @@ const ColorComponentValue = entities.ColorComponentValue;
 const BlockType = entities.BlockType;
 const TitleType = entities.TitleType;
 const TweenedValue = entities.TweenedValue;
-const FPSState = internal.FPSState;
+const FPSWindow = internal.FPSWindow;
 const AsepriteAsset = aseprite.AsepriteAsset;
 
 const Vector2 = math.Vector2;
@@ -72,8 +72,8 @@ pub const State = struct {
 
     debug_allocator: *DebugAllocator = undefined,
     debug_state: *debug.DebugState = undefined,
-    debug_output: *internal.DebugOutput = undefined,
-    fps_state: ?*FPSState = null,
+    debug_output: *internal.DebugOutputWindow = undefined,
+    fps_window: ?*FPSWindow = null,
 
     window: *sdl.SDL_Window,
     renderer: *sdl.SDL_Renderer,
@@ -350,17 +350,19 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     _ = sdl.SDL_SetWindowSize(state.window, WINDOW_WIDTH, WINDOW_HEIGHT);
 
     if (INTERNAL) {
-        state.debug_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize debug allocator."));
+        state.debug_allocator =
+            (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize debug allocator."));
         state.debug_allocator.* = .init;
         state.debug_state = state.debug_allocator.allocator().create(debug.DebugState) catch @panic("Out of memory");
         state.debug_state.init() catch @panic("Failed to init DebugState");
 
-        state.debug_output = state.debug_allocator.allocator().create(internal.DebugOutput) catch @panic("Out of memory");
+        state.debug_output =
+            state.debug_allocator.allocator().create(internal.DebugOutputWindow) catch @panic("Out of memory");
         state.debug_output.init();
 
-        state.fps_state =
-            state.debug_allocator.allocator().create(FPSState) catch @panic("Failed to allocate FPS state");
-        state.fps_state.?.init(sdl.SDL_GetPerformanceFrequency());
+        state.fps_window =
+            state.debug_allocator.allocator().create(FPSWindow) catch @panic("Failed to allocate FPS state");
+        state.fps_window.?.init(sdl.SDL_GetPerformanceFrequency());
 
         debug.updateWindowSize(state);
     }
@@ -545,7 +547,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
     state.time = sdl.SDL_GetTicks();
 
     if (INTERNAL) {
-        state.fps_state.?.addFrameTime(sdl.SDL_GetPerformanceCounter());
+        state.fps_window.?.addFrameTime(sdl.SDL_GetPerformanceCounter());
         debug.recordMemoryUsage(state);
     }
 

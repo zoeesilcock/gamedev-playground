@@ -16,7 +16,7 @@ const Matrix4x4 = math.Matrix4x4;
 const X = math.X;
 const Y = math.Y;
 const Z = math.Z;
-const FPSState = internal.FPSState;
+const FPSWindow = internal.FPSWindow;
 const ScreenEffect = enum(u32) {
     None = 0,
     VerticalWave,
@@ -35,7 +35,7 @@ pub const State = struct {
     allocator: std.mem.Allocator,
     debug_allocator: *DebugAllocator = undefined,
 
-    fps_state: ?*FPSState = null,
+    fps_window: ?*FPSWindow = null,
     inspect_game_state: bool = false,
 
     window: *sdl.SDL_Window,
@@ -288,9 +288,9 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         };
         state.debug_allocator.* = .init;
 
-        state.fps_state =
-            state.debug_allocator.allocator().create(FPSState) catch @panic("Failed to allocate FPS state");
-        state.fps_state.?.init(sdl.SDL_GetPerformanceFrequency());
+        state.fps_window =
+            state.debug_allocator.allocator().create(FPSWindow) catch @panic("Failed to allocate FPS state");
+        state.fps_window.?.init(sdl.SDL_GetPerformanceFrequency());
     }
 
     const new_entity = state.entities.addOne(state.allocator) catch @panic("Failed to add entity");
@@ -375,7 +375,7 @@ pub export fn processInput(state_ptr: *anyopaque) bool {
                     _ = sdl.SDL_SetWindowFullscreen(state.window, state.fullscreen);
                 },
                 sdl.SDLK_F1 => {
-                    state.fps_state.?.toggleMode();
+                    state.fps_window.?.cycleMode();
                 },
                 sdl.SDLK_G => {
                     state.inspect_game_state = !state.inspect_game_state;
@@ -410,7 +410,7 @@ pub export fn tick(state_ptr: *anyopaque) void {
     state.time = new_time;
 
     if (INTERNAL) {
-        state.fps_state.?.addFrameTime(sdl.SDL_GetPerformanceCounter());
+        state.fps_window.?.addFrameTime(sdl.SDL_GetPerformanceCounter());
     }
 
     const test_entity = &state.entities.items[0];
@@ -524,7 +524,7 @@ pub export fn draw(state_ptr: *anyopaque) void {
 
         if (INTERNAL) {
             imgui.newFrame();
-            state.fps_state.?.draw();
+            state.fps_window.?.draw();
 
             if (state.inspect_game_state) {
                 imgui.c.ImGui_SetNextWindowPosEx(
