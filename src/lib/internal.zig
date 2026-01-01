@@ -1,8 +1,7 @@
-//! This module contains tools used in internal builds of your game.
-const std = @import("std");
-const imgui = @import("imgui.zig");
+//! Exposes tools used in internal builds, things like inspectors, editors and information overlays.
 
-const c_imgui = imgui.c;
+const std = @import("std");
+const imgui = @import("imgui.zig").c;
 
 const MAX_FRAME_TIME_COUNT: u32 = 300;
 
@@ -18,7 +17,7 @@ pub const FPSState = struct {
     frame_times: [MAX_FRAME_TIME_COUNT]u64,
     average: f32,
     display_mode: FPSDisplayMode,
-    position: c_imgui.ImVec2,
+    position: imgui.ImVec2,
 
     pub fn init(self: *FPSState, frequency: u64) void {
         self.current_frame_index = 0;
@@ -26,7 +25,7 @@ pub const FPSState = struct {
         self.frame_times = [1]u64{0} ** MAX_FRAME_TIME_COUNT;
         self.average = 0;
         self.display_mode = .Number;
-        self.position = c_imgui.ImVec2{ .x = 5, .y = 5 };
+        self.position = imgui.ImVec2{ .x = 5, .y = 5 };
     }
 
     pub fn toggleMode(self: *FPSState) void {
@@ -74,21 +73,21 @@ pub const FPSState = struct {
 
     pub fn draw(self: *FPSState) void {
         if (self.display_mode != .None) {
-            c_imgui.ImGui_SetNextWindowPosEx(self.position, 0, c_imgui.ImVec2{ .x = 0, .y = 0 });
-            c_imgui.ImGui_SetNextWindowSize(c_imgui.ImVec2{ .x = 300, .y = 160 }, 0);
+            imgui.ImGui_SetNextWindowPosEx(self.position, 0, imgui.ImVec2{ .x = 0, .y = 0 });
+            imgui.ImGui_SetNextWindowSize(imgui.ImVec2{ .x = 300, .y = 160 }, 0);
 
-            _ = c_imgui.ImGui_Begin(
+            _ = imgui.ImGui_Begin(
                 "FPS",
                 null,
-                c_imgui.ImGuiWindowFlags_NoMove |
-                    c_imgui.ImGuiWindowFlags_NoResize |
-                    c_imgui.ImGuiWindowFlags_NoBackground |
-                    c_imgui.ImGuiWindowFlags_NoTitleBar |
-                    c_imgui.ImGuiWindowFlags_NoMouseInputs,
+                imgui.ImGuiWindowFlags_NoMove |
+                    imgui.ImGuiWindowFlags_NoResize |
+                    imgui.ImGuiWindowFlags_NoBackground |
+                    imgui.ImGuiWindowFlags_NoTitleBar |
+                    imgui.ImGuiWindowFlags_NoMouseInputs,
             );
 
-            c_imgui.ImGui_TextColored(
-                c_imgui.ImVec4{ .x = 0, .y = 1, .z = 0, .w = 1 },
+            imgui.ImGui_TextColored(
+                imgui.ImVec4{ .x = 0, .y = 1, .z = 0, .w = 1 },
                 "FPS: %.0f",
                 self.average,
             );
@@ -102,7 +101,7 @@ pub const FPSState = struct {
                         max_value = timings[i];
                     }
                 }
-                c_imgui.ImGui_PlotHistogramEx(
+                imgui.ImGui_PlotHistogramEx(
                     "##FPS_Graph",
                     &timings,
                     timings.len,
@@ -110,12 +109,12 @@ pub const FPSState = struct {
                     "",
                     0,
                     max_value,
-                    c_imgui.ImVec2{ .x = 300, .y = 100 },
+                    imgui.ImVec2{ .x = 300, .y = 100 },
                     @sizeOf(f32),
                 );
             }
 
-            c_imgui.ImGui_End();
+            imgui.ImGui_End();
         }
     }
 };
@@ -142,18 +141,18 @@ pub const DebugOutput = struct {
     /// any data in the array. Data is cleared and memory is freed after every draw.
     pub fn draw(self: *DebugOutput) void {
         if (self.data.items.len > 0) {
-            imgui.c.ImGui_SetNextWindowPosEx(
-                imgui.c.ImVec2{ .x = 350, .y = 30 },
-                imgui.c.ImGuiCond_FirstUseEver,
-                imgui.c.ImVec2{ .x = 0, .y = 0 },
+            imgui.ImGui_SetNextWindowPosEx(
+                imgui.ImVec2{ .x = 350, .y = 30 },
+                imgui.ImGuiCond_FirstUseEver,
+                imgui.ImVec2{ .x = 0, .y = 0 },
             );
-            imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 300, .y = 540 }, imgui.c.ImGuiCond_FirstUseEver);
+            imgui.ImGui_SetNextWindowSize(imgui.ImVec2{ .x = 300, .y = 540 }, imgui.ImGuiCond_FirstUseEver);
 
-            _ = imgui.c.ImGui_Begin("Debug output", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
-            defer imgui.c.ImGui_End();
+            _ = imgui.ImGui_Begin("Debug output", null, imgui.ImGuiWindowFlags_NoFocusOnAppearing);
+            defer imgui.ImGui_End();
 
             for (self.data.items) |line| {
-                imgui.c.ImGui_TextWrapped("%s", @as([*:0]const u8, @ptrCast(line)));
+                imgui.ImGui_TextWrapped("%s", @as([*:0]const u8, @ptrCast(line)));
             }
         }
 
@@ -328,30 +327,34 @@ test "DebugOutput.printStruct handles optional types" {
     try std.testing.expectEqual(0, output.data.items.len);
 }
 
-const handleCustomTypesFn = ?*const fn (
+/// Allows you to generate custom imgui inputs for any types or fields. If you return true from this function the
+/// inspector won't generate it's own input for the field.
+pub const handleCustomTypesFn = ?*const fn (
     struct_field: std.builtin.Type.StructField,
     field_ptr: anytype,
 ) bool;
 
-pub fn inspectStructOptional(
+/// Generates imgui inputs for all fields on a struct.
+pub fn inspectStruct(
     struct_ptr: anytype,
     ignored_fields: []const []const u8,
     expand_sections: bool,
+    /// Function pointer which allows you to handle specific fields manually, see `handleCustomTypesFn`.
     optHandleCustomTypes: handleCustomTypesFn,
 ) void {
     switch (@typeInfo(@TypeOf(struct_ptr))) {
         .optional => {
             if (struct_ptr) |ptr| {
-                inspectStruct(ptr, ignored_fields, expand_sections, optHandleCustomTypes);
+                inspectStructInternal(ptr, ignored_fields, expand_sections, optHandleCustomTypes);
             }
         },
         else => {
-            inspectStruct(struct_ptr, ignored_fields, expand_sections, optHandleCustomTypes);
+            inspectStructInternal(struct_ptr, ignored_fields, expand_sections, optHandleCustomTypes);
         },
     }
 }
 
-pub fn inspectStruct(
+fn inspectStructInternal(
     struct_ptr: anytype,
     ignored_fields: []const []const u8,
     expand_sections: bool,
@@ -403,7 +406,7 @@ pub fn inspectStruct(
     }
 }
 
-pub fn inputStruct(
+fn inputStruct(
     struct_field: std.builtin.Type.StructField,
     field_ptr: anytype,
     ignored_fields: []const []const u8,
@@ -504,20 +507,20 @@ pub fn inputStruct(
     }
 }
 
-pub fn inputStructSection(
+fn inputStructSection(
     target: anytype,
     heading: ?[*:0]const u8,
     ignored_fields: []const []const u8,
     expand_sections: bool,
     optHandleCustomTypes: handleCustomTypesFn,
 ) void {
-    c_imgui.ImGui_PushIDPtr(@ptrCast(heading));
-    defer c_imgui.ImGui_PopID();
+    imgui.ImGui_PushIDPtr(@ptrCast(heading));
+    defer imgui.ImGui_PopID();
 
     const section_flags =
-        if (expand_sections) c_imgui.ImGuiTreeNodeFlags_DefaultOpen else c_imgui.ImGuiTreeNodeFlags_None;
-    if (c_imgui.ImGui_CollapsingHeaderBoolPtr(heading, null, section_flags)) {
-        c_imgui.ImGui_Indent();
+        if (expand_sections) imgui.ImGuiTreeNodeFlags_DefaultOpen else imgui.ImGuiTreeNodeFlags_None;
+    if (imgui.ImGui_CollapsingHeaderBoolPtr(heading, null, section_flags)) {
+        imgui.ImGui_Indent();
         switch (@typeInfo(@TypeOf(target))) {
             .pointer => |ptr_info| {
                 if (@typeInfo(ptr_info.child) != .@"opaque" and ptr_info.size == .one) {
@@ -528,45 +531,51 @@ pub fn inputStructSection(
                 inspectStruct(target, ignored_fields, expand_sections, optHandleCustomTypes);
             },
         }
-        c_imgui.ImGui_Unindent();
+        imgui.ImGui_Unindent();
     }
 }
 
+/// Generate an imgui checkbox based on a bool pointer.
 pub fn inputBool(heading: ?[*:0]const u8, value: *bool) void {
-    c_imgui.ImGui_PushIDPtr(value);
-    defer c_imgui.ImGui_PopID();
+    imgui.ImGui_PushIDPtr(value);
+    defer imgui.ImGui_PopID();
 
-    _ = c_imgui.ImGui_Checkbox(heading, value);
+    _ = imgui.ImGui_Checkbox(heading, value);
 }
 
+/// Generate an imgui input field based on a f32 pointer.
 pub fn inputF32(heading: ?[*:0]const u8, value: *f32) void {
-    c_imgui.ImGui_PushIDPtr(value);
-    defer c_imgui.ImGui_PopID();
+    imgui.ImGui_PushIDPtr(value);
+    defer imgui.ImGui_PopID();
 
-    _ = c_imgui.ImGui_InputFloatEx(heading, value, 0.1, 1, "%.2f", 0);
+    _ = imgui.ImGui_InputFloatEx(heading, value, 0.1, 1, "%.2f", 0);
 }
 
+/// Generate an imgui input field based on a u32 pointer.
 pub fn inputU32(heading: ?[*:0]const u8, value: *u32) void {
-    c_imgui.ImGui_PushIDPtr(value);
-    defer c_imgui.ImGui_PopID();
+    imgui.ImGui_PushIDPtr(value);
+    defer imgui.ImGui_PopID();
 
-    _ = c_imgui.ImGui_InputScalarEx(heading, c_imgui.ImGuiDataType_U32, @ptrCast(value), null, null, null, 0);
+    _ = imgui.ImGui_InputScalarEx(heading, imgui.ImGuiDataType_U32, @ptrCast(value), null, null, null, 0);
 }
 
+/// Generate an imgui input field based on a i32 pointer.
 pub fn inputI32(heading: ?[*:0]const u8, value: *u32) void {
-    c_imgui.ImGui_PushIDPtr(value);
-    defer c_imgui.ImGui_PopID();
+    imgui.ImGui_PushIDPtr(value);
+    defer imgui.ImGui_PopID();
 
-    _ = c_imgui.ImGui_InputScalarEx(heading, c_imgui.ImGuiDataType_I32, @ptrCast(value), null, null, null, 0);
+    _ = imgui.ImGui_InputScalarEx(heading, imgui.ImGuiDataType_I32, @ptrCast(value), null, null, null, 0);
 }
 
+/// Generate an imgui input field based on a u64 pointer.
 pub fn inputU64(heading: ?[*:0]const u8, value: *u64) void {
-    c_imgui.ImGui_PushIDPtr(value);
-    defer c_imgui.ImGui_PopID();
+    imgui.ImGui_PushIDPtr(value);
+    defer imgui.ImGui_PopID();
 
-    _ = c_imgui.ImGui_InputScalarEx(heading, c_imgui.ImGuiDataType_U64, @ptrCast(value), null, null, null, 0);
+    _ = imgui.ImGui_InputScalarEx(heading, imgui.ImGuiDataType_U64, @ptrCast(value), null, null, null, 0);
 }
 
+/// Generate an imgui dropdown field based on an enum pointer.
 pub fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
     const field_info = @typeInfo(@TypeOf(value.*));
     const count: u32 = field_info.@"enum".fields.len;
@@ -575,24 +584,25 @@ pub fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
         items[i] = enum_field.name;
     }
 
-    c_imgui.ImGui_PushIDPtr(value);
-    defer c_imgui.ImGui_PopID();
+    imgui.ImGui_PushIDPtr(value);
+    defer imgui.ImGui_PopID();
 
     var current_item: i32 = @intCast(@intFromEnum(value.*));
-    if (c_imgui.ImGui_ComboCharEx(heading, &current_item, &items, count, 0)) {
+    if (imgui.ImGui_ComboCharEx(heading, &current_item, &items, count, 0)) {
         value.* = @enumFromInt(current_item);
     }
 }
 
+/// Generate a set of imgui checkboxes based on a u32 pointer and an enum type which describes the flags.
 pub fn inputFlagsU32(heading: ?[*:0]const u8, value: *u32, FlagsEnumType: type) void {
-    if (imgui.c.ImGui_CollapsingHeaderBoolPtr(heading, null, imgui.c.ImGuiTreeNodeFlags_None)) {
+    if (imgui.ImGui_CollapsingHeaderBoolPtr(heading, null, imgui.ImGuiTreeNodeFlags_None)) {
         inline for (@typeInfo(FlagsEnumType).@"enum".fields) |flag| {
             var bool_value: bool = (value.* & flag.value) != 0;
 
-            c_imgui.ImGui_PushIDPtr(&bool_value);
-            defer c_imgui.ImGui_PopID();
+            imgui.ImGui_PushIDPtr(&bool_value);
+            defer imgui.ImGui_PopID();
 
-            if (c_imgui.ImGui_Checkbox(flag.name, &bool_value)) {
+            if (imgui.ImGui_Checkbox(flag.name, &bool_value)) {
                 value.* ^= flag.value;
             }
         }
@@ -605,17 +615,17 @@ fn displayConst(
 ) void {
     switch (@TypeOf(field_ptr.*)) {
         []const u8 => {
-            c_imgui.ImGui_LabelText(struct_field.name, field_ptr.ptr);
+            imgui.ImGui_LabelText(struct_field.name, field_ptr.ptr);
         },
         else => {
-            c_imgui.ImGui_LabelText(struct_field.name, "unknown const");
+            imgui.ImGui_LabelText(struct_field.name, "unknown const");
         },
     }
 }
 
 fn displayNull(comptime heading: [:0]const u8) void {
-    c_imgui.ImGui_PushIDPtr(@ptrCast(heading));
-    defer c_imgui.ImGui_PopID();
+    imgui.ImGui_PushIDPtr(@ptrCast(heading));
+    defer imgui.ImGui_PopID();
 
-    c_imgui.ImGui_LabelText(heading, "null");
+    imgui.ImGui_LabelText(heading, "null");
 }

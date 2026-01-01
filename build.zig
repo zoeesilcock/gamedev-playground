@@ -36,6 +36,19 @@ pub fn build(b: *std.Build) !void {
     const run_lib_tests = b.addRunArtifact(lib_tests);
     test_step.dependOn(&run_lib_tests.step);
 
+    // Docs.
+    const docs = b.addObject(.{
+        .name = "playground",
+        .root_module = playground_mod,
+    });
+    const install_docs = b.addInstallDirectory(.{
+        .source_dir = docs.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    });
+    const docs_step = b.step("docs", "Generate documentation");
+    docs_step.dependOn(&install_docs.step);
+
     // Imgui C bindings.
     generateImGuiBindingsStep(b, target, optimize);
 }

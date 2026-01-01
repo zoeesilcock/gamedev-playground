@@ -485,7 +485,7 @@ pub fn drawDebugUI(state: *State) void {
             _ = imgui.c.ImGui_Begin("Inspector", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
             defer imgui.c.ImGui_End();
 
-            internal.inspectStructOptional(state.getEntity(state.debug_state.selected_entity_id), &.{"is_in_use"}, true, &inputCustomTypes);
+            internal.inspectStruct(state.getEntity(state.debug_state.selected_entity_id), &.{"is_in_use"}, true, &inputCustomTypes);
         }
 
         {
@@ -742,6 +742,20 @@ fn drawEntityHighlight(
         if (entity.hasFlag(.is_ui)) {
             const title_position: Vector2 = entity.getUIPosition(state);
             entity_rect.position = title_position + offset;
+        }
+
+        if (entity.id.equals(state.debug_state.selected_entity_id)) {
+            state.debug_output.printStruct(
+                "Highlight rect:",
+                .{
+                    .rect = entity_rect,
+                    .color = color,
+                    .boo = true,
+                    .string = "hai",
+                    .array = @as([2][]const u8, .{ "foo", "bar" }),
+                },
+            );
+            state.debug_output.print("Hello :) (id: {d}, {d})", .{ entity.id.index, entity.id.generation });
         }
 
         _ = sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
