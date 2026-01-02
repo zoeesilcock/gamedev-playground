@@ -730,20 +730,6 @@ fn drawEntityHighlight(
             entity_rect.position = title_position + offset;
         }
 
-        if (entity.id.equals(state.debug_state.selected_entity_id)) {
-            state.debug_output.printStruct(
-                "Highlight rect:",
-                .{
-                    .rect = entity_rect,
-                    .color = color,
-                    .boo = true,
-                    .string = "hai",
-                    .array = @as([2][]const u8, .{ "foo", "bar" }),
-                },
-            );
-            state.debug_output.print("Hello :) (id: {d}, {d})", .{ entity.id.index, entity.id.generation });
-        }
-
         _ = sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
         _ = sdl.SDL_RenderRect(renderer, &entity_rect.scaled(scale).toSDL());
     }

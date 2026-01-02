@@ -200,7 +200,9 @@ pub const DebugOutputWindow = struct {
         value: anytype,
         writer: *std.Io.Writer,
     ) !void {
-        switch (@typeInfo(@TypeOf(value))) {
+        const type_info = @typeInfo(@TypeOf(value));
+
+        switch (type_info) {
             .@"struct" => |struct_info| {
                 inline for (struct_info.fields, 0..) |struct_field, i| {
                     try writer.print("{s}: ", .{struct_field.name});
@@ -245,6 +247,12 @@ pub const DebugOutputWindow = struct {
             .bool => {
                 try writer.print("{s}", .{if (value) "true" else "false"});
             },
+            .enum_literal => {
+                try writer.print("{s}", .{@tagName(value)});
+            },
+            .error_set => {
+                try writer.print("error.{s}", .{@errorName(value)});
+            },
             .vector => |vector_info| {
                 try writer.print("{{", .{});
                 for (0..vector_info.len) |i| {
@@ -256,7 +264,7 @@ pub const DebugOutputWindow = struct {
                 }
                 try writer.print("}}", .{});
             },
-            else => try writer.print("unhandled data type", .{}),
+            else => try writer.print("unhandled data type ({s})", .{@tagName(type_info)}),
         }
     }
 };
@@ -285,12 +293,14 @@ test "DebugOutputWindow can output a text representation of an arbitrary struct 
         .boolean = true,
         .array = @as([2][]const u8, .{ "foo", "bar" }),
         .nested = .{ .hello = "world", .number = 3 },
+        .enum_literal = .oh_hai,
+        .err = error.ExampleError,
     });
 
     try std.testing.expectEqual(1, output.data.items.len);
     try std.testing.expectEqualSlices(
         u8,
-        "Title: string: test, number: 0.5, vector: {1, 23}, boolean: true, array: [foo, bar], nested: hello: world, number: 3",
+        "Title: string: test, number: 0.5, vector: {1, 23}, boolean: true, array: [foo, bar], nested: hello: world, number: 3, enum_literal: oh_hai, err: error.ExampleError",
         output.data.items[0],
     );
 
