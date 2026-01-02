@@ -48,9 +48,6 @@ pub fn build(b: *std.Build) !void {
     });
     const docs_step = b.step("docs", "Generate documentation");
     docs_step.dependOn(&install_docs.step);
-
-    // Imgui C bindings.
-    generateImGuiBindingsStep(b, target, optimize);
 }
 
 pub fn buildExecutable(
@@ -179,75 +176,55 @@ fn createImGuiLib(
         .optimize = optimize,
         .preferred_linkage = .dynamic,
     })) |sdl_dep| {
-        const module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        });
-        const dcimgui_sdl = b.addLibrary(.{
-            .name = "dcimgui_sdl",
-            .root_module = module,
-        });
-
-        dcimgui_sdl.root_module.link_libcpp = true;
-        dcimgui_sdl.addIncludePath(sdl_dep.path("include"));
-        dcimgui_sdl.addIncludePath(imgui_dep.path("."));
-        dcimgui_sdl.addIncludePath(imgui_dep.path("backends/"));
-        dcimgui_sdl.addIncludePath(b.path("src/lib/dcimgui/"));
-
-        const imgui_sources: []const std.Build.LazyPath = &.{
-            b.path("src/lib/dcimgui/dcimgui.cpp"),
-            imgui_dep.path("imgui.cpp"),
-            imgui_dep.path("imgui_demo.cpp"),
-            imgui_dep.path("imgui_draw.cpp"),
-            imgui_dep.path("imgui_tables.cpp"),
-            imgui_dep.path("imgui_widgets.cpp"),
-            imgui_dep.path("backends/imgui_impl_sdlrenderer3.cpp"),
-            imgui_dep.path("backends/imgui_impl_sdlgpu3.cpp"),
-            imgui_dep.path("backends/imgui_impl_sdl3.cpp"),
-        };
-
-        for (IMGUI_C_DEFINES) |c_define| {
-            dcimgui_sdl.root_module.addCMacro(c_define[0], c_define[1]);
-        }
-
-        for (imgui_sources) |file| {
-            dcimgui_sdl.addCSourceFile(.{
-                .file = file,
-                .flags = IMGUI_C_FLAGS,
+        if (b.lazyDependency("dear_bindings", .{})) |dear_bindings_dep| {
+            const module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
             });
+            const dcimgui_sdl = b.addLibrary(.{
+                .name = "dcimgui_sdl",
+                .root_module = module,
+            });
+
+            dcimgui_sdl.root_module.link_libcpp = true;
+            dcimgui_sdl.addIncludePath(sdl_dep.path("include"));
+            dcimgui_sdl.addIncludePath(imgui_dep.path(""));
+            dcimgui_sdl.addIncludePath(imgui_dep.path("backends/"));
+            dcimgui_sdl.addIncludePath(dear_bindings_dep.path(""));
+            dcimgui_sdl.installHeadersDirectory(
+                dear_bindings_dep.path(""),
+                "",
+                .{ .include_extensions = &.{".h"} },
+            );
+
+            const imgui_sources: []const std.Build.LazyPath = &.{
+                dear_bindings_dep.path("dcimgui.cpp"),
+                imgui_dep.path("imgui.cpp"),
+                imgui_dep.path("imgui_demo.cpp"),
+                imgui_dep.path("imgui_draw.cpp"),
+                imgui_dep.path("imgui_tables.cpp"),
+                imgui_dep.path("imgui_widgets.cpp"),
+                imgui_dep.path("backends/imgui_impl_sdlrenderer3.cpp"),
+                imgui_dep.path("backends/imgui_impl_sdlgpu3.cpp"),
+                imgui_dep.path("backends/imgui_impl_sdl3.cpp"),
+            };
+
+            for (IMGUI_C_DEFINES) |c_define| {
+                dcimgui_sdl.root_module.addCMacro(c_define[0], c_define[1]);
+            }
+
+            for (imgui_sources) |file| {
+                dcimgui_sdl.addCSourceFile(.{
+                    .file = file,
+                    .flags = IMGUI_C_FLAGS,
+                });
+            }
+
+            b.installArtifact(dcimgui_sdl);
+
+            imgui_lib = dcimgui_sdl;
         }
-
-        b.installArtifact(dcimgui_sdl);
-
-        imgui_lib = dcimgui_sdl;
     }
 
     return imgui_lib;
-}
-
-fn generateImGuiBindingsStep(
-    b: *std.Build,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-) void {
-    if (b.lazyDependency("imgui", .{
-        .target = target,
-        .optimize = optimize,
-    })) |imgui_dep| {
-        if (b.lazyDependency("dear_bindings", .{
-            .target = target,
-            .optimize = optimize,
-        })) |dear_bindings_dep| {
-            const generate_bindings_step = b.step("generate_imgui_bindings", "Generate C-bindings for imgui");
-            const dear_bindings = b.addSystemCommand(&.{
-                "python",
-                "dear_bindings.py",
-            });
-            dear_bindings.setCwd(dear_bindings_dep.path("."));
-            dear_bindings.addArg("-o");
-            dear_bindings.addFileArg(b.path("src/lib/dcimgui/dcimgui"));
-            dear_bindings.addFileArg(imgui_dep.path("imgui.h"));
-            generate_bindings_step.dependOn(&dear_bindings.step);
-        }
-    }
 }

@@ -1,1 +1,1 @@
-cloc src/ ./build.zig --fullpath --not-match-d="(dcimgui)"
+cloc src/ ./build.zig

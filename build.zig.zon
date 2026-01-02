@@ -15,8 +15,8 @@
             .lazy = true,
         },
         .dear_bindings = .{
-            .url = "git+https://github.com/dearimgui/dear_bindings.git#DearBindings_v0.17_ImGui_v1.92.5-docking",
-            .hash = "N-V-__8AAMhuCABFyuSTmFllWg_gdOyeibwDUO2gfaPrP65l",
+            .url = "https://github.com/dearimgui/dear_bindings/releases/download/DearBindings_v0.17_ImGui_v1.92.5-docking/DearBindings_v0.17_ImGui_v1.92.5-docking.zip",
+            .hash = "N-V-__8AAC_u1wANr1W-wiiHVIvTrI5SLzW-kvQcBhVIEQ1z",
             .lazy = true,
         },
     },

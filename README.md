@@ -52,13 +52,6 @@ The project is built using the zig build system, use `zig build -h` for a list o
 ### Debugging
 Debugger configurations for VS Code are included in the main project as well as the example projects. When using VS Code it is also helpful to open the workspace file located in `.vscode/gamedev-playground.code-workspace` to get an overview of the full project.
 
-### Dear ImgGui
-We build [Dear ImGui](https://github.com/ocornut/imgui) from source and use [Dear Bindings](https://github.com/dearimgui/dear_bindings) to generate C bindings which we then use directly from Zig. It is important to regenerate the bindings whenever updating the Dear ImGui dependency. This can be done by running the following build step:
-
-```
-zig build generate_imgui_bindings
-```
-
 
 ## Usage
 To use this in your own projects you include it as a dependency and then integrate it into your `build.zig` and then import any modules you want to use. See the examples for more details.
