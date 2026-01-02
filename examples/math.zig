@@ -28,6 +28,10 @@ pub const Rect = struct {
         };
     }
 
+    pub fn rounded(self: *const Rect) Rect {
+        return Rect{ .position = @round(self.position), .size = @round(self.size) };
+    }
+
     pub fn toSDL(self: *const Rect) sdl.SDL_FRect {
         return sdl.SDL_FRect{
             .x = self.position[X],

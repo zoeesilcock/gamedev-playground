@@ -731,7 +731,7 @@ fn drawEntityHighlight(
         }
 
         _ = sdl.SDL_SetRenderDrawColor(renderer, color[R], color[G], color[B], color[A]);
-        _ = sdl.SDL_RenderRect(renderer, &entity_rect.scaled(scale).toSDL());
+        _ = sdl.SDL_RenderRect(renderer, &entity_rect.rounded().scaled(scale).toSDL());
     }
 }
 
