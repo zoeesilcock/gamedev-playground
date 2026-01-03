@@ -183,6 +183,16 @@ pub const State = struct {
         }
         return result;
     }
+
+    pub fn pausedDueToEditor(self: *State) bool {
+        var result: bool = false;
+
+        if (INTERNAL and self.debug_state.mode != .Play) {
+            result = true;
+        }
+
+        return result;
+    }
 };
 
 const Input = struct {
@@ -541,7 +551,7 @@ pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     state.delta_time_actual = sdl.SDL_GetTicks() - state.time;
-    if (!state.paused and !state.pausedDueToTitle()) {
+    if (!state.paused and !state.pausedDueToTitle() and !state.pausedDueToEditor()) {
         state.delta_time = state.delta_time_actual;
     } else {
         state.delta_time = 0;
@@ -567,7 +577,10 @@ pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
 
                 switch (title.title_type) {
                     .CLEARED => nextLevel(state),
-                    .DEATH => resetBall(state),
+                    .DEATH => {
+                        resetBall(state);
+                        state.showTitleForDuration(.GET_READY, 2000) catch @panic("Failed to show Get Ready title");
+                    },
                     .GAME_OVER => restart(state),
                     else => {},
                 }
@@ -885,6 +898,7 @@ fn spawnBall(state: *State) !void {
     state.ball_id = entity.id;
 
     resetBall(state);
+    state.showTitleForDuration(.GET_READY, 2000) catch @panic("Failed to show Get Ready title");
 }
 
 fn resetBall(state: *State) void {
@@ -893,8 +907,6 @@ fn resetBall(state: *State) void {
         ball.velocity[Y] = BALL_VELOCITY;
         ball.color = .Red;
         ball.startAnimation(state, "idle", &state.assets);
-
-        state.showTitleForDuration(.GET_READY, 2000) catch @panic("Failed to show Get Ready title");
     }
 }
 
@@ -960,6 +972,10 @@ fn isLevelCompleted(state: *State) bool {
                 break;
             }
         }
+    }
+
+    if (INTERNAL and state.debug_state.mode != .Play) {
+        result = false;
     }
 
     return result;
