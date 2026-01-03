@@ -785,6 +785,11 @@ pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
         if (INTERNAL) {
             debug.drawDebugOverlay(state);
             debug.drawDebugUI(state);
+
+            if (state.debug_state.should_restart) {
+                state.debug_state.should_restart = false;
+                restart(state);
+            }
         }
     }
     _ = sdl.SDL_RenderPresent(state.renderer);

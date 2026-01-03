@@ -64,6 +64,8 @@ pub const DebugState = struct {
     memory_usage_last_collected_at: u64,
     memory_usage_display: bool,
 
+    should_restart: bool,
+
     pub fn init(self: *DebugState) !void {
         self.* = .{
             .input = DebugInput{},
@@ -84,6 +86,8 @@ pub const DebugState = struct {
             .memory_usage_current_index = 0,
             .memory_usage_last_collected_at = 0,
             .memory_usage_display = false,
+
+            .should_restart = false,
         };
 
         _ = try std.fmt.bufPrintZ(&self.current_level_name, "level1", .{});
@@ -465,10 +469,7 @@ pub fn drawDebugUI(state: *State) void {
             }
 
             if (imgui.c.ImGui_ButtonEx("Restart", button_size)) {
-                imgui.c.ImGui_End();
-
-                game.restart(state);
-                return;
+                state.debug_state.should_restart = true;
             }
 
             internal.inputEnum("Mode", &state.debug_state.mode);
