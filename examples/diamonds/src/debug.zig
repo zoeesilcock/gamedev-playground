@@ -288,7 +288,7 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
         if (input.right_mouse_pressed and state.debug_state.mode == .Edit) {
             var should_add: bool = true;
 
-            if (hovered_entity.hasFlag(.has_block) and !hovered_entity.hasFlag(.player_controlled)) {
+            if (hovered_entity.hasFlag(.has_block)) {
                 should_add = block_color != hovered_entity.color or block_type != hovered_entity.block_type;
                 state.removeEntity(hovered_entity);
             }
@@ -319,14 +319,6 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
     }
 }
 
-fn entityContainsPoint(state: *State, mouse_position: Vector2, entity: *Entity) ?EntityId {
-    var result: ?EntityId = null;
-    if (entity.spriteContainsPoint(state, mouse_position)) {
-        result = entity.id;
-    }
-    return result;
-}
-
 fn getHoveredEntity(state: *State) ?EntityId {
     var result: ?EntityId = null;
     const mouse_position = state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale));
@@ -338,8 +330,8 @@ fn getHoveredEntity(state: *State) ?EntityId {
     var iter: EntityIterator = .init(&state.entities, .End);
     while (iter.prev()) |entity| {
         if (ui == null and entity.hasFlag(.is_ui) and entity.hasFlag(.has_sprite)) {
-            if (entityContainsPoint(state, mouse_position, entity)) |id| {
-                ui = id;
+            if (entity.spriteContainsPoint(state, mouse_position)) {
+                ui = entity.id;
                 break;
             }
         }
@@ -349,8 +341,8 @@ fn getHoveredEntity(state: *State) ?EntityId {
             }
         }
         if (sprite == null and entity.hasFlag(.has_sprite)) {
-            if (entityContainsPoint(state, mouse_position, entity)) |id| {
-                sprite = id;
+            if (entity.spriteContainsPoint(state, mouse_position)) {
+                sprite = entity.id;
             }
         }
     }
