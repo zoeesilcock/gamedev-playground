@@ -26,7 +26,9 @@ Double clicking on an entity will open it's sprite in Aseprite. This works parti
 * E: Toggle level editor mode.
 * S: Save level.
 * L: Load level.
-* Alt/Option + click: Grabs the color and/or type of the clicked element like an eye dropper tool.
+* Left click: selects the entity under the cursor.
+* Right click (in edit mode): Places the current type of block where the cursor is. If there is a block in that location then it will be replaced if it is a different block that what is being placed and removed if it is the same.
+* Alt/Option + left click: Grabs the color or block type of the clicked block like an eye dropper tool.
 
 
 ## Hot reloading

@@ -44,8 +44,8 @@ const WINDOW_WIDTH_ADDITIONAL = 300;
 
 pub const DebugState = struct {
     input: DebugInput,
-    mode: enum {
-        Select,
+    mode: enum(u8) {
+        Play,
         Edit,
     },
     show_sidebar: bool,
@@ -68,7 +68,7 @@ pub const DebugState = struct {
         self.* = .{
             .input = DebugInput{},
 
-            .mode = .Select,
+            .mode = .Play,
             .show_sidebar = true,
             .testing_level = false,
             .current_level_name = undefined,
@@ -112,11 +112,17 @@ const DebugInput = struct {
     left_mouse_last_time: u64 = 0,
     left_mouse_last_entity_id: ?EntityId = null,
 
+    right_mouse_down: bool = false,
+    right_mouse_pressed: bool = false,
+    right_mouse_last_time: u64 = 0,
+    right_mouse_last_entity_id: ?EntityId = null,
+
     mouse_position: Vector2 = @splat(0),
     alt_key_down: bool = false,
 
     pub fn reset(self: *DebugInput) void {
         self.left_mouse_pressed = false;
+        self.right_mouse_pressed = false;
     }
 };
 
@@ -156,7 +162,11 @@ pub fn processInputEvent(state: *State, event: sdl.SDL_Event) void {
                 }
             },
             sdl.SDLK_E => {
-                state.debug_state.mode = if (state.debug_state.mode == .Select) .Edit else .Select;
+                var next_mode: u32 = @intFromEnum(state.debug_state.mode) + 1;
+                if (next_mode > @typeInfo(@TypeOf(state.debug_state.mode)).@"enum".fields.len - 1) {
+                    next_mode = 0;
+                }
+                state.debug_state.mode = @enumFromInt(next_mode);
             },
             sdl.SDLK_S => {
                 saveLevel(state, state.debug_state.currentLevelName()) catch unreachable;
@@ -178,6 +188,10 @@ pub fn processInputEvent(state: *State, event: sdl.SDL_Event) void {
             1 => {
                 input.left_mouse_pressed = (input.left_mouse_down and !is_down);
                 input.left_mouse_down = is_down;
+            },
+            3 => {
+                input.right_mouse_pressed = (input.right_mouse_down and !is_down);
+                input.right_mouse_down = is_down;
             },
             else => {},
         }
@@ -246,39 +260,23 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
 
     if (state.getEntity(state.debug_state.hovered_entity_id)) |hovered_entity| {
         if (input.left_mouse_pressed) {
-            // Grab the color and type of the hovered entity when alt is held down.
             if (state.debug_state.input.alt_key_down) {
-                state.debug_state.current_block_type = hovered_entity.block_type;
-                state.debug_state.current_block_color = hovered_entity.color;
+                if (hovered_entity.hasFlag(.has_block)) {
+                    state.debug_state.current_block_type = hovered_entity.block_type;
+                    state.debug_state.current_block_color = hovered_entity.color;
+                }
             } else {
-                if (state.debug_state.mode == .Edit) {
-                    var should_add: bool = true;
-
-                    if (hovered_entity.hasFlag(.has_block) and !hovered_entity.hasFlag(.player_controlled)) {
-                        should_add = block_color != hovered_entity.color or block_type != hovered_entity.block_type;
-                        state.removeEntity(hovered_entity);
-                    }
-
-                    if (should_add) {
-                        const tiled_position = getTiledPosition(
-                            input.mouse_position / @as(Vector2, @splat(state.world_scale)),
-                            state.assets.getWall(block_color, block_type),
-                        );
-                        _ = game.addWall(state, block_color, block_type, tiled_position) catch undefined;
-                    }
+                if (hovered_entity.id.equals(state.debug_state.input.left_mouse_last_entity_id) and
+                    state.time - state.debug_state.input.left_mouse_last_time < DOUBLE_CLICK_THRESHOLD)
+                {
+                    openSprite(state, allocator, hovered_entity);
                 } else {
-                    if (hovered_entity.id.equals(state.debug_state.input.left_mouse_last_entity_id) and
-                        state.time - state.debug_state.input.left_mouse_last_time < DOUBLE_CLICK_THRESHOLD)
+                    if (!hovered_entity.id.equals(state.debug_state.selected_entity_id) or
+                        state.debug_state.selected_entity_id == null)
                     {
-                        openSprite(state, allocator, hovered_entity);
+                        state.debug_state.selected_entity_id = hovered_entity.id;
                     } else {
-                        if (!hovered_entity.id.equals(state.debug_state.selected_entity_id) or
-                            state.debug_state.selected_entity_id == null)
-                        {
-                            state.debug_state.selected_entity_id = hovered_entity.id;
-                        } else {
-                            state.debug_state.selected_entity_id = null;
-                        }
+                        state.debug_state.selected_entity_id = null;
                     }
                 }
             }
@@ -286,17 +284,37 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
             state.debug_state.input.left_mouse_last_time = state.time;
             state.debug_state.input.left_mouse_last_entity_id = state.debug_state.hovered_entity_id;
         }
-    } else {
-        if (input.left_mouse_pressed) {
-            if (state.debug_state.mode == .Edit) {
+
+        if (input.right_mouse_pressed and state.debug_state.mode == .Edit) {
+            var should_add: bool = true;
+
+            if (hovered_entity.hasFlag(.has_block) and !hovered_entity.hasFlag(.player_controlled)) {
+                should_add = block_color != hovered_entity.color or block_type != hovered_entity.block_type;
+                state.removeEntity(hovered_entity);
+            }
+
+            if (should_add) {
                 const tiled_position = getTiledPosition(
                     input.mouse_position / @as(Vector2, @splat(state.world_scale)),
                     state.assets.getWall(block_color, block_type),
                 );
                 _ = game.addWall(state, block_color, block_type, tiled_position) catch undefined;
-            } else {
-                state.debug_state.selected_entity_id = null;
             }
+
+            state.debug_state.input.right_mouse_last_time = state.time;
+            state.debug_state.input.right_mouse_last_entity_id = state.debug_state.hovered_entity_id;
+        }
+    } else {
+        if (input.left_mouse_pressed) {
+            state.debug_state.selected_entity_id = null;
+        }
+
+        if (input.right_mouse_pressed and state.debug_state.mode == .Edit) {
+            const tiled_position = getTiledPosition(
+                input.mouse_position / @as(Vector2, @splat(state.world_scale)),
+                state.assets.getWall(block_color, block_type),
+            );
+            _ = game.addWall(state, block_color, block_type, tiled_position) catch undefined;
         }
     }
 }
@@ -435,6 +453,11 @@ pub fn drawDebugUI(state: *State) void {
 
             if (imgui.c.ImGui_ButtonEx("Load", half_button_size)) {
                 game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
+                state.debug_state.mode = .Edit;
+
+                if (state.getEntity(state.current_title_id)) |current_title| {
+                    state.removeEntity(current_title);
+                }
             }
             imgui.c.ImGui_SameLineEx(0, 10);
             if (imgui.c.ImGui_ButtonEx("Save", half_button_size)) {
@@ -443,6 +466,7 @@ pub fn drawDebugUI(state: *State) void {
 
             if (imgui.c.ImGui_ButtonEx("Test level", button_size)) {
                 state.debug_state.testing_level = true;
+                state.debug_state.mode = .Play;
                 state.paused = false;
 
                 game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
