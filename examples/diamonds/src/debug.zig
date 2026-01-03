@@ -444,7 +444,7 @@ pub fn drawDebugUI(state: *State) void {
             );
 
             if (imgui.c.ImGui_ButtonEx("Load", half_button_size)) {
-                game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
+                game.loadLevel(state, state.debug_state.currentLevelName()) catch undefined;
                 state.debug_state.mode = .Edit;
 
                 if (state.getEntity(state.current_title_id)) |current_title| {
@@ -461,7 +461,7 @@ pub fn drawDebugUI(state: *State) void {
                 state.debug_state.mode = .Play;
                 state.paused = false;
 
-                game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
+                game.loadLevel(state, state.debug_state.currentLevelName()) catch undefined;
             }
 
             if (imgui.c.ImGui_ButtonEx("Restart", button_size)) {

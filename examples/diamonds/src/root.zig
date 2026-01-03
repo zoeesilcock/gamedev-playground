@@ -739,7 +739,7 @@ pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
             if (!state.debug_state.testing_level) {
                 state.showTitleForDuration(.CLEARED, 2000) catch @panic("Failed to show Cleared title");
             } else if (state.debug_state.testing_level) {
-                loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
+                loadLevel(state, state.debug_state.currentLevelName()) catch undefined;
             }
         }
     }
