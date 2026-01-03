@@ -146,7 +146,7 @@ pub const State = struct {
         entity.* = .{};
         entity.is_in_use = true;
         entity.id = .{
-            .index = self.next_free_entity_index,
+            .index = entity_index,
             .generation = previous_generation + 1,
         };
         self.next_free_entity_index = entity_index + 1;
