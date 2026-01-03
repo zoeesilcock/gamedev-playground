@@ -56,7 +56,7 @@ pub fn build(b: *std.Build) !void {
         const exe = gamedev_playground.buildExecutable(
             playground_dep.builder,
             b,
-            "diamonds",
+            "cube",
             build_options,
             target,
             optimize,
