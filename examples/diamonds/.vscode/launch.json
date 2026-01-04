@@ -24,5 +24,14 @@
             "preLaunchTask": "build",
             "MIMode": "lldb",
         },
+        {
+            "name": "Debug (Linux)",
+            "type": "lldb-dap",
+            "request": "launch",
+            "program": "${workspaceFolder}/zig-out/bin/${workspaceFolderBasename}",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build",
+        },
     ],
 }
