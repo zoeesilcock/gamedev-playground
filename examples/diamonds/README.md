@@ -4,7 +4,8 @@ This example is inspired by the classic game [Diamonds](https://en.wikipedia.org
 
 ![Playground screenshot](screenshot.png)
 
-### Controls
+
+## Controls
 * Left arrow: Move the ball to the left.
 * Right arrow: Move the ball to the right.
 * P: Toggle pause.

@@ -4,7 +4,7 @@ This example uses the SDL3 GPU API to render a cube.
 
 ![Playground screenshot](screenshot.png)
 
-### Controls
+## Controls
 * P: Toggle pause.
 * F: Toggle fullscreen.
 

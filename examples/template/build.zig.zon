@@ -1,0 +1,16 @@
+.{
+    .name = .template_example,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.15.2",
+    .fingerprint = 0x3d54e0a673bba291,
+    .dependencies = .{
+        .gamedev_playground = .{
+            .path = "../../",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
