@@ -52,10 +52,6 @@ The project is built using the zig build system, use `zig build -h` for a list o
 ### Debugging
 Debugger configurations for VS Code are included in the main project as well as the example projects, it will prompt to install the required extension if you don't have it. When using VS Code it is also helpful to open the workspace file located in `.vscode/gamedev-playground.code-workspace` to get an overview of the full project.
 
-
-## Usage
-To use this in your own projects you include it as a dependency and then integrate it into your `build.zig` and then import any modules you want to use. See the examples for more details.
-
 ### Documentation
 The documentation is generated using the zig autodoc system. It can be generated locally or [viewed online](https://zoeesilcock.github.io/gamedev-playground/).
 
@@ -65,10 +61,16 @@ zig build docs
 python -m http.server -b 127.0.0.1 8000 -d zig-out/docs/
 ```
 
-### Build
-Building the runtime executable in a different project works by importing the dependency in the `build.zig` file and using the `buildExecutable` function to create the runtime executable which can then be installed using `installArtifact`.
 
-### Modules
+## Usage
+To use this in your own projects you include it as a dependency, integrate it into your `build.zig` file and then implement a library which follows the API expected by the main executable. See the [documentation](https://zoeesilcock.github.io/gamedev-playground/), and the examples for more details.
+
+### Add dependency
+```
+zig fetch --save git+https://github.com/zoeesilcock/gamedev-playground.git
+```
+
+### Exposed modules
 * sdl - exposes the SDL C API.
 * imgui - exposes the ImGui C API and backend integrations for the SDL3 Renderer and SDL3 GPU APIs.
 * internal - exposes tools used to generate editors and tools for internal builds.
