@@ -3,7 +3,7 @@ const playground = @import("playground");
 const sdl = playground.sdl.c;
 const GameLib = playground.GameLib;
 
-const DEBUG = @import("builtin").mode == std.builtin.OptimizeMode.Debug;
+const INTERNAL: bool = @import("build_options").internal;
 const PLATFORM = @import("builtin").os.tag;
 const LIB_BASE_NAME = @import("build_options").lib_base_name;
 
@@ -15,10 +15,10 @@ const LIB_NAME =
         "lib" ++ LIB_BASE_NAME ++ ".dylib"
     else
         "lib" ++ LIB_BASE_NAME ++ ".so";
-const LIB_NAME_RUNTIME = if (PLATFORM == .windows and DEBUG) LIB_BASE_NAME ++ "_temp.dll" else LIB_NAME;
+const LIB_NAME_RUNTIME = if (PLATFORM == .windows and INTERNAL) LIB_BASE_NAME ++ "_temp.dll" else LIB_NAME;
 
-const WINDOW_WIDTH = if (DEBUG) 800 else 1600;
-const WINDOW_HEIGHT = if (DEBUG) 600 else 1200;
+const WINDOW_WIDTH = if (INTERNAL) 800 else 1600;
+const WINDOW_HEIGHT = if (INTERNAL) 600 else 1200;
 const WINDOW_DECORATIONS_WIDTH = if (PLATFORM == .windows) 0 else 0;
 const WINDOW_DECORATIONS_HEIGHT = if (PLATFORM == .windows) 31 else 0;
 const TARGET_FPS = 120;
@@ -44,7 +44,7 @@ pub fn main() !void {
         @panic("Failed to create window.");
     }
 
-    if (DEBUG) {
+    if (INTERNAL) {
         var num_displays: i32 = 0;
         const displays = sdl.SDL_GetDisplays(&num_displays);
         if (num_displays > 0) {
@@ -64,7 +64,7 @@ pub fn main() !void {
 
     const state = game.init(WINDOW_WIDTH, WINDOW_HEIGHT, window.?);
 
-    if (DEBUG) {
+    if (INTERNAL) {
         initChangeTimes(allocator);
     }
 
@@ -73,7 +73,7 @@ pub fn main() !void {
     while (true) {
         frame_start_time = sdl.SDL_GetTicks();
 
-        if (DEBUG) {
+        if (INTERNAL) {
             checkForChanges(state, allocator);
         }
 
@@ -86,7 +86,7 @@ pub fn main() !void {
 
         frame_elapsed_time = sdl.SDL_GetTicks() - frame_start_time;
 
-        if (!DEBUG) {
+        if (!INTERNAL) {
             if (frame_elapsed_time < TARGET_FRAME_TIME) {
                 sdl.SDL_Delay(@intFromFloat(TARGET_FRAME_TIME - @as(f32, @floatFromInt(frame_elapsed_time))));
             }
@@ -98,7 +98,7 @@ pub fn main() !void {
     sdl.SDL_DestroyWindow(window);
     sdl.SDL_Quit();
 
-    if (DEBUG) {
+    if (INTERNAL) {
         _ = debug_allocator.detectLeaks();
     }
 }
@@ -172,7 +172,7 @@ fn unloadDll() !void {
 fn loadDll() !void {
     if (opt_dyn_lib != null) return error.AlreadyLoaded;
 
-    if (DEBUG and PLATFORM == .windows) {
+    if (INTERNAL and PLATFORM == .windows) {
         var output = try std.fs.cwd().openDir(LIB_DIRECTORY, .{});
         try output.copyFile(LIB_NAME, output, LIB_NAME_RUNTIME, .{});
     }
