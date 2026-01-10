@@ -39,11 +39,9 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
     game_allocator.* = .init;
 
-    var allocator = game_allocator.allocator();
-
-    var state: *State = allocator.create(State) catch @panic("Out of memory");
+    var state: *State = game_allocator.allocator().create(State) catch @panic("Out of memory");
     state.* = .{
-        .allocator = allocator,
+        .allocator = game_allocator.allocator(),
         .game_allocator = game_allocator,
 
         .window = window,
@@ -55,6 +53,8 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     };
 
     if (INTERNAL) {
+        imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
+
         state.debug_allocator =
             (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize debug allocator."));
         state.debug_allocator.* = .init;
@@ -68,28 +68,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         state.fps_window.init(sdl.SDL_GetPerformanceFrequency());
     }
 
-    if (INTERNAL) {
-        imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
-    }
-
     return state;
-}
-
-pub fn restart(state: *State) void {
-    deinit(state);
-
-    state.* = @as(
-        *State,
-        @ptrCast(
-            @alignCast(
-                init(
-                    state.window_width,
-                    state.window_height,
-                    state.window,
-                ),
-            ),
-        ),
-    ).*;
 }
 
 pub export fn deinit(state_ptr: GameLib.GameStatePtr) void {
@@ -174,10 +153,12 @@ pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
         _ = sdl.SDL_SetRenderDrawColor(state.renderer, 0, 0, 0, 255);
         _ = sdl.SDL_RenderClear(state.renderer);
 
+        // Draw your game world here.
         drawGame(state);
 
         if (INTERNAL) {
             imgui.newFrame();
+            // Draw your internal UI and visualizations here.
             drawInternalUI(state);
             imgui.render(state.renderer);
         }
@@ -186,8 +167,6 @@ pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
 }
 
 fn drawGame(state: *State) void {
-    // Draw your game world here.
-
     if (state.space_is_down) {
         _ = sdl.SDL_SetRenderDrawColor(state.renderer, 0, 127, 0, 255);
         _ = sdl.SDL_RenderClear(state.renderer);
