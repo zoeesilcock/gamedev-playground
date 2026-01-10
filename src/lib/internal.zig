@@ -129,11 +129,15 @@ pub const FPSWindow = struct {
 pub const DebugOutputWindow = struct {
     arena: std.heap.ArenaAllocator,
     data: std.ArrayList([]const u8),
+    size: imgui.ImVec2,
+    position: imgui.ImVec2,
 
     pub fn init(self: *DebugOutputWindow) void {
         self.* = .{
             .arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
             .data = .empty,
+            .size = .{ .x = 300, .y = 50 },
+            .position = .{ .x = 10, .y = 40 },
         };
     }
 
@@ -147,11 +151,11 @@ pub const DebugOutputWindow = struct {
     pub fn draw(self: *DebugOutputWindow) void {
         if (self.data.items.len > 0) {
             imgui.ImGui_SetNextWindowPosEx(
-                imgui.ImVec2{ .x = 350, .y = 30 },
+                self.position,
                 imgui.ImGuiCond_FirstUseEver,
                 imgui.ImVec2{ .x = 0, .y = 0 },
             );
-            imgui.ImGui_SetNextWindowSize(imgui.ImVec2{ .x = 300, .y = 540 }, imgui.ImGuiCond_FirstUseEver);
+            imgui.ImGui_SetNextWindowSize(self.size, imgui.ImGuiCond_FirstUseEver);
 
             _ = imgui.ImGui_Begin("Debug output", null, imgui.ImGuiWindowFlags_NoFocusOnAppearing);
             defer imgui.ImGui_End();
