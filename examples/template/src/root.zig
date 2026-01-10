@@ -22,7 +22,6 @@ pub const State = struct {
 
     window: *sdl.SDL_Window,
     renderer: *sdl.SDL_Renderer,
-
     window_width: u32,
     window_height: u32,
 
@@ -32,7 +31,7 @@ pub const State = struct {
     // Internal.
     debug_allocator: *DebugAllocator = undefined,
     debug_output: *internal.DebugOutputWindow = undefined,
-    fps_window: ?*internal.FPSWindow = null,
+    fps_window: *internal.FPSWindow = undefined,
 };
 
 pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) GameLib.GameStatePtr {
@@ -49,7 +48,6 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
 
         .window = window,
         .renderer = sdl_utils.panicIfNull(sdl.SDL_CreateRenderer(window, null), "Failed to create renderer.").?,
-
         .window_width = window_width,
         .window_height = window_height,
 
@@ -67,7 +65,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
 
         state.fps_window =
             state.debug_allocator.allocator().create(internal.FPSWindow) catch @panic("Failed to allocate FPS state");
-        state.fps_window.?.init(sdl.SDL_GetPerformanceFrequency());
+        state.fps_window.init(sdl.SDL_GetPerformanceFrequency());
     }
 
     if (INTERNAL) {
@@ -127,8 +125,7 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
     var continue_running: bool = true;
     var event: sdl.SDL_Event = undefined;
     while (sdl.SDL_PollEvent(&event)) {
-        const event_used = if (INTERNAL) imgui.processEvent(&event) else false;
-        if (event_used) {
+        if (INTERNAL and imgui.processEvent(&event)) {
             continue;
         }
 
@@ -139,10 +136,13 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
             break;
         }
 
-        // Game input.
         if (event.type == sdl.SDL_EVENT_KEY_DOWN or event.type == sdl.SDL_EVENT_KEY_UP) {
             const is_down = event.type == sdl.SDL_EVENT_KEY_DOWN;
             switch (event.key.key) {
+                sdl.SDLK_F1 => {
+                    state.fps_window.cycleMode();
+                },
+                // Process your game input here.
                 sdl.SDLK_SPACE => {
                     state.space_is_down = is_down;
                 },
@@ -156,7 +156,12 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
 
 pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
-    _ = state;
+
+    if (INTERNAL) {
+        state.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());
+
+        state.debug_output.print("Hello world! Space is down: {s}", .{if (state.space_is_down) "true" else "false"});
+    }
 
     // Update your game state here.
 }
@@ -173,7 +178,7 @@ pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
 
         if (INTERNAL) {
             imgui.newFrame();
-            drawInspector(state);
+            drawInternalUI(state);
             imgui.render(state.renderer);
         }
     }
@@ -181,22 +186,30 @@ pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
 }
 
 fn drawGame(state: *State) void {
+    // Draw your game world here.
+
     if (state.space_is_down) {
         _ = sdl.SDL_SetRenderDrawColor(state.renderer, 0, 127, 0, 255);
         _ = sdl.SDL_RenderClear(state.renderer);
     }
 }
 
-fn drawInspector(state: *State) void {
-    imgui.c.ImGui_SetNextWindowPosEx(
-        imgui.c.ImVec2{ .x = 350, .y = 30 },
-        imgui.c.ImGuiCond_FirstUseEver,
-        imgui.c.ImVec2{ .x = 0, .y = 0 },
-    );
-    imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 300, .y = 540 }, imgui.c.ImGuiCond_FirstUseEver);
+fn drawInternalUI(state: *State) void {
+    state.fps_window.draw();
+    state.debug_output.draw();
 
-    _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
-    defer imgui.c.ImGui_End();
+    // Game state inspector
+    {
+        imgui.c.ImGui_SetNextWindowPosEx(
+            imgui.c.ImVec2{ .x = 10, .y = 100 },
+            imgui.c.ImGuiCond_FirstUseEver,
+            imgui.c.ImVec2{ .x = 0, .y = 0 },
+        );
+        imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 300, .y = 400 }, imgui.c.ImGuiCond_FirstUseEver);
 
-    internal.inspectStruct(state, &.{}, false, null);
+        _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
+        defer imgui.c.ImGui_End();
+
+        internal.inspectStruct(state, &.{}, false, null);
+    }
 }
