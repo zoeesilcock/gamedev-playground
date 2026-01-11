@@ -1,8 +1,6 @@
 const std = @import("std");
 const playground = @import("playground");
-const sdl_utils = playground.sdl;
 const sdl = playground.sdl.c;
-const internal = playground.internal;
 const imgui = if (INTERNAL) playground.imgui else struct {};
 
 // Build options.
@@ -16,7 +14,7 @@ const DebugAllocator = std.heap.DebugAllocator(.{
     .never_unmap = INTERNAL,
 });
 
-pub const State = struct {
+const State = struct {
     game_allocator: *DebugAllocator,
     allocator: std.mem.Allocator,
 
@@ -28,10 +26,12 @@ pub const State = struct {
     // Input.
     space_is_down: bool,
 
-    // Internal.
-    debug_allocator: *DebugAllocator = undefined,
-    debug_output: *internal.DebugOutputWindow = undefined,
-    fps_window: *internal.FPSWindow = undefined,
+    internal: if (INTERNAL) struct {
+        debug_allocator: *DebugAllocator = undefined,
+        allocator: std.mem.Allocator = undefined,
+        output: *playground.internal.DebugOutputWindow = undefined,
+        fps_window: *playground.internal.FPSWindow = undefined,
+    } else struct {} = undefined,
 };
 
 pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) GameLib.GameStatePtr {
@@ -39,13 +39,13 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
     game_allocator.* = .init;
 
-    var state: *State = game_allocator.allocator().create(State) catch @panic("Out of memory");
+    var state: *State = game_allocator.allocator().create(State) catch @panic("Out of memory.");
     state.* = .{
         .allocator = game_allocator.allocator(),
         .game_allocator = game_allocator,
 
         .window = window,
-        .renderer = sdl_utils.panicIfNull(sdl.SDL_CreateRenderer(window, null), "Failed to create renderer.").?,
+        .renderer = playground.sdl.panicIfNull(sdl.SDL_CreateRenderer(window, null), "Failed to create renderer.").?,
         .window_width = window_width,
         .window_height = window_height,
 
@@ -55,17 +55,18 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     if (INTERNAL) {
         imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
 
-        state.debug_allocator =
+        state.internal.debug_allocator =
             (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize debug allocator."));
-        state.debug_allocator.* = .init;
+        state.internal.debug_allocator.* = .init;
+        state.internal.allocator = state.internal.debug_allocator.allocator();
 
-        state.debug_output =
-            state.debug_allocator.allocator().create(internal.DebugOutputWindow) catch @panic("Out of memory");
-        state.debug_output.init();
+        state.internal.output =
+            state.internal.allocator.create(playground.internal.DebugOutputWindow) catch @panic("Out of memory.");
+        state.internal.output.init();
 
-        state.fps_window =
-            state.debug_allocator.allocator().create(internal.FPSWindow) catch @panic("Failed to allocate FPS state");
-        state.fps_window.init(sdl.SDL_GetPerformanceFrequency());
+        state.internal.fps_window =
+            state.internal.allocator.create(playground.internal.FPSWindow) catch @panic("Failed to allocate FPS state.");
+        state.internal.fps_window.init(sdl.SDL_GetPerformanceFrequency());
     }
 
     return state;
@@ -119,7 +120,9 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
             const is_down = event.type == sdl.SDL_EVENT_KEY_DOWN;
             switch (event.key.key) {
                 sdl.SDLK_F1 => {
-                    state.fps_window.cycleMode();
+                    if (INTERNAL) {
+                        state.internal.fps_window.cycleMode();
+                    }
                 },
                 // Process your game input here.
                 sdl.SDLK_SPACE => {
@@ -137,9 +140,11 @@ pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     if (INTERNAL) {
-        state.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());
+        state.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());
 
-        state.debug_output.print("Hello world! Space is down: {s}", .{if (state.space_is_down) "true" else "false"});
+        state.internal.output.print("Hello world! Space is down: {s}", .{
+            if (state.space_is_down) "true" else "false",
+        });
     }
 
     // Update your game state here.
@@ -174,8 +179,8 @@ fn drawGame(state: *State) void {
 }
 
 fn drawInternalUI(state: *State) void {
-    state.fps_window.draw();
-    state.debug_output.draw();
+    state.internal.fps_window.draw();
+    state.internal.output.draw();
 
     // Game state inspector
     {
@@ -189,6 +194,6 @@ fn drawInternalUI(state: *State) void {
         _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
         defer imgui.c.ImGui_End();
 
-        internal.inspectStruct(state, &.{}, false, null);
+        playground.internal.inspectStruct(state, &.{}, false, null);
     }
 }

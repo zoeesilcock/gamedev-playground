@@ -16,6 +16,7 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
+    playground_mod.addOptions("build_options", build_options);
     if (getSDLIncludePath(b, target, optimize)) |sdl_include_path| {
         playground_mod.addIncludePath(sdl_include_path);
     }

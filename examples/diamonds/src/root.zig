@@ -2,14 +2,11 @@ const std = @import("std");
 const playground = @import("playground");
 const sdl_utils = playground.sdl;
 const sdl = playground.sdl.c;
-const imgui = if (INTERNAL) playground.imgui else struct {};
-const internal = playground.internal;
 const aseprite = playground.aseprite;
 const entities = @import("entities.zig");
 const math = @import("math");
-const debug = if (INTERNAL) @import("debug.zig") else struct {
-    pub const DebugState = void;
-};
+const imgui = if (INTERNAL) playground.imgui else struct {};
+const internal = if (INTERNAL) @import("internal.zig") else struct {};
 
 const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
 pub const std_options: std.Options = .{
@@ -27,7 +24,6 @@ const ColorComponentValue = entities.ColorComponentValue;
 const BlockType = entities.BlockType;
 const TitleType = entities.TitleType;
 const TweenedValue = entities.TweenedValue;
-const FPSWindow = internal.FPSWindow;
 const AsepriteAsset = aseprite.AsepriteAsset;
 
 const Vector2 = math.Vector2;
@@ -41,7 +37,7 @@ const G = math.G;
 const B = math.B;
 const A = math.A;
 
-const DebugAllocator = std.heap.DebugAllocator(.{
+pub const DebugAllocator = std.heap.DebugAllocator(.{
     .enable_memory_limit = true,
     .retain_metadata = INTERNAL,
     .never_unmap = INTERNAL,
@@ -70,11 +66,6 @@ const LEVELS: []const []const u8 = &.{
 pub const State = struct {
     game_allocator: *DebugAllocator,
     allocator: std.mem.Allocator,
-
-    debug_allocator: *DebugAllocator = undefined,
-    debug_state: *debug.DebugState = undefined,
-    debug_output: *internal.DebugOutputWindow = undefined,
-    fps_window: ?*FPSWindow = null,
 
     window: *sdl.SDL_Window,
     renderer: *sdl.SDL_Renderer,
@@ -109,6 +100,8 @@ pub const State = struct {
 
     ball_id: ?EntityId,
     current_title_id: ?EntityId,
+
+    internal: if (INTERNAL) *internal.InternalState else struct {} = undefined,
 
     pub fn deltaTime(self: *State) f32 {
         return @as(f32, @floatFromInt(self.delta_time)) / 1000;
@@ -187,7 +180,7 @@ pub const State = struct {
     pub fn pausedDueToEditor(self: *State) bool {
         var result: bool = false;
 
-        if (INTERNAL and self.debug_state.mode != .Play) {
+        if (INTERNAL and self.internal.mode != .Play) {
             result = true;
         }
 
@@ -361,21 +354,8 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     _ = sdl.SDL_SetWindowSize(state.window, WINDOW_WIDTH, WINDOW_HEIGHT);
 
     if (INTERNAL) {
-        state.debug_allocator =
-            (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize debug allocator."));
-        state.debug_allocator.* = .init;
-        state.debug_state = state.debug_allocator.allocator().create(debug.DebugState) catch @panic("Out of memory");
-        state.debug_state.init() catch @panic("Failed to init DebugState");
-
-        state.debug_output =
-            state.debug_allocator.allocator().create(internal.DebugOutputWindow) catch @panic("Out of memory");
-        state.debug_output.init();
-
-        state.fps_window =
-            state.debug_allocator.allocator().create(FPSWindow) catch @panic("Failed to allocate FPS state");
-        state.fps_window.?.init(sdl.SDL_GetPerformanceFrequency());
-
-        debug.updateWindowSize(state);
+        state.internal = internal.InternalState.init(backing_allocator) catch @panic("Failed to init internal state.");
+        internal.updateWindowSize(state);
     }
 
     loadAssets(state);
@@ -414,7 +394,7 @@ pub export fn deinit(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     if (INTERNAL) {
-        debug.resetWindowPosition(state);
+        internal.resetWindowPosition(state);
         imgui.deinit();
     }
 
@@ -484,7 +464,7 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     if (INTERNAL) {
-        state.debug_state.input.reset();
+        state.internal.input.reset();
     }
 
     var continue_running: bool = true;
@@ -501,7 +481,7 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
         }
 
         if (INTERNAL) {
-            debug.processInputEvent(state, event);
+            internal.processInputEvent(state, event);
         }
 
         // Game input.
@@ -541,7 +521,7 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
     }
 
     if (INTERNAL) {
-        debug.handleInput(state, state.debug_allocator.allocator());
+        internal.handleInput(state, state.internal.allocator);
     }
 
     return continue_running;
@@ -559,8 +539,8 @@ pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
     state.time = sdl.SDL_GetTicks();
 
     if (INTERNAL) {
-        state.fps_window.?.addFrameTime(sdl.SDL_GetPerformanceCounter());
-        debug.recordMemoryUsage(state);
+        state.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());
+        internal.recordMemoryUsage(state);
     }
 
     // Update current title.
@@ -618,7 +598,7 @@ pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
                     entity.velocity[Y] = 0;
 
                     if (INTERNAL) {
-                        state.debug_state.addCollision(state.debug_allocator.allocator(), &collision, state.time);
+                        state.internal.addCollision(state.internal.allocator, &collision, state.time);
                     }
 
                     handleBallCollision(state, entity, other_entity);
@@ -636,7 +616,7 @@ pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
                     state.ball_horizontal_bounce_start_time = state.time;
 
                     if (INTERNAL) {
-                        state.debug_state.addCollision(state.debug_allocator.allocator(), &collision, state.time);
+                        state.internal.addCollision(state.internal.allocator, &collision, state.time);
                     }
 
                     handleBallCollision(state, entity, other_entity);
@@ -736,10 +716,10 @@ pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
         if (!INTERNAL) {
             state.showTitleForDuration(.CLEARED, 2000) catch @panic("Failed to show Cleared title");
         } else {
-            if (!state.debug_state.testing_level) {
+            if (!state.internal.testing_level) {
                 state.showTitleForDuration(.CLEARED, 2000) catch @panic("Failed to show Cleared title");
-            } else if (state.debug_state.testing_level) {
-                loadLevel(state, state.debug_state.currentLevelName()) catch undefined;
+            } else if (state.internal.testing_level) {
+                loadLevel(state, state.internal.currentLevelName()) catch undefined;
             }
         }
     }
@@ -748,7 +728,7 @@ pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
 fn handleBallCollision(state: *State, ball: *Entity, block: *Entity) void {
     if (block.block_type == .Deadly) {
         if (state.lives_remaining > 0) {
-            if (!INTERNAL or !state.debug_state.testing_level) {
+            if (!INTERNAL or !state.internal.testing_level) {
                 state.lives_remaining -= 1;
             }
             state.showTitleForDuration(.DEATH, 2000) catch @panic("Failed to show Death title");
@@ -783,11 +763,11 @@ pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
         _ = sdl.SDL_RenderTexture(state.renderer, state.render_texture, null, &state.dest_rect);
 
         if (INTERNAL) {
-            debug.drawDebugOverlay(state);
-            debug.drawDebugUI(state);
+            internal.drawDebugOverlay(state);
+            internal.drawDebugUI(state);
 
-            if (state.debug_state.should_restart) {
-                state.debug_state.should_restart = false;
+            if (state.internal.should_restart) {
+                state.internal.should_restart = false;
                 restart(state);
             }
         }
@@ -979,7 +959,7 @@ fn isLevelCompleted(state: *State) bool {
         }
     }
 
-    if (INTERNAL and state.debug_state.mode != .Play) {
+    if (INTERNAL and state.internal.mode != .Play) {
         result = false;
     }
 

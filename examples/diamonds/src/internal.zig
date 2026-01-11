@@ -1,7 +1,6 @@
 const std = @import("std");
 const playground = @import("playground");
 const sdl = playground.sdl.c;
-const internal = playground.internal;
 const imgui = playground.imgui;
 const aseprite = playground.aseprite;
 const game = @import("root.zig");
@@ -42,7 +41,12 @@ const WINDOW_WIDTH = game.WINDOW_WIDTH;
 const WINDOW_HEIGHT = game.WINDOW_HEIGHT;
 const WINDOW_WIDTH_ADDITIONAL = 300;
 
-pub const DebugState = struct {
+pub const InternalState = struct {
+    debug_allocator: *game.DebugAllocator,
+    allocator: std.mem.Allocator,
+    output: *playground.internal.DebugOutputWindow,
+    fps_window: *playground.internal.FPSWindow,
+
     input: DebugInput,
     mode: enum(u8) {
         Play,
@@ -66,8 +70,20 @@ pub const DebugState = struct {
 
     should_restart: bool,
 
-    pub fn init(self: *DebugState) !void {
-        self.* = .{
+    pub fn init(backing_allocator: std.mem.Allocator) !*InternalState {
+        const debug_allocator =
+            (backing_allocator.create(game.DebugAllocator) catch @panic("Failed to initialize debug allocator."));
+        debug_allocator.* = .init;
+
+        var allocator = debug_allocator.allocator();
+        var state: *InternalState = allocator.create(InternalState) catch @panic("Out of memory.");
+
+        state.* = .{
+            .debug_allocator = debug_allocator,
+            .allocator = allocator,
+            .output = allocator.create(playground.internal.DebugOutputWindow) catch @panic("Out of memory"),
+            .fps_window = allocator.create(playground.internal.FPSWindow) catch @panic("Failed to allocate FPS state."),
+
             .input = DebugInput{},
 
             .mode = .Play,
@@ -90,11 +106,17 @@ pub const DebugState = struct {
             .should_restart = false,
         };
 
-        _ = try std.fmt.bufPrintZ(&self.current_level_name, "level1", .{});
+        state.output.init();
+
+        state.fps_window.init(sdl.SDL_GetPerformanceFrequency());
+
+        _ = try std.fmt.bufPrintZ(&state.current_level_name, "level1", .{});
+
+        return state;
     }
 
     pub fn addCollision(
-        self: *DebugState,
+        self: *InternalState,
         allocator: std.mem.Allocator,
         collision: *const Collision,
         time: u64,
@@ -105,7 +127,7 @@ pub const DebugState = struct {
         }) catch unreachable;
     }
 
-    pub fn currentLevelName(self: *DebugState) []const u8 {
+    pub fn currentLevelName(self: *InternalState) []const u8 {
         return std.mem.span(self.current_level_name[0..].ptr);
     }
 };
@@ -142,7 +164,7 @@ const FPSDisplayMode = enum {
 };
 
 pub fn processInputEvent(state: *State, event: sdl.SDL_Event) void {
-    var input = &state.debug_state.input;
+    var input = &state.internal.input;
 
     // Keyboard.
     if (event.key.key == sdl.SDLK_LALT) {
@@ -151,32 +173,32 @@ pub fn processInputEvent(state: *State, event: sdl.SDL_Event) void {
     if (event.type == sdl.SDL_EVENT_KEY_DOWN) {
         switch (event.key.key) {
             sdl.SDLK_F1 => {
-                state.fps_window.?.cycleMode();
+                state.internal.fps_window.cycleMode();
             },
             sdl.SDLK_F2 => {
-                state.debug_state.memory_usage_display = !state.debug_state.memory_usage_display;
+                state.internal.memory_usage_display = !state.internal.memory_usage_display;
             },
             sdl.SDLK_C => {
-                state.debug_state.show_colliders = !state.debug_state.show_colliders;
+                state.internal.show_colliders = !state.internal.show_colliders;
             },
             sdl.SDLK_TAB => {
-                state.debug_state.show_sidebar = !state.debug_state.show_sidebar;
+                state.internal.show_sidebar = !state.internal.show_sidebar;
                 if (!state.fullscreen) {
                     updateWindowSize(state);
                 }
             },
             sdl.SDLK_E => {
-                var next_mode: u32 = @intFromEnum(state.debug_state.mode) + 1;
-                if (next_mode > @typeInfo(@TypeOf(state.debug_state.mode)).@"enum".fields.len - 1) {
+                var next_mode: u32 = @intFromEnum(state.internal.mode) + 1;
+                if (next_mode > @typeInfo(@TypeOf(state.internal.mode)).@"enum".fields.len - 1) {
                     next_mode = 0;
                 }
-                state.debug_state.mode = @enumFromInt(next_mode);
+                state.internal.mode = @enumFromInt(next_mode);
             },
             sdl.SDLK_S => {
-                saveLevel(state, state.debug_state.currentLevelName()) catch unreachable;
+                saveLevel(state, state.internal.currentLevelName()) catch unreachable;
             },
             sdl.SDLK_L => {
-                game.loadLevel(state, state.debug_state.currentLevelName()) catch unreachable;
+                game.loadLevel(state, state.internal.currentLevelName()) catch unreachable;
             },
             else => {},
         }
@@ -207,7 +229,7 @@ pub fn updateWindowSize(state: *State) void {
     var y: c_int = 0;
     var width: c_int = 0;
     var height: c_int = 0;
-    const show_sidebar: bool = state.debug_state.show_sidebar;
+    const show_sidebar: bool = state.internal.show_sidebar;
 
     if (sdl.SDL_GetWindowPosition(state.window, &x, &y)) {
         if (sdl.SDL_GetWindowSize(state.window, &width, &height)) {
@@ -227,8 +249,8 @@ pub fn updateWindowSize(state: *State) void {
                 _ = sdl.SDL_SetWindowPosition(state.window, x, y);
                 _ = sdl.SDL_SetWindowSize(state.window, width, height);
 
-                state.fps_window.?.position =
-                    if (state.debug_state.show_sidebar)
+                state.internal.fps_window.position =
+                    if (state.internal.show_sidebar)
                         .{ .x = 225, .y = -5 }
                     else
                         .{ .x = 5, .y = 5 };
@@ -238,7 +260,7 @@ pub fn updateWindowSize(state: *State) void {
 }
 
 pub fn resetWindowPosition(state: *State) void {
-    if (state.debug_state.show_sidebar) {
+    if (state.internal.show_sidebar) {
         var x: c_int = 0;
         var y: c_int = 0;
         if (sdl.SDL_GetWindowPosition(state.window, &x, &y)) {
@@ -248,48 +270,48 @@ pub fn resetWindowPosition(state: *State) void {
 }
 
 pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
-    state.debug_state.hovered_entity_id = getHoveredEntity(state);
+    state.internal.hovered_entity_id = getHoveredEntity(state);
 
-    const input: *DebugInput = &state.debug_state.input;
-    var block_color = state.debug_state.current_block_color;
-    const block_type = state.debug_state.current_block_type;
+    const input: *DebugInput = &state.internal.input;
+    var block_color = state.internal.current_block_color;
+    const block_type = state.internal.current_block_type;
 
     if (block_type == .Deadly) {
         block_color = .Gray;
     }
 
-    if (state.debug_state.mode == .Edit and block_type == .ColorChange and block_color == .Gray) {
+    if (state.internal.mode == .Edit and block_type == .ColorChange and block_color == .Gray) {
         return;
     }
 
-    if (state.getEntity(state.debug_state.hovered_entity_id)) |hovered_entity| {
+    if (state.getEntity(state.internal.hovered_entity_id)) |hovered_entity| {
         if (input.left_mouse_pressed) {
-            if (state.debug_state.input.alt_key_down) {
+            if (state.internal.input.alt_key_down) {
                 if (hovered_entity.hasFlag(.has_block)) {
-                    state.debug_state.current_block_type = hovered_entity.block_type;
-                    state.debug_state.current_block_color = hovered_entity.color;
+                    state.internal.current_block_type = hovered_entity.block_type;
+                    state.internal.current_block_color = hovered_entity.color;
                 }
             } else {
-                if (hovered_entity.id.equals(state.debug_state.input.left_mouse_last_entity_id) and
-                    state.time - state.debug_state.input.left_mouse_last_time < DOUBLE_CLICK_THRESHOLD)
+                if (hovered_entity.id.equals(state.internal.input.left_mouse_last_entity_id) and
+                    state.time - state.internal.input.left_mouse_last_time < DOUBLE_CLICK_THRESHOLD)
                 {
                     openSprite(state, allocator, hovered_entity);
                 } else {
-                    if (!hovered_entity.id.equals(state.debug_state.selected_entity_id) or
-                        state.debug_state.selected_entity_id == null)
+                    if (!hovered_entity.id.equals(state.internal.selected_entity_id) or
+                        state.internal.selected_entity_id == null)
                     {
-                        state.debug_state.selected_entity_id = hovered_entity.id;
+                        state.internal.selected_entity_id = hovered_entity.id;
                     } else {
-                        state.debug_state.selected_entity_id = null;
+                        state.internal.selected_entity_id = null;
                     }
                 }
             }
 
-            state.debug_state.input.left_mouse_last_time = state.time;
-            state.debug_state.input.left_mouse_last_entity_id = state.debug_state.hovered_entity_id;
+            state.internal.input.left_mouse_last_time = state.time;
+            state.internal.input.left_mouse_last_entity_id = state.internal.hovered_entity_id;
         }
 
-        if (input.right_mouse_pressed and state.debug_state.mode == .Edit) {
+        if (input.right_mouse_pressed and state.internal.mode == .Edit) {
             var should_add: bool = true;
 
             if (hovered_entity.hasFlag(.has_block)) {
@@ -305,15 +327,15 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
                 _ = game.addWall(state, block_color, block_type, tiled_position) catch undefined;
             }
 
-            state.debug_state.input.right_mouse_last_time = state.time;
-            state.debug_state.input.right_mouse_last_entity_id = state.debug_state.hovered_entity_id;
+            state.internal.input.right_mouse_last_time = state.time;
+            state.internal.input.right_mouse_last_entity_id = state.internal.hovered_entity_id;
         }
     } else {
         if (input.left_mouse_pressed) {
-            state.debug_state.selected_entity_id = null;
+            state.internal.selected_entity_id = null;
         }
 
-        if (input.right_mouse_pressed and state.debug_state.mode == .Edit) {
+        if (input.right_mouse_pressed and state.internal.mode == .Edit) {
             const tiled_position = getTiledPosition(
                 input.mouse_position / @as(Vector2, @splat(state.world_scale)),
                 state.assets.getWall(block_color, block_type),
@@ -325,7 +347,7 @@ pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
 
 fn getHoveredEntity(state: *State) ?EntityId {
     var result: ?EntityId = null;
-    const mouse_position = state.debug_state.input.mouse_position / @as(Vector2, @splat(state.world_scale));
+    const mouse_position = state.internal.input.mouse_position / @as(Vector2, @splat(state.world_scale));
 
     var ui: ?EntityId = null;
     var collider: ?EntityId = null;
@@ -363,13 +385,13 @@ fn getHoveredEntity(state: *State) ?EntityId {
 }
 
 pub fn recordMemoryUsage(state: *State) void {
-    if (state.debug_state.memory_usage_last_collected_at + MEMORY_USAGE_RECORD_INTERVAL < state.time) {
-        state.debug_state.memory_usage_last_collected_at = state.time;
-        state.debug_state.memory_usage_current_index += 1;
-        if (state.debug_state.memory_usage_current_index >= MAX_MEMORY_USAGE_COUNT) {
-            state.debug_state.memory_usage_current_index = 0;
+    if (state.internal.memory_usage_last_collected_at + MEMORY_USAGE_RECORD_INTERVAL < state.time) {
+        state.internal.memory_usage_last_collected_at = state.time;
+        state.internal.memory_usage_current_index += 1;
+        if (state.internal.memory_usage_current_index >= MAX_MEMORY_USAGE_COUNT) {
+            state.internal.memory_usage_current_index = 0;
         }
-        state.debug_state.memory_usage[state.debug_state.memory_usage_current_index] =
+        state.internal.memory_usage[state.internal.memory_usage_current_index] =
             state.game_allocator.total_requested_bytes;
     }
 }
@@ -377,10 +399,10 @@ pub fn recordMemoryUsage(state: *State) void {
 pub fn drawDebugUI(state: *State) void {
     imgui.newFrame();
 
-    state.fps_window.?.draw();
-    state.debug_output.draw();
+    state.internal.fps_window.draw();
+    state.internal.output.draw();
 
-    if (state.debug_state.show_sidebar) {
+    if (state.internal.show_sidebar) {
         {
             _ = imgui.c.ImGui_Begin(
                 "MemoryUsage",
@@ -393,14 +415,14 @@ pub fn drawDebugUI(state: *State) void {
 
             _ = imgui.c.ImGui_Text(
                 "Bytes: %d",
-                state.debug_state.memory_usage[state.debug_state.memory_usage_current_index],
+                state.internal.memory_usage[state.internal.memory_usage_current_index],
             );
 
             var memory_usage: [MAX_MEMORY_USAGE_COUNT]f32 = [1]f32{0} ** MAX_MEMORY_USAGE_COUNT;
             var max_value: f32 = 0;
             var min_value: f32 = std.math.floatMax(f32);
             for (0..MAX_MEMORY_USAGE_COUNT) |i| {
-                memory_usage[i] = @floatFromInt(state.debug_state.memory_usage[i]);
+                memory_usage[i] = @floatFromInt(state.internal.memory_usage[i]);
                 if (memory_usage[i] > max_value) {
                     max_value = memory_usage[i];
                 }
@@ -414,7 +436,7 @@ pub fn drawDebugUI(state: *State) void {
                 "##MemoryUsageGraph",
                 &memory_usage,
                 memory_usage.len,
-                @intCast(state.debug_state.memory_usage_current_index + 1),
+                @intCast(state.internal.memory_usage_current_index + 1),
                 min_text.ptr,
                 min_value,
                 max_value,
@@ -440,16 +462,16 @@ pub fn drawDebugUI(state: *State) void {
 
             _ = imgui.c.ImGui_InputTextEx(
                 "Name",
-                @ptrCast(&state.debug_state.current_level_name),
-                state.debug_state.current_level_name.len,
+                @ptrCast(&state.internal.current_level_name),
+                state.internal.current_level_name.len,
                 0,
                 null,
                 null,
             );
 
             if (imgui.c.ImGui_ButtonEx("Load", half_button_size)) {
-                game.loadLevel(state, state.debug_state.currentLevelName()) catch undefined;
-                state.debug_state.mode = .Edit;
+                game.loadLevel(state, state.internal.currentLevelName()) catch undefined;
+                state.internal.mode = .Edit;
 
                 if (state.getEntity(state.current_title_id)) |current_title| {
                     state.removeEntity(current_title);
@@ -457,24 +479,24 @@ pub fn drawDebugUI(state: *State) void {
             }
             imgui.c.ImGui_SameLineEx(0, 10);
             if (imgui.c.ImGui_ButtonEx("Save", half_button_size)) {
-                saveLevel(state, state.debug_state.currentLevelName()) catch unreachable;
+                saveLevel(state, state.internal.currentLevelName()) catch unreachable;
             }
 
             if (imgui.c.ImGui_ButtonEx("Test level", button_size)) {
-                state.debug_state.testing_level = true;
-                state.debug_state.mode = .Play;
+                state.internal.testing_level = true;
+                state.internal.mode = .Play;
                 state.paused = false;
 
-                game.loadLevel(state, state.debug_state.currentLevelName()) catch undefined;
+                game.loadLevel(state, state.internal.currentLevelName()) catch undefined;
             }
 
             if (imgui.c.ImGui_ButtonEx("Restart", button_size)) {
-                state.debug_state.should_restart = true;
+                state.internal.should_restart = true;
             }
 
-            internal.inputEnum("Mode", &state.debug_state.mode);
-            internal.inputEnum("Type", &state.debug_state.current_block_type);
-            internal.inputEnum("Color", &state.debug_state.current_block_color);
+            playground.internal.inputEnum("Mode", &state.internal.mode);
+            playground.internal.inputEnum("Type", &state.internal.current_block_type);
+            playground.internal.inputEnum("Color", &state.internal.current_block_color);
         }
 
         {
@@ -488,7 +510,12 @@ pub fn drawDebugUI(state: *State) void {
             _ = imgui.c.ImGui_Begin("Inspector", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
             defer imgui.c.ImGui_End();
 
-            internal.inspectStruct(state.getEntity(state.debug_state.selected_entity_id), &.{"is_in_use"}, true, &inputCustomTypes);
+            playground.internal.inspectStruct(
+                state.getEntity(state.internal.selected_entity_id),
+                &.{"is_in_use"},
+                true,
+                &inputCustomTypes,
+            );
         }
 
         {
@@ -502,7 +529,7 @@ pub fn drawDebugUI(state: *State) void {
             _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
             defer imgui.c.ImGui_End();
 
-            internal.inspectStruct(state, &.{"entity"}, false, &inputCustomTypes);
+            playground.internal.inspectStruct(state, &.{"entity"}, false, &inputCustomTypes);
         }
     }
 
@@ -549,7 +576,7 @@ fn inputCustomTypes(
         },
         EntityFlagsType => {
             if (std.mem.eql(u8, struct_field.name, "flags")) {
-                internal.inputFlagsU32(struct_field.name, field_ptr, EntityFlags);
+                playground.internal.inputFlagsU32(struct_field.name, field_ptr, EntityFlags);
                 handled = true;
             } else {
                 handled = false;
@@ -569,7 +596,7 @@ pub fn drawDebugOverlay(state: *State) void {
         state.dest_rect.y / state.world_scale,
     };
 
-    if (state.debug_state.show_colliders) {
+    if (state.internal.show_colliders) {
         var iter: EntityIterator = .init(&state.entities, .Start);
         while (iter.next()) |entity| {
             if (entity.hasFlag(.has_collider)) {
@@ -578,14 +605,14 @@ pub fn drawDebugOverlay(state: *State) void {
         }
 
         // Highlight collisions.
-        var index = state.debug_state.collisions.items.len;
+        var index = state.internal.collisions.items.len;
         while (index > 0) {
             index -= 1;
 
             const show_time: u64 = 500;
-            const collision = state.debug_state.collisions.items[index];
+            const collision = state.internal.collisions.items[index];
             if (state.time > collision.time_added + show_time) {
-                _ = state.debug_state.collisions.swapRemove(index);
+                _ = state.internal.collisions.swapRemove(index);
             } else {
                 const time_remaining: f32 =
                     @as(f32, @floatFromInt(((collision.time_added + show_time) - state.time))) /
@@ -603,7 +630,7 @@ pub fn drawDebugOverlay(state: *State) void {
         state,
         state.renderer,
         &state.assets,
-        state.debug_state.selected_entity_id,
+        state.internal.selected_entity_id,
         Color{ 255, 0, 0, 255 },
         scale,
         offset,
@@ -612,7 +639,7 @@ pub fn drawDebugOverlay(state: *State) void {
         state,
         state.renderer,
         &state.assets,
-        state.debug_state.hovered_entity_id,
+        state.internal.hovered_entity_id,
         Color{ 255, 150, 0, 255 },
         scale,
         offset,
@@ -623,8 +650,8 @@ pub fn drawDebugOverlay(state: *State) void {
         const mouse_size: f32 = 8;
         const mouse_rect: math.Rect = .{
             .position = Vector2{
-                (state.debug_state.input.mouse_position[X] - (mouse_size / 2)) / scale,
-                (state.debug_state.input.mouse_position[Y] - (mouse_size / 2)) / scale,
+                (state.internal.input.mouse_position[X] - (mouse_size / 2)) / scale,
+                (state.internal.input.mouse_position[Y] - (mouse_size / 2)) / scale,
             } + offset,
             .size = Vector2{
                 mouse_size / scale,

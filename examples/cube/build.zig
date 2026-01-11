@@ -92,7 +92,10 @@ pub fn build(b: *std.Build) !void {
     test_step.dependOn(&run_lib_tests.step);
 
     // Shader compilation.
-    const compile_shaders_step = b.step("compile_shaders", "Compile SHADERS. (requires a working shadercross installation on the path)");
+    const compile_shaders_step = b.step(
+        "compile_shaders",
+        "Compile SHADERS. (requires a working shadercross installation on the path)",
+    );
     inline for (SHADERS) |shader| {
         inline for (SHADER_FORMATS) |shader_output_format| {
             const output_name = shader ++ "." ++ shader_output_format;

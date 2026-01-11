@@ -51,10 +51,12 @@
 //! * See the examples for complete integrations.
 const std = @import("std");
 
+const INTERNAL: bool = @import("build_options").internal;
+
 pub const sdl = @import("sdl.zig");
 pub const imgui = @import("imgui.zig");
-pub const internal = @import("internal.zig");
 pub const aseprite = @import("aseprite.zig");
+pub const internal = if (INTERNAL) @import("internal.zig") else struct {};
 
 pub const GameLib = @import("GameLib.zig");
 
