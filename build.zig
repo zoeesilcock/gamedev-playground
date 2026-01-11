@@ -6,9 +6,12 @@ pub fn build(b: *std.Build) !void {
     const lib_base_name = b.option([]const u8, "lib_base_name", "name of the shared library") orelse "game";
     const internal = b.option(bool, "internal", "include debug interface") orelse true;
 
+    const exe_build_options = b.addOptions();
+    exe_build_options.addOption(bool, "internal", internal);
+    exe_build_options.addOption([]const u8, "lib_base_name", lib_base_name);
+
     const build_options = b.addOptions();
     build_options.addOption(bool, "internal", internal);
-    build_options.addOption([]const u8, "lib_base_name", lib_base_name);
 
     // Exposed module.
     const playground_mod = b.addModule("playground", .{
@@ -23,7 +26,7 @@ pub fn build(b: *std.Build) !void {
     linkImgui(b, playground_mod, target, optimize, internal);
 
     // Main executable.
-    const exe = buildExecutable(b, b, "gamedev-playground", build_options, target, optimize, playground_mod);
+    const exe = buildExecutable(b, b, "gamedev-playground", exe_build_options, target, optimize, playground_mod);
     b.installArtifact(exe);
 
     // Tests.
@@ -38,9 +41,14 @@ pub fn build(b: *std.Build) !void {
     test_step.dependOn(&run_lib_tests.step);
 
     // Docs.
+    const docs_mod = b.addModule("docs", .{
+        .root_source_file = b.path("src/lib/docs.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
     const docs = b.addObject(.{
-        .name = "playground",
-        .root_module = playground_mod,
+        .name = "docs",
+        .root_module = docs_mod,
     });
     const install_docs = b.addInstallDirectory(.{
         .source_dir = docs.getEmittedDocs(),

@@ -1,4 +1,7 @@
 //! Exposes tools used in internal builds, things like inspectors, editors and information overlays.
+//!
+//! Note that importing this module without the INTERNAL build_option set to true will give an empty struct. The point
+//! of this is to make it a compile time error to use any internal functions in a release version.
 
 const std = @import("std");
 const imgui = @import("imgui.zig").c;
