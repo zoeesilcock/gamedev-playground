@@ -299,8 +299,12 @@ pub const Assets = struct {
     }
 };
 
-pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) GameLib.GameStatePtr {
-    sdl_utils.logError(sdl.SDL_SetWindowTitle(window, "Diamonds"), "Failed to set window title");
+pub export fn getSettings() GameLib.Settings {
+    return .{ .dependencies = .Minimal };
+}
+
+pub export fn init(dependencies: GameLib.Dependencies.Minimal) GameLib.GameStatePtr {
+    sdl_utils.logError(sdl.SDL_SetWindowTitle(dependencies.window, "Diamonds"), "Failed to set window title");
 
     var backing_allocator = std.heap.page_allocator;
     var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
@@ -319,11 +323,11 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         .allocator = allocator,
         .game_allocator = game_allocator,
 
-        .window = window,
-        .renderer = sdl_utils.panicIfNull(sdl.SDL_CreateRenderer(window, null), "Failed to create renderer.").?,
+        .window = dependencies.window,
+        .renderer = sdl_utils.panicIfNull(sdl.SDL_CreateRenderer(dependencies.window, null), "Failed to create renderer.").?,
 
-        .window_width = window_width,
-        .window_height = window_height,
+        .window_width = dependencies.window_width,
+        .window_height = dependencies.window_height,
 
         .world_scale = 1,
         .ui_scale = 1,
@@ -380,11 +384,11 @@ pub fn restart(state: *State) void {
         *State,
         @ptrCast(
             @alignCast(
-                init(
-                    state.window_width,
-                    state.window_height,
-                    state.window,
-                ),
+                init(.{
+                    .window_width = state.window_width,
+                    .window_height = state.window_height,
+                    .window = state.window,
+                }),
             ),
         ),
     ).*;

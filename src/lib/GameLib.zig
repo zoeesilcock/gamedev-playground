@@ -2,6 +2,53 @@
 //! game library (most likely the `root.zig` file) and marking them with `pub export`.
 const std = @import("std");
 const sdl = @import("sdl.zig").c;
+const internal = @import("internal.zig");
+
+// Build options.
+const INTERNAL: bool = @import("build_options").internal;
+
+// Types.
+pub const DebugAllocator = std.heap.DebugAllocator(.{
+    .enable_memory_limit = true,
+    .retain_metadata = INTERNAL,
+    .never_unmap = INTERNAL,
+});
+
+/// Settings that your game library can define.
+pub const Settings = extern struct {
+    dependencies: DependenciesType,
+};
+
+/// List of dependency sets available to receive on startup.
+pub const DependenciesType = enum(u32) {
+    Minimal,
+    All2D,
+};
+
+/// These structs define different sets of dependencies that can be provided to your library on startup.
+pub const Dependencies = struct {
+    /// A minimal set of dependencies, suitable when you want to do everything yourself.
+    pub const Minimal = extern struct {
+        window: *sdl.SDL_Window,
+        window_width: u32,
+        window_height: u32,
+    };
+
+    /// A batteries included set of dependencies for 2D rendering, preferable in most cases.
+    pub const All2D = extern struct {
+        game_allocator: *DebugAllocator,
+        window: *sdl.SDL_Window,
+        renderer: *sdl.SDL_Renderer,
+        window_width: u32,
+        window_height: u32,
+
+        internal: if (INTERNAL) extern struct {
+            debug_allocator: *DebugAllocator = undefined,
+            output: *internal.DebugOutputWindow = undefined,
+            fps_window: *internal.FPSWindow = undefined,
+        } else extern struct {} = undefined,
+    };
+};
 
 /// Type that signifies a pointer to your game state, you will need to cast it to the type you are using for your game
 /// state.
@@ -11,9 +58,17 @@ const sdl = @import("sdl.zig").c;
 /// ```
 pub const GameStatePtr = *anyopaque;
 
+/// Called before the game has been initialized. The settings returned will decide what type of init dependencies will
+/// be passed.
+getSettings: *const fn () callconv(.c) Settings = undefined,
 /// Called when the game starts, use to setup your game state and return a pointer to it which will be held by the main
-/// executable and passed to all subsequent calls into the game.
-init: *const fn (u32, u32, *sdl.SDL_Window) callconv(.c) GameStatePtr = undefined,
+/// executable and passed to all subsequent calls into the game. Includes a minimal set of dependencies.
+initMinimal: *const fn (Dependencies.Minimal) callconv(.c) GameStatePtr = undefined,
+/// Called when the game starts, use to setup your game state and return a pointer to it which will be held by the main
+/// executable and passed to all subsequent calls into the game. Includes a full set of dependencies for 2D games.
+initAll2D: *const fn (Dependencies.All2D) callconv(.c) GameStatePtr = undefined,
+
+/// Called just before the game exits.
 deinit: *const fn (GameStatePtr) callconv(.c) void = undefined,
 
 /// Called just before a code/asset hot reload. Use it for any clean up needed to support hot reloading,
@@ -28,10 +83,15 @@ tick: *const fn (GameStatePtr) callconv(.c) void = undefined,
 draw: *const fn (GameStatePtr) callconv(.c) void = undefined,
 
 pub fn load(self: *@This(), dyn_lib: *std.DynLib) !void {
-    self.init = dyn_lib.lookup(@TypeOf(self.init), "init") orelse return error.LookupFail;
+    self.getSettings = dyn_lib.lookup(@TypeOf(self.getSettings), "getSettings") orelse return error.LookupFail;
+    self.initMinimal = dyn_lib.lookup(@TypeOf(self.initMinimal), "init") orelse return error.LookupFail;
+    self.initAll2D = dyn_lib.lookup(@TypeOf(self.initAll2D), "init") orelse return error.LookupFail;
+
     self.deinit = dyn_lib.lookup(@TypeOf(self.deinit), "deinit") orelse return error.LookupFail;
+
     self.willReload = dyn_lib.lookup(@TypeOf(self.willReload), "willReload") orelse return error.LookupFail;
     self.reloaded = dyn_lib.lookup(@TypeOf(self.reloaded), "reloaded") orelse return error.LookupFail;
+
     self.processInput = dyn_lib.lookup(@TypeOf(self.processInput), "processInput") orelse return error.LookupFail;
     self.tick = dyn_lib.lookup(@TypeOf(self.tick), "tick") orelse return error.LookupFail;
     self.draw = dyn_lib.lookup(@TypeOf(self.draw), "draw") orelse return error.LookupFail;

@@ -251,8 +251,12 @@ const FragmentUniforms = struct {
     screen_effect: u32,
 };
 
-pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) GameLib.GameStatePtr {
-    sdl_utils.logError(sdl.SDL_SetWindowTitle(window, "Cube"), "Failed to set window title");
+pub export fn getSettings() GameLib.Settings {
+    return .{ .dependencies = .Minimal };
+}
+
+pub export fn init(dependencies: GameLib.Dependencies.Minimal) GameLib.GameStatePtr {
+    sdl_utils.logError(sdl.SDL_SetWindowTitle(dependencies.window, "Cube"), "Failed to set window title");
 
     var backing_allocator = std.heap.page_allocator;
     var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
@@ -280,9 +284,9 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     state.* = .{
         .allocator = allocator,
         .game_allocator = game_allocator,
-        .window = window,
-        .window_width = window_width,
-        .window_height = window_height,
+        .window = dependencies.window,
+        .window_width = dependencies.window_width,
+        .window_height = dependencies.window_height,
         .device = device.?,
         .time = sdl.SDL_GetTicks(),
         .camera = undefined,
@@ -314,7 +318,12 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     submitQuadData(state);
 
     if (INTERNAL) {
-        imgui.initGPU(state.window, state.device, @floatFromInt(window_width), @floatFromInt(window_height));
+        imgui.initGPU(
+            state.window,
+            state.device,
+            @floatFromInt(state.window_width),
+            @floatFromInt(state.window_height),
+        );
     }
 
     return state;

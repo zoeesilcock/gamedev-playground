@@ -35,6 +35,13 @@ pub fn main() !void {
     var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
     const allocator = debug_allocator.allocator();
 
+    loadDll() catch |err| {
+        std.log.err("Failed to load the game DLL.", .{});
+        return err;
+    };
+
+    const game_settings: GameLib.Settings = game.getSettings();
+
     if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO | sdl.SDL_INIT_EVENTS)) {
         @panic("SDL_Init failed.");
     }
@@ -57,12 +64,54 @@ pub fn main() !void {
         _ = sdl.SDL_SetWindowAlwaysOnTop(window, true);
     }
 
-    loadDll() catch |err| {
-        std.log.err("Failed to load the game DLL.", .{});
-        return err;
-    };
+    var backing_allocator = std.heap.page_allocator;
+    var state: GameLib.GameStatePtr = undefined;
+    switch (game_settings.dependencies) {
+        .Minimal => {
+            state = game.initMinimal(.{
+                .window = window.?,
+                .window_width = WINDOW_WIDTH,
+                .window_height = WINDOW_HEIGHT,
+            });
+        },
+        .All2D => {
+            const game_allocator = backing_allocator.create(GameLib.DebugAllocator) catch
+                @panic("Failed to initialize game allocator.");
+            game_allocator.* = .init;
 
-    const state = game.init(WINDOW_WIDTH, WINDOW_HEIGHT, window.?);
+            const renderer = playground.sdl.panicIfNull(
+                sdl.SDL_CreateRenderer(window.?, null),
+                "Failed to create renderer.",
+            );
+
+            var dependencies: GameLib.Dependencies.All2D = .{
+                .game_allocator = game_allocator,
+                .window = window.?,
+                .renderer = renderer.?,
+                .window_width = WINDOW_WIDTH,
+                .window_height = WINDOW_HEIGHT,
+            };
+
+            if (INTERNAL) {
+                const internal_allocator = (backing_allocator.create(GameLib.DebugAllocator) catch
+                    @panic("Failed to initialize game allocator."));
+                internal_allocator.* = .init;
+
+                dependencies.internal = .{
+                    .debug_allocator = internal_allocator,
+                    .output = internal_allocator.allocator().create(playground.internal.DebugOutputWindow) catch
+                        @panic("Out of memory."),
+                    .fps_window = internal_allocator.allocator().create(playground.internal.FPSWindow) catch
+                        @panic("Failed to allocate FPS state."),
+                };
+
+                dependencies.internal.output.init();
+                dependencies.internal.fps_window.init(sdl.SDL_GetPerformanceFrequency());
+            }
+
+            state = game.initAll2D(dependencies);
+        },
+    }
 
     if (INTERNAL) {
         initChangeTimes(allocator);

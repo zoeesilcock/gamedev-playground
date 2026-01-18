@@ -8,11 +8,7 @@ const INTERNAL: bool = @import("build_options").internal;
 
 // Types.
 const GameLib = playground.GameLib;
-const DebugAllocator = std.heap.DebugAllocator(.{
-    .enable_memory_limit = true,
-    .retain_metadata = INTERNAL,
-    .never_unmap = INTERNAL,
-});
+const DebugAllocator = GameLib.DebugAllocator;
 
 const State = struct {
     game_allocator: *DebugAllocator,
@@ -34,39 +30,33 @@ const State = struct {
     } else struct {} = undefined,
 };
 
-pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) GameLib.GameStatePtr {
-    var backing_allocator = std.heap.page_allocator;
-    var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
-    game_allocator.* = .init;
+pub export fn getSettings() GameLib.Settings {
+    return .{ .dependencies = .All2D };
+}
+
+pub export fn init(dependencies: GameLib.Dependencies.All2D) GameLib.GameStatePtr {
+    const game_allocator = dependencies.game_allocator;
 
     var state: *State = game_allocator.allocator().create(State) catch @panic("Out of memory.");
     state.* = .{
-        .allocator = game_allocator.allocator(),
         .game_allocator = game_allocator,
+        .allocator = game_allocator.allocator(),
 
-        .window = window,
-        .renderer = playground.sdl.panicIfNull(sdl.SDL_CreateRenderer(window, null), "Failed to create renderer.").?,
-        .window_width = window_width,
-        .window_height = window_height,
+        .window = dependencies.window,
+        .renderer = dependencies.renderer,
+        .window_width = dependencies.window_width,
+        .window_height = dependencies.window_height,
 
         .space_is_down = false,
     };
 
     if (INTERNAL) {
-        imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
-
-        state.internal.debug_allocator =
-            (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize debug allocator."));
-        state.internal.debug_allocator.* = .init;
+        state.internal.debug_allocator = dependencies.internal.debug_allocator;
         state.internal.allocator = state.internal.debug_allocator.allocator();
+        state.internal.output = dependencies.internal.output;
+        state.internal.fps_window = dependencies.internal.fps_window;
 
-        state.internal.output =
-            state.internal.allocator.create(playground.internal.DebugOutputWindow) catch @panic("Out of memory.");
-        state.internal.output.init();
-
-        state.internal.fps_window =
-            state.internal.allocator.create(playground.internal.FPSWindow) catch @panic("Failed to allocate FPS state.");
-        state.internal.fps_window.init(sdl.SDL_GetPerformanceFrequency());
+        imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
     }
 
     return state;
