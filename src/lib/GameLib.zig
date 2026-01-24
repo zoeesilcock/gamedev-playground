@@ -82,7 +82,7 @@ reloaded: *const fn (GameStatePtr) callconv(.c) void = undefined,
 
 /// Called on every frame, return false from it to exit the game.
 processInput: *const fn (GameStatePtr) callconv(.c) bool = undefined,
-tick: *const fn (GameStatePtr) callconv(.c) void = undefined,
+tick: *const fn (GameStatePtr, time: u64, delta_time: u64) callconv(.c) void = undefined,
 draw: *const fn (GameStatePtr) callconv(.c) void = undefined,
 
 pub fn load(self: *@This(), dyn_lib: *std.DynLib) !void {

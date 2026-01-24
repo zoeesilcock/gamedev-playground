@@ -532,16 +532,17 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
     return continue_running;
 }
 
-pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
+pub export fn tick(state_ptr: GameLib.GameStatePtr, time: u64, delta_time_int: u64) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    state.delta_time_actual = sdl.SDL_GetTicks() - state.time;
+    state.delta_time_actual = delta_time_int;
+    state.time = time;
+
     if (!state.paused and !state.pausedDueToTitle() and !state.pausedDueToEditor()) {
         state.delta_time = state.delta_time_actual;
     } else {
         state.delta_time = 0;
     }
-    state.time = sdl.SDL_GetTicks();
 
     if (INTERNAL) {
         state.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());

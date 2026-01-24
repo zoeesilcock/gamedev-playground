@@ -17,6 +17,10 @@ const State = struct {
     window: *sdl.SDL_Window,
     renderer: *sdl.SDL_Renderer,
 
+    // Time.
+    time: u64,
+    delta_time: u64,
+
     // Input.
     space_is_down: bool,
 
@@ -47,6 +51,9 @@ pub export fn init(dependencies: GameLib.Dependencies.All2D) GameLib.GameStatePt
 
         .window = dependencies.window,
         .renderer = dependencies.renderer,
+
+        .time = 0,
+        .delta_time = 0,
 
         .space_is_down = false,
     };
@@ -137,8 +144,10 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
     return continue_running;
 }
 
-pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
+pub export fn tick(state_ptr: GameLib.GameStatePtr, time: u64, delta_time: u64) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
+    state.time = time;
+    state.delta_time = delta_time;
 
     if (INTERNAL) {
         state.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());

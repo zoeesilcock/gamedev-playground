@@ -428,13 +428,12 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
     return continue_running;
 }
 
-pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
+pub export fn tick(state_ptr: GameLib.GameStatePtr, time: u64, delta_time: u64) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    const new_time: u64 = sdl.SDL_GetTicks();
-    state.delta_time_actual = new_time - state.time;
+    state.time = time;
+    state.delta_time_actual = delta_time;
     state.delta_time = if (state.paused) 0 else state.delta_time_actual;
-    state.time = new_time;
 
     if (INTERNAL) {
         state.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());

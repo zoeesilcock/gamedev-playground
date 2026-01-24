@@ -122,10 +122,12 @@ pub fn main() !void {
         initChangeTimes(allocator);
     }
 
+    var previous_frame_start_time: u64 = 0;
     var frame_start_time: u64 = 0;
     var frame_elapsed_time: u64 = 0;
     while (true) {
         frame_start_time = sdl.SDL_GetTicks();
+        const delta_time = frame_start_time - previous_frame_start_time;
 
         if (INTERNAL) {
             checkForChanges(state, allocator);
@@ -135,7 +137,7 @@ pub fn main() !void {
             break;
         }
 
-        game.tick(state);
+        game.tick(state, frame_start_time, delta_time);
         game.draw(state);
 
         frame_elapsed_time = sdl.SDL_GetTicks() - frame_start_time;
@@ -145,6 +147,7 @@ pub fn main() !void {
                 sdl.SDL_Delay(@intCast(target_frame_time - frame_elapsed_time));
             }
         }
+        previous_frame_start_time = frame_start_time;
     }
 
     game.deinit(state);
