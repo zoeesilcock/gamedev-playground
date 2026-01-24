@@ -51,8 +51,6 @@ pub const State = struct {
     depth_stencil_format: sdl.SDL_GPUTextureFormat = undefined,
     depth_stencil_texture: *sdl.SDL_GPUTexture = undefined,
 
-    window_width: u32,
-    window_height: u32,
     fullscreen: bool = false,
     screen_effect: ScreenEffect = .None,
 
@@ -251,13 +249,16 @@ const FragmentUniforms = struct {
     screen_effect: u32,
 };
 
+var settings: GameLib.Settings = .{
+    .title = "Cube",
+    .dependencies = .Minimal,
+};
+
 pub export fn getSettings() GameLib.Settings {
-    return .{ .dependencies = .Minimal };
+    return settings;
 }
 
 pub export fn init(dependencies: GameLib.Dependencies.Minimal) GameLib.GameStatePtr {
-    sdl_utils.logError(sdl.SDL_SetWindowTitle(dependencies.window, "Cube"), "Failed to set window title");
-
     var backing_allocator = std.heap.page_allocator;
     var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
     game_allocator.* = .init;
@@ -285,8 +286,6 @@ pub export fn init(dependencies: GameLib.Dependencies.Minimal) GameLib.GameState
         .allocator = allocator,
         .game_allocator = game_allocator,
         .window = dependencies.window,
-        .window_width = dependencies.window_width,
-        .window_height = dependencies.window_height,
         .device = device.?,
         .time = sdl.SDL_GetTicks(),
         .camera = undefined,
@@ -321,8 +320,8 @@ pub export fn init(dependencies: GameLib.Dependencies.Minimal) GameLib.GameState
         imgui.initGPU(
             state.window,
             state.device,
-            @floatFromInt(state.window_width),
-            @floatFromInt(state.window_height),
+            @floatFromInt(settings.window_width),
+            @floatFromInt(settings.window_height),
         );
     }
 
@@ -362,8 +361,8 @@ pub export fn reloaded(state_ptr: GameLib.GameStatePtr) void {
         imgui.initGPU(
             state.window,
             state.device,
-            @floatFromInt(state.window_width),
-            @floatFromInt(state.window_height),
+            @floatFromInt(settings.window_width),
+            @floatFromInt(settings.window_height),
         );
     }
 
@@ -796,17 +795,21 @@ fn deinitPipeline(state: *State) void {
 }
 
 fn initWindowSize(state: *State) void {
-    _ = sdl.SDL_GetWindowSizeInPixels(state.window, @ptrCast(&state.window_width), @ptrCast(&state.window_height));
+    _ = sdl.SDL_GetWindowSizeInPixels(
+        state.window,
+        @ptrCast(&settings.window_width),
+        @ptrCast(&settings.window_height),
+    );
 
     state.camera =
-        Camera.init(@as(f32, @floatFromInt(state.window_width)) / @as(f32, @floatFromInt(state.window_height)));
+        Camera.init(@as(f32, @floatFromInt(settings.window_width)) / @as(f32, @floatFromInt(settings.window_height)));
 
     if (sdl.SDL_CreateGPUTexture(
         state.device,
         &.{
             .type = sdl.SDL_GPU_TEXTURETYPE_2D,
-            .width = state.window_width,
-            .height = state.window_height,
+            .width = settings.window_width,
+            .height = settings.window_height,
             .layer_count_or_depth = 1,
             .num_levels = 1,
             .format = state.render_texture_format,
@@ -842,8 +845,8 @@ fn initWindowSize(state: *State) void {
         state.device,
         &.{
             .type = sdl.SDL_GPU_TEXTURETYPE_2D,
-            .width = state.window_width,
-            .height = state.window_height,
+            .width = settings.window_width,
+            .height = settings.window_height,
             .layer_count_or_depth = 1,
             .num_levels = 1,
             .format = state.render_texture_format,
@@ -859,8 +862,8 @@ fn initWindowSize(state: *State) void {
         state.device,
         &.{
             .type = sdl.SDL_GPU_TEXTURETYPE_2D,
-            .width = state.window_width,
-            .height = state.window_height,
+            .width = settings.window_width,
+            .height = settings.window_height,
             .layer_count_or_depth = 1,
             .num_levels = 1,
             .sample_count = state.render_texture_sample_count,

@@ -16,13 +16,8 @@ const LIB_NAME =
     else
         "lib" ++ LIB_BASE_NAME ++ ".so";
 const LIB_NAME_RUNTIME = if (PLATFORM == .windows and INTERNAL) LIB_BASE_NAME ++ "_temp.dll" else LIB_NAME;
-
-const WINDOW_WIDTH = if (INTERNAL) 800 else 1600;
-const WINDOW_HEIGHT = if (INTERNAL) 600 else 1200;
 const WINDOW_DECORATIONS_WIDTH = if (PLATFORM == .windows) 0 else 0;
 const WINDOW_DECORATIONS_HEIGHT = if (PLATFORM == .windows) 31 else 0;
-const TARGET_FPS = 120;
-const TARGET_FRAME_TIME: f32 = 1000 / TARGET_FPS;
 
 var game: GameLib = .{};
 var opt_dyn_lib: ?std.DynLib = null;
@@ -41,12 +36,23 @@ pub fn main() !void {
     };
 
     const game_settings: GameLib.Settings = game.getSettings();
+    const target_frame_time: u64 = @intFromFloat(1000 / @as(f32, @floatFromInt(game_settings.target_frame_rate)));
 
     if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO | sdl.SDL_INIT_EVENTS)) {
         @panic("SDL_Init failed.");
     }
 
-    const window = sdl.SDL_CreateWindow("Playground", WINDOW_WIDTH, WINDOW_HEIGHT, 0);
+    var window_flags: sdl.SDL_WindowFlags = 0;
+    if (game_settings.fullscreen) window_flags |= sdl.SDL_WINDOW_FULLSCREEN;
+    if (game_settings.window_on_top) window_flags |= sdl.SDL_WINDOW_ALWAYS_ON_TOP;
+
+    const window = sdl.SDL_CreateWindow(
+        game_settings.title,
+        @intCast(game_settings.window_width),
+        @intCast(game_settings.window_height),
+        window_flags,
+    );
+
     if (window == null) {
         @panic("Failed to create window.");
     }
@@ -59,9 +65,12 @@ pub fn main() !void {
             const window_offset_x: c_int = WINDOW_DECORATIONS_WIDTH;
             const window_offset_y: c_int = WINDOW_DECORATIONS_HEIGHT;
 
-            _ = sdl.SDL_SetWindowPosition(window, display_mode[0].w - WINDOW_WIDTH - window_offset_x, window_offset_y);
+            _ = sdl.SDL_SetWindowPosition(
+                window,
+                display_mode[0].w - @as(c_int, @intCast(game_settings.window_width)) - window_offset_x,
+                window_offset_y,
+            );
         }
-        _ = sdl.SDL_SetWindowAlwaysOnTop(window, true);
     }
 
     var backing_allocator = std.heap.page_allocator;
@@ -70,8 +79,8 @@ pub fn main() !void {
         .Minimal => {
             state = game.initMinimal(.{
                 .window = window.?,
-                .window_width = WINDOW_WIDTH,
-                .window_height = WINDOW_HEIGHT,
+                .window_width = game_settings.window_width,
+                .window_height = game_settings.window_height,
             });
         },
         .All2D => {
@@ -88,8 +97,8 @@ pub fn main() !void {
                 .game_allocator = game_allocator,
                 .window = window.?,
                 .renderer = renderer.?,
-                .window_width = WINDOW_WIDTH,
-                .window_height = WINDOW_HEIGHT,
+                .window_width = game_settings.window_width,
+                .window_height = game_settings.window_height,
             };
 
             if (INTERNAL) {
@@ -136,8 +145,8 @@ pub fn main() !void {
         frame_elapsed_time = sdl.SDL_GetTicks() - frame_start_time;
 
         if (!INTERNAL) {
-            if (frame_elapsed_time < TARGET_FRAME_TIME) {
-                sdl.SDL_Delay(@intFromFloat(TARGET_FRAME_TIME - @as(f32, @floatFromInt(frame_elapsed_time))));
+            if (frame_elapsed_time < target_frame_time) {
+                sdl.SDL_Delay(@intCast(target_frame_time - frame_elapsed_time));
             }
         }
     }

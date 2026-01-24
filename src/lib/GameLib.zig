@@ -16,7 +16,14 @@ pub const DebugAllocator = std.heap.DebugAllocator(.{
 
 /// Settings that your game library can define.
 pub const Settings = extern struct {
-    dependencies: DependenciesType,
+    title: [*c]const u8 = "Playground",
+    window_width: u32 = if (INTERNAL) 800 else 1600,
+    window_height: u32 = if (INTERNAL) 600 else 1200,
+    window_floating: bool = INTERNAL,
+    window_on_top: bool = INTERNAL,
+    fullscreen: bool = !INTERNAL,
+    target_frame_rate: u32 = 120,
+    dependencies: DependenciesType = .Minimal,
 };
 
 /// List of dependency sets available to receive on startup.

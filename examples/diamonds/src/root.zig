@@ -72,9 +72,6 @@ pub const State = struct {
     render_texture: *sdl.SDL_Texture = undefined,
     dest_rect: sdl.SDL_FRect = undefined,
 
-    window_width: u32,
-    window_height: u32,
-
     world_scale: f32,
     ui_scale: f32,
     world_width: u32,
@@ -299,13 +296,16 @@ pub const Assets = struct {
     }
 };
 
+var settings: GameLib.Settings = .{
+    .title = "Diamonds",
+    .dependencies = .Minimal,
+};
+
 pub export fn getSettings() GameLib.Settings {
-    return .{ .dependencies = .Minimal };
+    return settings;
 }
 
 pub export fn init(dependencies: GameLib.Dependencies.Minimal) GameLib.GameStatePtr {
-    sdl_utils.logError(sdl.SDL_SetWindowTitle(dependencies.window, "Diamonds"), "Failed to set window title");
-
     var backing_allocator = std.heap.page_allocator;
     var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
     game_allocator.* = .init;
@@ -325,9 +325,6 @@ pub export fn init(dependencies: GameLib.Dependencies.Minimal) GameLib.GameState
 
         .window = dependencies.window,
         .renderer = sdl_utils.panicIfNull(sdl.SDL_CreateRenderer(dependencies.window, null), "Failed to create renderer.").?,
-
-        .window_width = dependencies.window_width,
-        .window_height = dependencies.window_height,
 
         .world_scale = 1,
         .ui_scale = 1,
@@ -371,7 +368,12 @@ pub export fn init(dependencies: GameLib.Dependencies.Minimal) GameLib.GameState
     setupRenderTexture(state);
 
     if (INTERNAL) {
-        imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
+        imgui.init(
+            state.window,
+            state.renderer,
+            @floatFromInt(settings.window_width),
+            @floatFromInt(settings.window_height),
+        );
     }
 
     return state;
@@ -385,8 +387,8 @@ pub fn restart(state: *State) void {
         @ptrCast(
             @alignCast(
                 init(.{
-                    .window_width = state.window_width,
-                    .window_height = state.window_height,
+                    .window_width = settings.window_width,
+                    .window_height = settings.window_height,
                     .window = state.window,
                 }),
             ),
@@ -406,11 +408,11 @@ pub export fn deinit(state_ptr: GameLib.GameStatePtr) void {
 }
 
 pub fn setupRenderTexture(state: *State) void {
-    _ = sdl.SDL_GetWindowSize(state.window, @ptrCast(&state.window_width), @ptrCast(&state.window_height));
-    state.world_scale = @as(f32, @floatFromInt(state.window_height)) / @as(f32, @floatFromInt(state.world_height));
+    _ = sdl.SDL_GetWindowSize(state.window, @ptrCast(&settings.window_width), @ptrCast(&settings.window_height));
+    state.world_scale = @as(f32, @floatFromInt(settings.window_height)) / @as(f32, @floatFromInt(state.world_height));
 
     var horizontal_offset: f32 =
-        (@as(f32, @floatFromInt(state.window_width)) -
+        (@as(f32, @floatFromInt(settings.window_width)) -
             (@as(f32, @floatFromInt(state.world_width)) * state.world_scale)) / 2;
 
     if (INTERNAL) {
@@ -456,7 +458,12 @@ pub export fn reloaded(state_ptr: GameLib.GameStatePtr) void {
     try addGameUI(state);
 
     if (INTERNAL) {
-        imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
+        imgui.init(
+            state.window,
+            state.renderer,
+            @floatFromInt(settings.window_width),
+            @floatFromInt(settings.window_height),
+        );
     }
 
     if (state.getEntity(state.ball_id)) |ball| {

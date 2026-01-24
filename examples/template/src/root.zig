@@ -16,8 +16,6 @@ const State = struct {
 
     window: *sdl.SDL_Window,
     renderer: *sdl.SDL_Renderer,
-    window_width: u32,
-    window_height: u32,
 
     // Input.
     space_is_down: bool,
@@ -30,8 +28,13 @@ const State = struct {
     } else struct {} = undefined,
 };
 
+const settings: GameLib.Settings = .{
+    .title = "Template",
+    .dependencies = .All2D,
+};
+
 pub export fn getSettings() GameLib.Settings {
-    return .{ .dependencies = .All2D };
+    return settings;
 }
 
 pub export fn init(dependencies: GameLib.Dependencies.All2D) GameLib.GameStatePtr {
@@ -44,8 +47,6 @@ pub export fn init(dependencies: GameLib.Dependencies.All2D) GameLib.GameStatePt
 
         .window = dependencies.window,
         .renderer = dependencies.renderer,
-        .window_width = dependencies.window_width,
-        .window_height = dependencies.window_height,
 
         .space_is_down = false,
     };
@@ -56,7 +57,12 @@ pub export fn init(dependencies: GameLib.Dependencies.All2D) GameLib.GameStatePt
         state.internal.output = dependencies.internal.output;
         state.internal.fps_window = dependencies.internal.fps_window;
 
-        imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
+        imgui.init(
+            state.window,
+            state.renderer,
+            @floatFromInt(settings.window_width),
+            @floatFromInt(settings.window_height),
+        );
     }
 
     return state;
@@ -85,7 +91,12 @@ pub export fn reloaded(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     if (INTERNAL) {
-        imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
+        imgui.init(
+            state.window,
+            state.renderer,
+            @floatFromInt(settings.window_width),
+            @floatFromInt(settings.window_height),
+        );
     }
 }
 
