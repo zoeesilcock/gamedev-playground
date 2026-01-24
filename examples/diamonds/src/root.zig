@@ -46,8 +46,6 @@ pub const DebugAllocator = std.heap.DebugAllocator(.{
 const INTERNAL: bool = @import("build_options").internal;
 const LOG_ALLOCATIONS: bool = @import("build_options").log_allocations;
 const MAX_ENTITY_COUNT = entities.MAX_ENTITY_COUNT;
-pub const WINDOW_WIDTH = 800;
-pub const WINDOW_HEIGHT = 600;
 const WORLD_WIDTH: u32 = 200;
 const WORLD_HEIGHT: u32 = 150;
 const BALL_VELOCITY: f32 = 64;
@@ -296,7 +294,7 @@ pub const Assets = struct {
     }
 };
 
-var settings: GameLib.Settings = .{
+pub var settings: GameLib.Settings = .{
     .title = "Diamonds",
     .dependencies = .Minimal,
 };
@@ -352,8 +350,6 @@ pub export fn init(dependencies: GameLib.Dependencies.Minimal) GameLib.GameState
         .current_title_id = null,
     };
 
-    _ = sdl.SDL_SetWindowSize(state.window, WINDOW_WIDTH, WINDOW_HEIGHT);
-
     if (INTERNAL) {
         state.internal = internal.InternalState.init(backing_allocator) catch @panic("Failed to init internal state.");
         internal.updateWindowSize(state);
@@ -387,8 +383,6 @@ pub fn restart(state: *State) void {
         @ptrCast(
             @alignCast(
                 init(.{
-                    .window_width = settings.window_width,
-                    .window_height = settings.window_height,
                     .window = state.window,
                 }),
             ),

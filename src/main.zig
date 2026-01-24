@@ -79,8 +79,6 @@ pub fn main() !void {
         .Minimal => {
             state = game.initMinimal(.{
                 .window = window.?,
-                .window_width = game_settings.window_width,
-                .window_height = game_settings.window_height,
             });
         },
         .All2D => {
@@ -97,8 +95,6 @@ pub fn main() !void {
                 .game_allocator = game_allocator,
                 .window = window.?,
                 .renderer = renderer.?,
-                .window_width = game_settings.window_width,
-                .window_height = game_settings.window_height,
             };
 
             if (INTERNAL) {

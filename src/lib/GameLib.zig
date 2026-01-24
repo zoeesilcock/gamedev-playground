@@ -37,8 +37,6 @@ pub const Dependencies = struct {
     /// A minimal set of dependencies, suitable when you want to do everything yourself.
     pub const Minimal = extern struct {
         window: *sdl.SDL_Window,
-        window_width: u32,
-        window_height: u32,
     };
 
     /// A batteries included set of dependencies for 2D rendering, preferable in most cases.
@@ -46,8 +44,6 @@ pub const Dependencies = struct {
         game_allocator: *DebugAllocator,
         window: *sdl.SDL_Window,
         renderer: *sdl.SDL_Renderer,
-        window_width: u32,
-        window_height: u32,
 
         internal: if (INTERNAL) extern struct {
             debug_allocator: *DebugAllocator = undefined,

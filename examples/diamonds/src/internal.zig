@@ -37,9 +37,8 @@ const MAX_FRAME_TIME_COUNT: u32 = 300;
 const MAX_MEMORY_USAGE_COUNT: u32 = 1000;
 const MEMORY_USAGE_RECORD_INTERVAL: u64 = 16;
 const LEVEL_NAME_BUFFER_SIZE = game.LEVEL_NAME_BUFFER_SIZE;
-const WINDOW_WIDTH = game.WINDOW_WIDTH;
-const WINDOW_HEIGHT = game.WINDOW_HEIGHT;
 const WINDOW_WIDTH_ADDITIONAL = 300;
+var initial_window_width: u32 = 0;
 
 pub const InternalState = struct {
     debug_allocator: *game.DebugAllocator,
@@ -231,15 +230,17 @@ pub fn updateWindowSize(state: *State) void {
     var height: c_int = 0;
     const show_sidebar: bool = state.internal.show_sidebar;
 
+    if (initial_window_width == 0) initial_window_width = game.settings.window_width;
+
     if (sdl.SDL_GetWindowPosition(state.window, &x, &y)) {
         if (sdl.SDL_GetWindowSize(state.window, &width, &height)) {
             var needs_change: bool = false;
 
-            if (show_sidebar and width == WINDOW_WIDTH) {
+            if (show_sidebar and width == game.settings.window_width) {
                 needs_change = true;
                 x -= WINDOW_WIDTH_ADDITIONAL;
                 width += WINDOW_WIDTH_ADDITIONAL;
-            } else if (!show_sidebar and width > WINDOW_WIDTH) {
+            } else if (!show_sidebar and width > initial_window_width) {
                 needs_change = true;
                 x += WINDOW_WIDTH_ADDITIONAL;
                 width -= WINDOW_WIDTH_ADDITIONAL;
