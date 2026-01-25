@@ -14,16 +14,29 @@ const State = struct {
     dependencies: GameLib.Dependencies.All2D,
 
     // Time.
-    time: u64,
-    delta_time: u64,
+    time: u64 = 0,
+    delta_time: u64 = 0,
 
     // Input.
-    space_is_down: bool,
+    space_is_down: bool = false,
 
     // Internal.
     internal: if (INTERNAL) extern struct {
         output: *playground.internal.DebugOutputWindow = undefined,
     } else extern struct {} = undefined,
+
+    pub fn create(dependencies: GameLib.Dependencies.All2D) !*State {
+        const state: *State = try dependencies.game_allocator.allocator().create(State);
+        state.* = .{
+            .dependencies = dependencies,
+        };
+
+        if (INTERNAL) {
+            state.internal.output = dependencies.internal.output;
+        }
+
+        return state;
+    }
 };
 
 const settings: GameLib.Settings = .{
@@ -36,20 +49,9 @@ pub export fn getSettings() GameLib.Settings {
 }
 
 pub export fn init(dependencies: GameLib.Dependencies.All2D) GameLib.GameStatePtr {
-    const game_allocator = dependencies.game_allocator;
-
-    const state: *State = game_allocator.allocator().create(State) catch @panic("Out of memory.");
-    state.* = .{
-        .dependencies = dependencies,
-
-        .time = 0,
-        .delta_time = 0,
-
-        .space_is_down = false,
-    };
+    const state: *State = State.create(dependencies) catch @panic("Failed to init state.");
 
     if (INTERNAL) {
-        state.internal.output = dependencies.internal.output;
         imgui.init(
             state.dependencies.window,
             state.dependencies.renderer,
