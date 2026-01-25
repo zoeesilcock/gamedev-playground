@@ -32,6 +32,7 @@ const State = struct {
         };
 
         if (INTERNAL) {
+            imgui.setup(state.dependencies.internal.imgui_context, .Renderer);
             state.internal.output = dependencies.internal.output;
         }
 
@@ -50,49 +51,22 @@ pub export fn getSettings() GameLib.Settings {
 
 pub export fn init(dependencies: GameLib.Dependencies.All2D) GameLib.GameStatePtr {
     const state: *State = State.create(dependencies) catch @panic("Failed to init state.");
-
-    if (INTERNAL) {
-        imgui.init(
-            state.dependencies.window,
-            state.dependencies.renderer,
-            @floatFromInt(settings.window_width),
-            @floatFromInt(settings.window_height),
-        );
-    }
-
     return state;
 }
 
 pub export fn deinit(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
-
-    if (INTERNAL) {
-        imgui.deinit();
-    }
-
-    sdl.SDL_DestroyRenderer(state.dependencies.renderer);
+    _ = state;
 }
 
 pub export fn willReload(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
     _ = state;
-
-    if (INTERNAL) {
-        imgui.deinit();
-    }
 }
 
 pub export fn reloaded(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
-
-    if (INTERNAL) {
-        imgui.init(
-            state.dependencies.window,
-            state.dependencies.renderer,
-            @floatFromInt(settings.window_width),
-            @floatFromInt(settings.window_height),
-        );
-    }
+    _ = state;
 }
 
 pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {

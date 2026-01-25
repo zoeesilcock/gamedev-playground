@@ -2,6 +2,7 @@ const std = @import("std");
 const playground = @import("playground");
 const sdl = playground.sdl.c;
 const GameLib = playground.GameLib;
+const imgui = if (INTERNAL) playground.imgui else struct {};
 
 const INTERNAL: bool = @import("build_options").internal;
 const PLATFORM = @import("builtin").os.tag;
@@ -45,17 +46,12 @@ pub fn main() !void {
     var window_flags: sdl.SDL_WindowFlags = 0;
     if (game_settings.fullscreen) window_flags |= sdl.SDL_WINDOW_FULLSCREEN;
     if (game_settings.window_on_top) window_flags |= sdl.SDL_WINDOW_ALWAYS_ON_TOP;
-
-    const window = sdl.SDL_CreateWindow(
+    const window = playground.sdl.panicIfNull(sdl.SDL_CreateWindow(
         game_settings.title,
         @intCast(game_settings.window_width),
         @intCast(game_settings.window_height),
         window_flags,
-    );
-
-    if (window == null) {
-        @panic("Failed to create window.");
-    }
+    ), "Failed to create window.");
 
     if (INTERNAL) {
         var num_displays: i32 = 0;
@@ -73,8 +69,11 @@ pub fn main() !void {
         }
     }
 
+    var game_renderer: ?*sdl.SDL_Renderer = null;
+    const game_gpu_device: ?*sdl.SDL_GPUDevice = null;
     var backing_allocator = std.heap.page_allocator;
     var state: GameLib.GameStatePtr = undefined;
+    var manage_imgui_lifecycle: bool = false;
     switch (game_settings.dependencies) {
         .Minimal => {
             state = game.initMinimal(.{
@@ -86,7 +85,7 @@ pub fn main() !void {
                 @panic("Failed to initialize game allocator.");
             game_allocator.* = .init;
 
-            const renderer = playground.sdl.panicIfNull(
+            game_renderer = playground.sdl.panicIfNull(
                 sdl.SDL_CreateRenderer(window.?, null),
                 "Failed to create renderer.",
             );
@@ -94,7 +93,7 @@ pub fn main() !void {
             var dependencies: GameLib.Dependencies.All2D = .{
                 .game_allocator = game_allocator,
                 .window = window.?,
-                .renderer = renderer.?,
+                .renderer = game_renderer.?,
             };
 
             if (INTERNAL) {
@@ -112,6 +111,10 @@ pub fn main() !void {
 
                 dependencies.internal.output.init();
                 dependencies.internal.fps_window.init(sdl.SDL_GetPerformanceFrequency());
+
+                manage_imgui_lifecycle = true;
+                initImgui(window.?, game_renderer, game_gpu_device, game_settings);
+                dependencies.internal.imgui_context = imgui.context.?;
             }
 
             state = game.initAll2D(dependencies);
@@ -130,7 +133,10 @@ pub fn main() !void {
         const delta_time = frame_start_time - previous_frame_start_time;
 
         if (INTERNAL) {
-            checkForChanges(state, allocator);
+            const reloaded = checkForChanges(state, allocator, manage_imgui_lifecycle);
+            if (reloaded and manage_imgui_lifecycle) {
+                initImgui(window.?, game_renderer, game_gpu_device, game_settings);
+            }
         }
 
         if (!game.processInput(state)) {
@@ -152,6 +158,14 @@ pub fn main() !void {
 
     game.deinit(state);
 
+    if (INTERNAL and manage_imgui_lifecycle) {
+        imgui.deinit();
+    }
+
+    if (game_renderer) |renderer| {
+        sdl.SDL_DestroyRenderer(renderer);
+    }
+
     sdl.SDL_DestroyWindow(window);
     sdl.SDL_Quit();
 
@@ -160,24 +174,56 @@ pub fn main() !void {
     }
 }
 
+fn initImgui(
+    window: *sdl.SDL_Window,
+    game_renderer: ?*sdl.SDL_Renderer,
+    game_gpu_device: ?*sdl.SDL_GPUDevice,
+    game_settings: GameLib.Settings,
+) void {
+    if (game_renderer) |renderer| {
+        imgui.init(
+            window,
+            renderer,
+            @floatFromInt(game_settings.window_width),
+            @floatFromInt(game_settings.window_height),
+        );
+    } else if (game_gpu_device) |gpu_device| {
+        imgui.initGPU(
+            window,
+            gpu_device,
+            @floatFromInt(game_settings.window_width),
+            @floatFromInt(game_settings.window_height),
+        );
+    }
+}
+
 fn initChangeTimes(allocator: std.mem.Allocator) void {
     _ = dllHasChanged();
     _ = assetsHaveChanged(allocator);
 }
 
-fn checkForChanges(state: GameLib.GameStatePtr, allocator: std.mem.Allocator) void {
+fn checkForChanges(state: GameLib.GameStatePtr, allocator: std.mem.Allocator, manage_imgui_lifecycle: bool) bool {
     const assetsChanged = assetsHaveChanged(allocator);
-    if (dllHasChanged()) {
+    const dllChanged = dllHasChanged();
+    var reloaded: bool = false;
+
+    if (dllChanged or assetsChanged) {
         game.willReload(state);
 
-        unloadDll() catch unreachable;
-        loadDll() catch @panic("Failed to load the game lib.");
+        if (manage_imgui_lifecycle) {
+            imgui.deinit();
+        }
+
+        if (dllChanged) {
+            unloadDll() catch unreachable;
+            loadDll() catch @panic("Failed to load the game lib.");
+        }
 
         game.reloaded(state);
-    } else if (assetsChanged) {
-        game.willReload(state);
-        game.reloaded(state);
+        reloaded = true;
     }
+
+    return reloaded;
 }
 
 fn dllHasChanged() bool {

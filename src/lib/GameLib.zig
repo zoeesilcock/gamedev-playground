@@ -2,6 +2,7 @@
 //! game library (most likely the `root.zig` file) and marking them with `pub export`.
 const std = @import("std");
 const sdl = @import("sdl.zig").c;
+const imgui = @import("imgui.zig").c;
 const internal = @import("internal.zig");
 
 // Build options.
@@ -46,6 +47,7 @@ pub const Dependencies = struct {
         renderer: *sdl.SDL_Renderer,
 
         internal: if (INTERNAL) extern struct {
+            imgui_context: *imgui.ImGuiContext = undefined,
             debug_allocator: *DebugAllocator = undefined,
             output: *internal.DebugOutputWindow = undefined,
             fps_window: *internal.FPSWindow = undefined,
