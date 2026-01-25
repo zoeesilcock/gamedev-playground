@@ -40,14 +40,21 @@ extern fn ImGui_ImplSDLGPU3_NewFrame() void;
 extern fn ImGui_ImplSDLGPU3_PrepareDrawData(draw_data: ?*c.ImDrawData, command_buffer: ?*sdl.SDL_GPUCommandBuffer) void;
 extern fn ImGui_ImplSDLGPU3_RenderDrawData(draw_data: ?*c.ImDrawData, command_buffer: ?*sdl.SDL_GPUCommandBuffer, render_pass: ?*sdl.SDL_GPURenderPass, pipeline: ?*sdl.SDL_GPUGraphicsPipeline) void;
 
-var im_context: ?*c.ImGuiContext = null;
+pub var context: ?*c.ImGuiContext = null;
 var backend: Backend = .Renderer;
 
-/// Initialize the SDL3 Renderer backend. Call this function when you game launches.
+/// Set the imgui context and backend, this is needed when using the dependency types that manage imgui the imgui
+/// lifecycle for you (all but `GameLib.Dependencies.Minimal`).
+pub fn setup(imgui_context: ?*c.ImGuiContext, imgui_backend: Backend) void {
+    backend = imgui_backend;
+    context = imgui_context;
+    c.ImGui_SetCurrentContext(context);
+}
+
+/// Initialize the SDL3 Renderer backend.
+/// Call this function when you game launches if you are managing the imgui lifecycle yourself.
 pub fn init(window: *sdl.SDL_Window, renderer: *sdl.SDL_Renderer, width: f32, height: f32) void {
-    backend = .Renderer;
-    im_context = c.ImGui_CreateContext(null);
-    c.ImGui_SetCurrentContext(im_context);
+    setup(c.ImGui_CreateContext(null), .Renderer);
     {
         var im_io: *c.ImGuiIO = @ptrCast(c.ImGui_GetIO());
         im_io.ConfigFlags =
@@ -63,11 +70,10 @@ pub fn init(window: *sdl.SDL_Window, renderer: *sdl.SDL_Renderer, width: f32, he
     _ = ImGui_ImplSDLRenderer3_Init(renderer);
 }
 
-/// Initialize the SDL3 GPU backend. Call this function when you game launches.
+/// Initialize the SDL3 GPU backend.
+/// Call this function when you game launches if you are managing the imgui lifecycle yourself.
 pub fn initGPU(window: *sdl.SDL_Window, device: *sdl.SDL_GPUDevice, width: f32, height: f32) void {
-    backend = .GPU;
-    im_context = c.ImGui_CreateContext(null);
-    c.ImGui_SetCurrentContext(im_context);
+    setup(c.ImGui_CreateContext(null), .GPU);
     {
         var im_io: *c.ImGuiIO = @ptrCast(c.ImGui_GetIO());
         im_io.ConfigFlags =
@@ -97,7 +103,7 @@ pub fn deinit() void {
         .GPU => ImGui_ImplSDLGPU3_Shutdown(),
     }
 
-    c.ImGui_DestroyContext(im_context);
+    c.ImGui_DestroyContext(context);
 }
 
 /// Process SDL events, call this with the event received via `SDL_PollEvent`. Returns a boolean which tells you if

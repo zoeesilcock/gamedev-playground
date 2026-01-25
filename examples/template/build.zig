@@ -11,6 +11,7 @@ pub fn build(b: *std.Build) void {
     const lib_base_name = b.option([]const u8, "lib_base_name", "name of the shared library") orelse "template";
     build_options.addOption(bool, "internal", internal);
     build_options.addOption([]const u8, "lib_base_name", lib_base_name);
+    const build_options_mod = build_options.createModule();
 
     // Game library.
     const module = b.createModule(.{
@@ -18,7 +19,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    module.addOptions("build_options", build_options);
+    module.addImport("build_options", build_options_mod);
 
     const lib = b.addLibrary(.{
         .linkage = .dynamic,
@@ -47,6 +48,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const playground_mod = playground_dep.module("playground");
+    playground_mod.addImport("build_options", build_options_mod);
     module.addImport("playground", playground_mod);
     gamedev_playground.linkSDL(playground_dep.builder, lib, target, optimize);
 
@@ -55,7 +57,7 @@ pub fn build(b: *std.Build) void {
             playground_dep.builder,
             b,
             "template",
-            build_options,
+            build_options_mod,
             target,
             optimize,
             playground_mod,

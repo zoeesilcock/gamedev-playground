@@ -51,8 +51,6 @@ pub const State = struct {
     depth_stencil_format: sdl.SDL_GPUTextureFormat = undefined,
     depth_stencil_texture: *sdl.SDL_GPUTexture = undefined,
 
-    window_width: u32,
-    window_height: u32,
     fullscreen: bool = false,
     screen_effect: ScreenEffect = .None,
 
@@ -251,9 +249,16 @@ const FragmentUniforms = struct {
     screen_effect: u32,
 };
 
-pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) GameLib.GameStatePtr {
-    sdl_utils.logError(sdl.SDL_SetWindowTitle(window, "Cube"), "Failed to set window title");
+var settings: GameLib.Settings = .{
+    .title = "Cube",
+    .dependencies = .Minimal,
+};
 
+pub export fn getSettings() GameLib.Settings {
+    return settings;
+}
+
+pub export fn init(dependencies: GameLib.Dependencies.Minimal) GameLib.GameStatePtr {
     var backing_allocator = std.heap.page_allocator;
     var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
     game_allocator.* = .init;
@@ -280,9 +285,7 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     state.* = .{
         .allocator = allocator,
         .game_allocator = game_allocator,
-        .window = window,
-        .window_width = window_width,
-        .window_height = window_height,
+        .window = dependencies.window,
         .device = device.?,
         .time = sdl.SDL_GetTicks(),
         .camera = undefined,
@@ -314,7 +317,12 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
     submitQuadData(state);
 
     if (INTERNAL) {
-        imgui.initGPU(state.window, state.device, @floatFromInt(window_width), @floatFromInt(window_height));
+        imgui.initGPU(
+            state.window,
+            state.device,
+            @floatFromInt(settings.window_width),
+            @floatFromInt(settings.window_height),
+        );
     }
 
     return state;
@@ -353,8 +361,8 @@ pub export fn reloaded(state_ptr: GameLib.GameStatePtr) void {
         imgui.initGPU(
             state.window,
             state.device,
-            @floatFromInt(state.window_width),
-            @floatFromInt(state.window_height),
+            @floatFromInt(settings.window_width),
+            @floatFromInt(settings.window_height),
         );
     }
 
@@ -420,13 +428,12 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
     return continue_running;
 }
 
-pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
+pub export fn tick(state_ptr: GameLib.GameStatePtr, time: u64, delta_time: u64) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    const new_time: u64 = sdl.SDL_GetTicks();
-    state.delta_time_actual = new_time - state.time;
+    state.time = time;
+    state.delta_time_actual = delta_time;
     state.delta_time = if (state.paused) 0 else state.delta_time_actual;
-    state.time = new_time;
 
     if (INTERNAL) {
         state.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());
@@ -787,17 +794,21 @@ fn deinitPipeline(state: *State) void {
 }
 
 fn initWindowSize(state: *State) void {
-    _ = sdl.SDL_GetWindowSizeInPixels(state.window, @ptrCast(&state.window_width), @ptrCast(&state.window_height));
+    _ = sdl.SDL_GetWindowSizeInPixels(
+        state.window,
+        @ptrCast(&settings.window_width),
+        @ptrCast(&settings.window_height),
+    );
 
     state.camera =
-        Camera.init(@as(f32, @floatFromInt(state.window_width)) / @as(f32, @floatFromInt(state.window_height)));
+        Camera.init(@as(f32, @floatFromInt(settings.window_width)) / @as(f32, @floatFromInt(settings.window_height)));
 
     if (sdl.SDL_CreateGPUTexture(
         state.device,
         &.{
             .type = sdl.SDL_GPU_TEXTURETYPE_2D,
-            .width = state.window_width,
-            .height = state.window_height,
+            .width = settings.window_width,
+            .height = settings.window_height,
             .layer_count_or_depth = 1,
             .num_levels = 1,
             .format = state.render_texture_format,
@@ -833,8 +844,8 @@ fn initWindowSize(state: *State) void {
         state.device,
         &.{
             .type = sdl.SDL_GPU_TEXTURETYPE_2D,
-            .width = state.window_width,
-            .height = state.window_height,
+            .width = settings.window_width,
+            .height = settings.window_height,
             .layer_count_or_depth = 1,
             .num_levels = 1,
             .format = state.render_texture_format,
@@ -850,8 +861,8 @@ fn initWindowSize(state: *State) void {
         state.device,
         &.{
             .type = sdl.SDL_GPU_TEXTURETYPE_2D,
-            .width = state.window_width,
-            .height = state.window_height,
+            .width = settings.window_width,
+            .height = settings.window_height,
             .layer_count_or_depth = 1,
             .num_levels = 1,
             .sample_count = state.render_texture_sample_count,

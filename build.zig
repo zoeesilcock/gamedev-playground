@@ -9,6 +9,7 @@ pub fn build(b: *std.Build) !void {
     const exe_build_options = b.addOptions();
     exe_build_options.addOption(bool, "internal", internal);
     exe_build_options.addOption([]const u8, "lib_base_name", lib_base_name);
+    const exe_build_options_mod = exe_build_options.createModule();
 
     const build_options = b.addOptions();
     build_options.addOption(bool, "internal", internal);
@@ -26,7 +27,7 @@ pub fn build(b: *std.Build) !void {
     linkImgui(b, playground_mod, target, optimize, internal);
 
     // Main executable.
-    const exe = buildExecutable(b, b, "gamedev-playground", exe_build_options, target, optimize, playground_mod);
+    const exe = buildExecutable(b, b, "gamedev-playground", exe_build_options_mod, target, optimize, playground_mod);
     b.installArtifact(exe);
 
     // Tests.
@@ -63,7 +64,7 @@ pub fn buildExecutable(
     b: *std.Build,
     client_b: *std.Build,
     name: []const u8,
-    build_options: *std.Build.Step.Options,
+    build_options_mod: *std.Build.Module,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     playground_mod: *std.Build.Module,
@@ -76,7 +77,7 @@ pub fn buildExecutable(
             .{ .name = "playground", .module = playground_mod },
         },
     });
-    module.addOptions("build_options", build_options);
+    module.addImport("build_options", build_options_mod);
     const exe = b.addExecutable(.{
         .name = name,
         .root_module = module,
