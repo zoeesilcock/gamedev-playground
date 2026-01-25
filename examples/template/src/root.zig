@@ -11,11 +11,7 @@ const GameLib = playground.GameLib;
 const DebugAllocator = GameLib.DebugAllocator;
 
 const State = struct {
-    game_allocator: *DebugAllocator,
-    allocator: std.mem.Allocator,
-
-    window: *sdl.SDL_Window,
-    renderer: *sdl.SDL_Renderer,
+    dependencies: GameLib.Dependencies.All2D,
 
     // Time.
     time: u64,
@@ -24,12 +20,10 @@ const State = struct {
     // Input.
     space_is_down: bool,
 
-    internal: if (INTERNAL) struct {
-        debug_allocator: *DebugAllocator = undefined,
-        allocator: std.mem.Allocator = undefined,
+    // Internal.
+    internal: if (INTERNAL) extern struct {
         output: *playground.internal.DebugOutputWindow = undefined,
-        fps_window: *playground.internal.FPSWindow = undefined,
-    } else struct {} = undefined,
+    } else extern struct {} = undefined,
 };
 
 const settings: GameLib.Settings = .{
@@ -44,13 +38,9 @@ pub export fn getSettings() GameLib.Settings {
 pub export fn init(dependencies: GameLib.Dependencies.All2D) GameLib.GameStatePtr {
     const game_allocator = dependencies.game_allocator;
 
-    var state: *State = game_allocator.allocator().create(State) catch @panic("Out of memory.");
+    const state: *State = game_allocator.allocator().create(State) catch @panic("Out of memory.");
     state.* = .{
-        .game_allocator = game_allocator,
-        .allocator = game_allocator.allocator(),
-
-        .window = dependencies.window,
-        .renderer = dependencies.renderer,
+        .dependencies = dependencies,
 
         .time = 0,
         .delta_time = 0,
@@ -59,14 +49,10 @@ pub export fn init(dependencies: GameLib.Dependencies.All2D) GameLib.GameStatePt
     };
 
     if (INTERNAL) {
-        state.internal.debug_allocator = dependencies.internal.debug_allocator;
-        state.internal.allocator = state.internal.debug_allocator.allocator();
         state.internal.output = dependencies.internal.output;
-        state.internal.fps_window = dependencies.internal.fps_window;
-
         imgui.init(
-            state.window,
-            state.renderer,
+            state.dependencies.window,
+            state.dependencies.renderer,
             @floatFromInt(settings.window_width),
             @floatFromInt(settings.window_height),
         );
@@ -82,7 +68,7 @@ pub export fn deinit(state_ptr: GameLib.GameStatePtr) void {
         imgui.deinit();
     }
 
-    sdl.SDL_DestroyRenderer(state.renderer);
+    sdl.SDL_DestroyRenderer(state.dependencies.renderer);
 }
 
 pub export fn willReload(state_ptr: GameLib.GameStatePtr) void {
@@ -99,8 +85,8 @@ pub export fn reloaded(state_ptr: GameLib.GameStatePtr) void {
 
     if (INTERNAL) {
         imgui.init(
-            state.window,
-            state.renderer,
+            state.dependencies.window,
+            state.dependencies.renderer,
             @floatFromInt(settings.window_width),
             @floatFromInt(settings.window_height),
         );
@@ -129,7 +115,7 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
             switch (event.key.key) {
                 sdl.SDLK_F1 => {
                     if (INTERNAL) {
-                        state.internal.fps_window.cycleMode();
+                        state.dependencies.internal.fps_window.cycleMode();
                     }
                 },
                 // Process your game input here.
@@ -150,7 +136,7 @@ pub export fn tick(state_ptr: GameLib.GameStatePtr, time: u64, delta_time: u64) 
     state.delta_time = delta_time;
 
     if (INTERNAL) {
-        state.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());
+        state.dependencies.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());
 
         state.internal.output.print("Hello world! Space is down: {s}", .{
             if (state.space_is_down) "true" else "false",
@@ -163,10 +149,10 @@ pub export fn tick(state_ptr: GameLib.GameStatePtr, time: u64, delta_time: u64) 
 pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    _ = sdl.SDL_SetRenderTarget(state.renderer, null);
+    _ = sdl.SDL_SetRenderTarget(state.dependencies.renderer, null);
     {
-        _ = sdl.SDL_SetRenderDrawColor(state.renderer, 0, 0, 0, 255);
-        _ = sdl.SDL_RenderClear(state.renderer);
+        _ = sdl.SDL_SetRenderDrawColor(state.dependencies.renderer, 0, 0, 0, 255);
+        _ = sdl.SDL_RenderClear(state.dependencies.renderer);
 
         // Draw your game world here.
         drawGame(state);
@@ -175,22 +161,22 @@ pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
             imgui.newFrame();
             // Draw your internal UI and visualizations here.
             drawInternalUI(state);
-            imgui.render(state.renderer);
+            imgui.render(state.dependencies.renderer);
         }
     }
-    _ = sdl.SDL_RenderPresent(state.renderer);
+    _ = sdl.SDL_RenderPresent(state.dependencies.renderer);
 }
 
 fn drawGame(state: *State) void {
     if (state.space_is_down) {
-        _ = sdl.SDL_SetRenderDrawColor(state.renderer, 0, 127, 0, 255);
-        _ = sdl.SDL_RenderClear(state.renderer);
+        _ = sdl.SDL_SetRenderDrawColor(state.dependencies.renderer, 0, 127, 0, 255);
+        _ = sdl.SDL_RenderClear(state.dependencies.renderer);
     }
 }
 
 fn drawInternalUI(state: *State) void {
-    state.internal.fps_window.draw();
-    state.internal.output.draw();
+    state.dependencies.internal.fps_window.draw();
+    state.dependencies.internal.output.draw();
 
     // Game state inspector
     {
