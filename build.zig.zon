@@ -1,6 +1,6 @@
 .{
     .name = .gamedev_playground,
-    .version = "0.7.0",
+    .version = "0.8.0",
     .minimum_zig_version = "0.15.2",
     .fingerprint = 0x4d0121353119f6fd,
     .dependencies = .{
