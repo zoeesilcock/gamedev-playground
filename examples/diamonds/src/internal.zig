@@ -247,16 +247,6 @@ pub fn updateWindowSize(state: *State) void {
     }
 }
 
-pub fn resetWindowPosition(state: *State) void {
-    if (state.internal.show_sidebar) {
-        var x: c_int = 0;
-        var y: c_int = 0;
-        if (sdl.SDL_GetWindowPosition(state.window, &x, &y)) {
-            _ = sdl.SDL_SetWindowPosition(state.window, x + WINDOW_WIDTH_ADDITIONAL, y);
-        }
-    }
-}
-
 pub fn handleInput(state: *State, allocator: std.mem.Allocator) void {
     state.internal.hovered_entity_id = getHoveredEntity(state);
 

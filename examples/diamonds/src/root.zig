@@ -385,19 +385,17 @@ pub fn restart(state: *State) void {
 }
 
 pub export fn deinit(state_ptr: GameLib.GameStatePtr) void {
-    const state: *State = @ptrCast(@alignCast(state_ptr));
-
-    if (INTERNAL) {
-        internal.resetWindowPosition(state);
-    }
+    _ = state_ptr;
 }
 
 pub fn setupRenderTexture(state: *State) void {
-    _ = sdl.SDL_GetWindowSize(state.window, @ptrCast(&settings.window_width), @ptrCast(&settings.window_height));
-    state.world_scale = @as(f32, @floatFromInt(settings.window_height)) / @as(f32, @floatFromInt(state.world_height));
+    var window_width: c_int = 0;
+    var window_height: c_int = 0;
+    _ = sdl.SDL_GetWindowSize(state.window, &window_width, &window_height);
+    state.world_scale = @as(f32, @floatFromInt(window_height)) / @as(f32, @floatFromInt(state.world_height));
 
     var horizontal_offset: f32 =
-        (@as(f32, @floatFromInt(settings.window_width)) -
+        (@as(f32, @floatFromInt(window_width)) -
             (@as(f32, @floatFromInt(state.world_width)) * state.world_scale)) / 2;
 
     if (INTERNAL) {
