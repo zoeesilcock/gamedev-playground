@@ -31,6 +31,11 @@ pub const Settings = extern struct {
 pub const DependenciesType = enum(u32) {
     Minimal,
     Full2D,
+    Full3D,
+
+    pub fn batteriesIncluded(self: DependenciesType) bool {
+        return self == .Full2D or self == .Full3D;
+    }
 };
 
 /// These structs define different sets of dependencies that can be provided to your library on startup.
@@ -46,13 +51,25 @@ pub const Dependencies = struct {
         window: *sdl.SDL_Window,
         renderer: *sdl.SDL_Renderer,
 
-        internal: if (INTERNAL) extern struct {
-            imgui_context: *imgui.ImGuiContext = undefined,
-            debug_allocator: *DebugAllocator = undefined,
-            output: *internal.DebugOutputWindow = undefined,
-            fps_window: *internal.FPSWindow = undefined,
-        } else extern struct {} = undefined,
+        internal: Internal = undefined,
     };
+
+    /// A batteries included set of dependencies for 2D rendering, preferable in most cases.
+    pub const Full3D = extern struct {
+        game_allocator: *DebugAllocator,
+        window: *sdl.SDL_Window,
+        gpu_device: *sdl.SDL_GPUDevice,
+
+        internal: Internal = undefined,
+    };
+
+    /// The internal dependencies included in the Full2D and Full3D dependency sets.
+    pub const Internal = if (INTERNAL) extern struct {
+        imgui_context: *imgui.ImGuiContext = undefined,
+        debug_allocator: *DebugAllocator = undefined,
+        output: *internal.DebugOutputWindow = undefined,
+        fps_window: *internal.FPSWindow = undefined,
+    } else extern struct {};
 };
 
 /// Type that signifies a pointer to your game state, you will need to cast it to the type you are using for your game
@@ -66,12 +83,15 @@ pub const GameStatePtr = *anyopaque;
 /// Called before the game has been initialized. The settings returned will decide what type of init dependencies will
 /// be passed.
 getSettings: *const fn () callconv(.c) Settings = undefined,
-/// Called when the game starts, use to setup your game state and return a pointer to it which will be held by the main
+/// Called when the game starts, used to setup your game state and return a pointer to it which will be held by the main
 /// executable and passed to all subsequent calls into the game. Includes a minimal set of dependencies.
 initMinimal: *const fn (Dependencies.Minimal) callconv(.c) GameStatePtr = undefined,
-/// Called when the game starts, use to setup your game state and return a pointer to it which will be held by the main
+/// Called when the game starts, used to setup your game state and return a pointer to it which will be held by the main
 /// executable and passed to all subsequent calls into the game. Includes a full set of dependencies for 2D games.
 initFull2D: *const fn (Dependencies.Full2D) callconv(.c) GameStatePtr = undefined,
+/// Called when the game starts, used to setup your game state and return a pointer to it which will be held by the main
+/// executable and passed to all subsequent calls into the game. Includes a full set of dependencies for 3D games.
+initFull3D: *const fn (Dependencies.Full3D) callconv(.c) GameStatePtr = undefined,
 
 /// Called just before the game exits.
 deinit: *const fn (GameStatePtr) callconv(.c) void = undefined,
@@ -91,6 +111,7 @@ pub fn load(self: *@This(), dyn_lib: *std.DynLib) !void {
     self.getSettings = dyn_lib.lookup(@TypeOf(self.getSettings), "getSettings") orelse return error.LookupFail;
     self.initMinimal = dyn_lib.lookup(@TypeOf(self.initMinimal), "init") orelse return error.LookupFail;
     self.initFull2D = dyn_lib.lookup(@TypeOf(self.initFull2D), "init") orelse return error.LookupFail;
+    self.initFull3D = dyn_lib.lookup(@TypeOf(self.initFull3D), "init") orelse return error.LookupFail;
 
     self.deinit = dyn_lib.lookup(@TypeOf(self.deinit), "deinit") orelse return error.LookupFail;
 

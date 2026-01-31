@@ -70,10 +70,65 @@ pub fn main() !void {
     }
 
     var game_renderer: ?*sdl.SDL_Renderer = null;
-    const game_gpu_device: ?*sdl.SDL_GPUDevice = null;
+    var game_gpu_device: ?*sdl.SDL_GPUDevice = null;
     var backing_allocator = std.heap.page_allocator;
     var state: GameLib.GameStatePtr = undefined;
     var manage_imgui_lifecycle: bool = false;
+    var internal_dependencies: GameLib.Dependencies.Internal = undefined;
+
+    // Prepare dependencies.
+    const game_allocator = backing_allocator.create(GameLib.DebugAllocator) catch
+        @panic("Failed to initialize game allocator.");
+    game_allocator.* = .init;
+
+    switch (game_settings.dependencies) {
+        .Minimal => {
+            // Nothing needs to be done here.
+        },
+        .Full2D => {
+            game_renderer = playground.sdl.panicIfNull(
+                sdl.SDL_CreateRenderer(window.?, null),
+                "Failed to create renderer.",
+            );
+        },
+        .Full3D => {
+            game_gpu_device = playground.sdl.panicIfNull(sdl.SDL_CreateGPUDevice(
+                sdl.SDL_GPU_SHADERFORMAT_SPIRV |
+                    sdl.SDL_GPU_SHADERFORMAT_DXIL |
+                    sdl.SDL_GPU_SHADERFORMAT_MSL |
+                    sdl.SDL_GPU_SHADERFORMAT_METALLIB,
+                true,
+                null,
+            ), "Failed to create GPU device");
+            playground.sdl.panic(
+                sdl.SDL_ClaimWindowForGPUDevice(game_gpu_device, window),
+                "Failed to claim window for GPU device.",
+            );
+        },
+    }
+
+    if (INTERNAL and game_settings.dependencies.batteriesIncluded()) {
+        const internal_allocator = (backing_allocator.create(GameLib.DebugAllocator) catch
+            @panic("Failed to initialize game allocator."));
+        internal_allocator.* = .init;
+
+        internal_dependencies = .{
+            .debug_allocator = internal_allocator,
+            .output = internal_allocator.allocator().create(playground.internal.DebugOutputWindow) catch
+                @panic("Out of memory."),
+            .fps_window = internal_allocator.allocator().create(playground.internal.FPSWindow) catch
+                @panic("Failed to allocate FPS state."),
+        };
+
+        internal_dependencies.output.init();
+        internal_dependencies.fps_window.init(sdl.SDL_GetPerformanceFrequency());
+
+        manage_imgui_lifecycle = true;
+        initImgui(window.?, game_renderer, game_gpu_device, game_settings);
+        internal_dependencies.imgui_context = imgui.context.?;
+    }
+
+    // Init game with the requested dependencies.
     switch (game_settings.dependencies) {
         .Minimal => {
             state = game.initMinimal(.{
@@ -81,43 +136,24 @@ pub fn main() !void {
             });
         },
         .Full2D => {
-            const game_allocator = backing_allocator.create(GameLib.DebugAllocator) catch
-                @panic("Failed to initialize game allocator.");
-            game_allocator.* = .init;
-
-            game_renderer = playground.sdl.panicIfNull(
-                sdl.SDL_CreateRenderer(window.?, null),
-                "Failed to create renderer.",
-            );
-
-            var dependencies: GameLib.Dependencies.Full2D = .{
+            const dependencies: GameLib.Dependencies.Full2D = .{
                 .game_allocator = game_allocator,
                 .window = window.?,
                 .renderer = game_renderer.?,
+                .internal = internal_dependencies,
             };
 
-            if (INTERNAL) {
-                const internal_allocator = (backing_allocator.create(GameLib.DebugAllocator) catch
-                    @panic("Failed to initialize game allocator."));
-                internal_allocator.* = .init;
-
-                dependencies.internal = .{
-                    .debug_allocator = internal_allocator,
-                    .output = internal_allocator.allocator().create(playground.internal.DebugOutputWindow) catch
-                        @panic("Out of memory."),
-                    .fps_window = internal_allocator.allocator().create(playground.internal.FPSWindow) catch
-                        @panic("Failed to allocate FPS state."),
-                };
-
-                dependencies.internal.output.init();
-                dependencies.internal.fps_window.init(sdl.SDL_GetPerformanceFrequency());
-
-                manage_imgui_lifecycle = true;
-                initImgui(window.?, game_renderer, game_gpu_device, game_settings);
-                dependencies.internal.imgui_context = imgui.context.?;
-            }
-
             state = game.initFull2D(dependencies);
+        },
+        .Full3D => {
+            const dependencies: GameLib.Dependencies.Full3D = .{
+                .game_allocator = game_allocator,
+                .window = window.?,
+                .gpu_device = game_gpu_device.?,
+                .internal = internal_dependencies,
+            };
+
+            state = game.initFull3D(dependencies);
         },
     }
 
@@ -160,6 +196,11 @@ pub fn main() !void {
 
     if (INTERNAL and manage_imgui_lifecycle) {
         imgui.deinit();
+    }
+
+    if (game_settings.dependencies == .Full3D) {
+        sdl.SDL_ReleaseWindowFromGPUDevice(game_gpu_device, window);
+        sdl.SDL_DestroyGPUDevice(game_gpu_device);
     }
 
     if (game_renderer) |renderer| {
