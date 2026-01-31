@@ -11,7 +11,7 @@ const GameLib = playground.GameLib;
 const DebugAllocator = GameLib.DebugAllocator;
 
 const State = struct {
-    dependencies: GameLib.Dependencies.All2D,
+    dependencies: GameLib.Dependencies.Full2D,
 
     // Time.
     time: u64 = 0,
@@ -25,7 +25,7 @@ const State = struct {
         output: *playground.internal.DebugOutputWindow = undefined,
     } else extern struct {} = undefined,
 
-    pub fn create(dependencies: GameLib.Dependencies.All2D) !*State {
+    pub fn create(dependencies: GameLib.Dependencies.Full2D) !*State {
         const state: *State = try dependencies.game_allocator.allocator().create(State);
         state.* = .{
             .dependencies = dependencies,
@@ -42,14 +42,14 @@ const State = struct {
 
 const settings: GameLib.Settings = .{
     .title = "Template",
-    .dependencies = .All2D,
+    .dependencies = .Full2D,
 };
 
 pub export fn getSettings() GameLib.Settings {
     return settings;
 }
 
-pub export fn init(dependencies: GameLib.Dependencies.All2D) GameLib.GameStatePtr {
+pub export fn init(dependencies: GameLib.Dependencies.Full2D) GameLib.GameStatePtr {
     const state: *State = State.create(dependencies) catch @panic("Failed to init state.");
     return state;
 }

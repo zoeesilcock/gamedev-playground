@@ -30,7 +30,7 @@ pub const Settings = extern struct {
 /// List of dependency sets available to receive on startup.
 pub const DependenciesType = enum(u32) {
     Minimal,
-    All2D,
+    Full2D,
 };
 
 /// These structs define different sets of dependencies that can be provided to your library on startup.
@@ -41,7 +41,7 @@ pub const Dependencies = struct {
     };
 
     /// A batteries included set of dependencies for 2D rendering, preferable in most cases.
-    pub const All2D = extern struct {
+    pub const Full2D = extern struct {
         game_allocator: *DebugAllocator,
         window: *sdl.SDL_Window,
         renderer: *sdl.SDL_Renderer,
@@ -71,7 +71,7 @@ getSettings: *const fn () callconv(.c) Settings = undefined,
 initMinimal: *const fn (Dependencies.Minimal) callconv(.c) GameStatePtr = undefined,
 /// Called when the game starts, use to setup your game state and return a pointer to it which will be held by the main
 /// executable and passed to all subsequent calls into the game. Includes a full set of dependencies for 2D games.
-initAll2D: *const fn (Dependencies.All2D) callconv(.c) GameStatePtr = undefined,
+initFull2D: *const fn (Dependencies.Full2D) callconv(.c) GameStatePtr = undefined,
 
 /// Called just before the game exits.
 deinit: *const fn (GameStatePtr) callconv(.c) void = undefined,
@@ -90,7 +90,7 @@ draw: *const fn (GameStatePtr) callconv(.c) void = undefined,
 pub fn load(self: *@This(), dyn_lib: *std.DynLib) !void {
     self.getSettings = dyn_lib.lookup(@TypeOf(self.getSettings), "getSettings") orelse return error.LookupFail;
     self.initMinimal = dyn_lib.lookup(@TypeOf(self.initMinimal), "init") orelse return error.LookupFail;
-    self.initAll2D = dyn_lib.lookup(@TypeOf(self.initAll2D), "init") orelse return error.LookupFail;
+    self.initFull2D = dyn_lib.lookup(@TypeOf(self.initFull2D), "init") orelse return error.LookupFail;
 
     self.deinit = dyn_lib.lookup(@TypeOf(self.deinit), "deinit") orelse return error.LookupFail;
 

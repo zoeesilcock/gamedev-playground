@@ -80,7 +80,7 @@ pub fn main() !void {
                 .window = window.?,
             });
         },
-        .All2D => {
+        .Full2D => {
             const game_allocator = backing_allocator.create(GameLib.DebugAllocator) catch
                 @panic("Failed to initialize game allocator.");
             game_allocator.* = .init;
@@ -90,7 +90,7 @@ pub fn main() !void {
                 "Failed to create renderer.",
             );
 
-            var dependencies: GameLib.Dependencies.All2D = .{
+            var dependencies: GameLib.Dependencies.Full2D = .{
                 .game_allocator = game_allocator,
                 .window = window.?,
                 .renderer = game_renderer.?,
@@ -117,7 +117,7 @@ pub fn main() !void {
                 dependencies.internal.imgui_context = imgui.context.?;
             }
 
-            state = game.initAll2D(dependencies);
+            state = game.initFull2D(dependencies);
         },
     }
 
