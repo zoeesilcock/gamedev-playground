@@ -62,7 +62,8 @@ const LEVELS: []const []const u8 = &.{
 };
 
 pub const State = struct {
-    game_allocator: *DebugAllocator,
+    dependencies: GameLib.Dependencies.Full2D,
+
     allocator: std.mem.Allocator,
 
     window: *sdl.SDL_Window,
@@ -296,21 +297,21 @@ pub const Assets = struct {
 
 pub var settings: GameLib.Settings = .{
     .title = "Diamonds",
-    .dependencies = .Minimal,
+    .dependencies = .Full2D,
 };
 
 pub export fn getSettings() GameLib.Settings {
     return settings;
 }
 
-pub export fn init(dependencies: GameLib.Dependencies.Minimal) GameLib.GameStatePtr {
-    var backing_allocator = std.heap.page_allocator;
-    var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
+pub export fn init(dependencies: GameLib.Dependencies.Full2D) GameLib.GameStatePtr {
+    var game_allocator = dependencies.game_allocator;
     game_allocator.* = .init;
 
     var allocator = game_allocator.allocator();
     if (INTERNAL and LOG_ALLOCATIONS) {
         const logging_allocator = loggingAllocator(game_allocator.allocator());
+        var backing_allocator = std.heap.page_allocator;
         var logging_allocator_ptr = (backing_allocator.create(@TypeOf(logging_allocator)) catch @panic("Failed to initialize logging allocator."));
         logging_allocator_ptr.* = logging_allocator;
         allocator = logging_allocator_ptr.allocator();
@@ -318,11 +319,11 @@ pub export fn init(dependencies: GameLib.Dependencies.Minimal) GameLib.GameState
 
     var state: *State = allocator.create(State) catch @panic("Out of memory");
     state.* = .{
+        .dependencies = dependencies,
         .allocator = allocator,
-        .game_allocator = game_allocator,
 
         .window = dependencies.window,
-        .renderer = sdl_utils.panicIfNull(sdl.SDL_CreateRenderer(dependencies.window, null), "Failed to create renderer.").?,
+        .renderer = dependencies.renderer,
 
         .world_scale = 1,
         .ui_scale = 1,
@@ -351,7 +352,11 @@ pub export fn init(dependencies: GameLib.Dependencies.Minimal) GameLib.GameState
     };
 
     if (INTERNAL) {
-        state.internal = internal.InternalState.init(backing_allocator) catch @panic("Failed to init internal state.");
+        state.internal = internal.InternalState.init(dependencies.internal.debug_allocator.allocator()) catch
+            @panic("Failed to init internal state.");
+
+        imgui.setup(state.dependencies.internal.imgui_context, .Renderer);
+        state.internal.output = dependencies.internal.output;
         internal.updateWindowSize(state);
     }
 
@@ -363,15 +368,6 @@ pub export fn init(dependencies: GameLib.Dependencies.Minimal) GameLib.GameState
 
     setupRenderTexture(state);
 
-    if (INTERNAL) {
-        imgui.init(
-            state.window,
-            state.renderer,
-            @floatFromInt(settings.window_width),
-            @floatFromInt(settings.window_height),
-        );
-    }
-
     return state;
 }
 
@@ -382,9 +378,7 @@ pub fn restart(state: *State) void {
         *State,
         @ptrCast(
             @alignCast(
-                init(.{
-                    .window = state.window,
-                }),
+                init(state.dependencies),
             ),
         ),
     ).*;
@@ -395,10 +389,7 @@ pub export fn deinit(state_ptr: GameLib.GameStatePtr) void {
 
     if (INTERNAL) {
         internal.resetWindowPosition(state);
-        imgui.deinit();
     }
-
-    sdl.SDL_DestroyRenderer(state.renderer);
 }
 
 pub fn setupRenderTexture(state: *State) void {
@@ -439,10 +430,6 @@ pub export fn willReload(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     unloadAssets(state);
-
-    if (INTERNAL) {
-        imgui.deinit();
-    }
 }
 
 pub export fn reloaded(state_ptr: GameLib.GameStatePtr) void {
@@ -450,15 +437,6 @@ pub export fn reloaded(state_ptr: GameLib.GameStatePtr) void {
 
     loadAssets(state);
     try addGameUI(state);
-
-    if (INTERNAL) {
-        imgui.init(
-            state.window,
-            state.renderer,
-            @floatFromInt(settings.window_width),
-            @floatFromInt(settings.window_height),
-        );
-    }
 
     if (state.getEntity(state.ball_id)) |ball| {
         ball.velocity[Y] = if (ball.velocity[Y] > 0) BALL_VELOCITY else -BALL_VELOCITY;
@@ -545,7 +523,7 @@ pub export fn tick(state_ptr: GameLib.GameStatePtr, time: u64, delta_time_int: u
     }
 
     if (INTERNAL) {
-        state.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());
+        state.dependencies.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());
         internal.recordMemoryUsage(state);
     }
 

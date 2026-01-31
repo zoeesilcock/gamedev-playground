@@ -33,7 +33,6 @@ const DebugAllocator = std.heap.DebugAllocator(.{
 pub const State = struct {
     dependencies: GameLib.Dependencies.Full3D,
 
-    game_allocator: *DebugAllocator,
     allocator: std.mem.Allocator,
 
     window: *sdl.SDL_Window,
@@ -275,7 +274,6 @@ pub export fn init(dependencies: GameLib.Dependencies.Full3D) GameLib.GameStateP
     var state: *State = allocator.create(State) catch @panic("Out of memory.");
     state.* = .{
         .allocator = allocator,
-        .game_allocator = game_allocator,
         .dependencies = dependencies,
         .window = dependencies.window,
         .device = dependencies.gpu_device,
