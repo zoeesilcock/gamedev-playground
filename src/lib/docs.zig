@@ -17,12 +17,14 @@
 //! const build_options = b.addOptions();
 //! build_options.addOption(bool, "internal", internal);
 //! build_options.addOption([]const u8, "lib_base_name", lib_base_name);
+//! const build_options_mod = build_options.createModule();
 //!
 //! const playground_dep = b.dependency("gamedev_playground", .{
 //!     .target = target,
 //!     .optimize = optimize,
 //! });
 //! const playground_mod = playground_dep.module("playground");
+//! playground_mod.addImport("build_options", build_options_mod);
 //! module.addImport("playground", playground_mod);
 //! gamedev_playground.linkSDL(playground_dep.builder, lib, target, optimize);
 //!
@@ -31,7 +33,7 @@
 //!         playground_dep.builder,
 //!         b,
 //!         "YOUR_EXECUTABLE_NAME",
-//!         build_options,
+//!         build_options_mod,
 //!         target,
 //!         optimize,
 //!         playground_mod,

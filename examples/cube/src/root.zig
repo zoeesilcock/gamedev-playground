@@ -31,7 +31,8 @@ const DebugAllocator = std.heap.DebugAllocator(.{
 });
 
 pub const State = struct {
-    game_allocator: *DebugAllocator,
+    dependencies: GameLib.Dependencies.Full3D,
+
     allocator: std.mem.Allocator,
 
     window: *sdl.SDL_Window,
@@ -51,8 +52,6 @@ pub const State = struct {
     depth_stencil_format: sdl.SDL_GPUTextureFormat = undefined,
     depth_stencil_texture: *sdl.SDL_GPUTexture = undefined,
 
-    window_width: u32,
-    window_height: u32,
     fullscreen: bool = false,
     screen_effect: ScreenEffect = .None,
 
@@ -64,12 +63,11 @@ pub const State = struct {
     camera: Camera,
     entities: std.ArrayList(Entity),
 
-    internal: if (INTERNAL) struct {
-        debug_allocator: *DebugAllocator = undefined,
-        allocator: std.mem.Allocator = undefined,
-        fps_window: *FPSWindow = undefined,
+    // Internal.
+    internal: if (INTERNAL) extern struct {
+        output: *playground.internal.DebugOutputWindow = undefined,
         inspect_game_state: bool = false,
-    } else struct {} = undefined,
+    } else extern struct {} = undefined,
 
     pub fn currentTime(self: *State) f32 {
         return @as(f32, @floatFromInt(self.time)) / 1000;
@@ -251,71 +249,50 @@ const FragmentUniforms = struct {
     screen_effect: u32,
 };
 
-pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) GameLib.GameStatePtr {
-    sdl_utils.logError(sdl.SDL_SetWindowTitle(window, "Cube"), "Failed to set window title");
+var settings: GameLib.Settings = .{
+    .title = "Cube",
+    .dependencies = .Full3D,
+};
 
-    var backing_allocator = std.heap.page_allocator;
-    var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
-    game_allocator.* = .init;
+pub export fn getSettings() GameLib.Settings {
+    return settings;
+}
 
+pub export fn init(dependencies: GameLib.Dependencies.Full3D) GameLib.GameStatePtr {
+    const game_allocator = dependencies.game_allocator;
     var allocator = game_allocator.allocator();
+
     if (INTERNAL and LOG_ALLOCATIONS) {
         const logging_allocator = loggingAllocator(game_allocator.allocator());
+        var backing_allocator = std.heap.page_allocator;
         var logging_allocator_ptr =
             backing_allocator.create(@TypeOf(logging_allocator)) catch @panic("Failed to initialize logging allocator.");
         logging_allocator_ptr.* = logging_allocator;
         allocator = logging_allocator_ptr.allocator();
     }
 
-    const device = sdl_utils.panicIfNull(sdl.SDL_CreateGPUDevice(
-        sdl.SDL_GPU_SHADERFORMAT_SPIRV |
-            sdl.SDL_GPU_SHADERFORMAT_DXIL |
-            sdl.SDL_GPU_SHADERFORMAT_MSL |
-            sdl.SDL_GPU_SHADERFORMAT_METALLIB,
-        true,
-        null,
-    ), "Failed to create GPU device");
-
     var state: *State = allocator.create(State) catch @panic("Out of memory.");
     state.* = .{
         .allocator = allocator,
-        .game_allocator = game_allocator,
-        .window = window,
-        .window_width = window_width,
-        .window_height = window_height,
-        .device = device.?,
+        .dependencies = dependencies,
+        .window = dependencies.window,
+        .device = dependencies.gpu_device,
         .time = sdl.SDL_GetTicks(),
         .camera = undefined,
         .entities = .empty,
     };
 
     if (INTERNAL) {
-        state.internal.debug_allocator = backing_allocator.create(DebugAllocator) catch {
-            @panic("Failed to initialize debug allocator.");
-        };
-        state.internal.debug_allocator.* = .init;
-        state.internal.allocator = state.internal.debug_allocator.allocator();
-
-        state.internal.fps_window =
-            state.internal.allocator.create(FPSWindow) catch @panic("Failed to allocate FPS state.");
-        state.internal.fps_window.init(sdl.SDL_GetPerformanceFrequency());
+        imgui.setup(state.dependencies.internal.imgui_context, .GPU);
+        state.internal.output = dependencies.internal.output;
     }
 
     const new_entity = state.entities.addOne(state.allocator) catch @panic("Failed to add entity");
     new_entity.* = .{};
 
-    const window_claimed = sdl.SDL_ClaimWindowForGPUDevice(state.device, state.window);
-    if (!window_claimed) {
-        @panic("Failed to claim window for GPU device.");
-    }
-
     initPipeline(state);
     submitVertexData(state);
     submitQuadData(state);
-
-    if (INTERNAL) {
-        imgui.initGPU(state.window, state.device, @floatFromInt(window_width), @floatFromInt(window_height));
-    }
 
     return state;
 }
@@ -323,23 +300,12 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
 pub export fn deinit(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    if (INTERNAL) {
-        imgui.deinit();
-    }
-
     deinitPipeline(state);
     deinitWindowSize(state);
-
-    sdl.SDL_ReleaseWindowFromGPUDevice(state.device, state.window);
-    sdl.SDL_DestroyGPUDevice(state.device);
 }
 
 pub export fn willReload(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
-
-    if (INTERNAL) {
-        imgui.deinit();
-    }
 
     deinitPipeline(state);
 }
@@ -348,15 +314,6 @@ pub export fn reloaded(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     initPipeline(state);
-
-    if (INTERNAL) {
-        imgui.initGPU(
-            state.window,
-            state.device,
-            @floatFromInt(state.window_width),
-            @floatFromInt(state.window_height),
-        );
-    }
 
     submitVertexData(state);
     submitQuadData(state);
@@ -391,7 +348,7 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
                 },
                 sdl.SDLK_F1 => {
                     if (INTERNAL) {
-                        state.internal.fps_window.cycleMode();
+                        state.dependencies.internal.fps_window.cycleMode();
                     }
                 },
                 sdl.SDLK_G => {
@@ -420,16 +377,15 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
     return continue_running;
 }
 
-pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
+pub export fn tick(state_ptr: GameLib.GameStatePtr, time: u64, delta_time: u64) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    const new_time: u64 = sdl.SDL_GetTicks();
-    state.delta_time_actual = new_time - state.time;
+    state.time = time;
+    state.delta_time_actual = delta_time;
     state.delta_time = if (state.paused) 0 else state.delta_time_actual;
-    state.time = new_time;
 
     if (INTERNAL) {
-        state.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());
+        state.dependencies.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());
     }
 
     const test_entity = &state.entities.items[0];
@@ -543,7 +499,8 @@ pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
 
         if (INTERNAL) {
             imgui.newFrame();
-            state.internal.fps_window.draw();
+            state.dependencies.internal.fps_window.draw();
+            state.dependencies.internal.output.draw();
 
             if (state.internal.inspect_game_state) {
                 imgui.c.ImGui_SetNextWindowPosEx(
@@ -787,17 +744,21 @@ fn deinitPipeline(state: *State) void {
 }
 
 fn initWindowSize(state: *State) void {
-    _ = sdl.SDL_GetWindowSizeInPixels(state.window, @ptrCast(&state.window_width), @ptrCast(&state.window_height));
+    _ = sdl.SDL_GetWindowSizeInPixels(
+        state.window,
+        @ptrCast(&settings.window_width),
+        @ptrCast(&settings.window_height),
+    );
 
     state.camera =
-        Camera.init(@as(f32, @floatFromInt(state.window_width)) / @as(f32, @floatFromInt(state.window_height)));
+        Camera.init(@as(f32, @floatFromInt(settings.window_width)) / @as(f32, @floatFromInt(settings.window_height)));
 
     if (sdl.SDL_CreateGPUTexture(
         state.device,
         &.{
             .type = sdl.SDL_GPU_TEXTURETYPE_2D,
-            .width = state.window_width,
-            .height = state.window_height,
+            .width = settings.window_width,
+            .height = settings.window_height,
             .layer_count_or_depth = 1,
             .num_levels = 1,
             .format = state.render_texture_format,
@@ -833,8 +794,8 @@ fn initWindowSize(state: *State) void {
         state.device,
         &.{
             .type = sdl.SDL_GPU_TEXTURETYPE_2D,
-            .width = state.window_width,
-            .height = state.window_height,
+            .width = settings.window_width,
+            .height = settings.window_height,
             .layer_count_or_depth = 1,
             .num_levels = 1,
             .format = state.render_texture_format,
@@ -850,8 +811,8 @@ fn initWindowSize(state: *State) void {
         state.device,
         &.{
             .type = sdl.SDL_GPU_TEXTURETYPE_2D,
-            .width = state.window_width,
-            .height = state.window_height,
+            .width = settings.window_width,
+            .height = settings.window_height,
             .layer_count_or_depth = 1,
             .num_levels = 1,
             .sample_count = state.render_texture_sample_count,

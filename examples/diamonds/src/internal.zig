@@ -37,15 +37,12 @@ const MAX_FRAME_TIME_COUNT: u32 = 300;
 const MAX_MEMORY_USAGE_COUNT: u32 = 1000;
 const MEMORY_USAGE_RECORD_INTERVAL: u64 = 16;
 const LEVEL_NAME_BUFFER_SIZE = game.LEVEL_NAME_BUFFER_SIZE;
-const WINDOW_WIDTH = game.WINDOW_WIDTH;
-const WINDOW_HEIGHT = game.WINDOW_HEIGHT;
 const WINDOW_WIDTH_ADDITIONAL = 300;
+var initial_window_width: u32 = 0;
 
 pub const InternalState = struct {
-    debug_allocator: *game.DebugAllocator,
     allocator: std.mem.Allocator,
     output: *playground.internal.DebugOutputWindow,
-    fps_window: *playground.internal.FPSWindow,
 
     input: DebugInput,
     mode: enum(u8) {
@@ -70,19 +67,12 @@ pub const InternalState = struct {
 
     should_restart: bool,
 
-    pub fn init(backing_allocator: std.mem.Allocator) !*InternalState {
-        const debug_allocator =
-            (backing_allocator.create(game.DebugAllocator) catch @panic("Failed to initialize debug allocator."));
-        debug_allocator.* = .init;
-
-        var allocator = debug_allocator.allocator();
+    pub fn init(allocator: std.mem.Allocator) !*InternalState {
         var state: *InternalState = allocator.create(InternalState) catch @panic("Out of memory.");
 
         state.* = .{
-            .debug_allocator = debug_allocator,
             .allocator = allocator,
             .output = allocator.create(playground.internal.DebugOutputWindow) catch @panic("Out of memory"),
-            .fps_window = allocator.create(playground.internal.FPSWindow) catch @panic("Failed to allocate FPS state."),
 
             .input = DebugInput{},
 
@@ -105,10 +95,6 @@ pub const InternalState = struct {
 
             .should_restart = false,
         };
-
-        state.output.init();
-
-        state.fps_window.init(sdl.SDL_GetPerformanceFrequency());
 
         _ = try std.fmt.bufPrintZ(&state.current_level_name, "level1", .{});
 
@@ -173,7 +159,7 @@ pub fn processInputEvent(state: *State, event: sdl.SDL_Event) void {
     if (event.type == sdl.SDL_EVENT_KEY_DOWN) {
         switch (event.key.key) {
             sdl.SDLK_F1 => {
-                state.internal.fps_window.cycleMode();
+                state.dependencies.internal.fps_window.cycleMode();
             },
             sdl.SDLK_F2 => {
                 state.internal.memory_usage_display = !state.internal.memory_usage_display;
@@ -231,15 +217,17 @@ pub fn updateWindowSize(state: *State) void {
     var height: c_int = 0;
     const show_sidebar: bool = state.internal.show_sidebar;
 
+    if (initial_window_width == 0) initial_window_width = game.settings.window_width;
+
     if (sdl.SDL_GetWindowPosition(state.window, &x, &y)) {
         if (sdl.SDL_GetWindowSize(state.window, &width, &height)) {
             var needs_change: bool = false;
 
-            if (show_sidebar and width == WINDOW_WIDTH) {
+            if (show_sidebar and width == game.settings.window_width) {
                 needs_change = true;
                 x -= WINDOW_WIDTH_ADDITIONAL;
                 width += WINDOW_WIDTH_ADDITIONAL;
-            } else if (!show_sidebar and width > WINDOW_WIDTH) {
+            } else if (!show_sidebar and width > initial_window_width) {
                 needs_change = true;
                 x += WINDOW_WIDTH_ADDITIONAL;
                 width -= WINDOW_WIDTH_ADDITIONAL;
@@ -249,22 +237,12 @@ pub fn updateWindowSize(state: *State) void {
                 _ = sdl.SDL_SetWindowPosition(state.window, x, y);
                 _ = sdl.SDL_SetWindowSize(state.window, width, height);
 
-                state.internal.fps_window.position =
+                state.dependencies.internal.fps_window.position =
                     if (state.internal.show_sidebar)
                         .{ .x = 225, .y = -5 }
                     else
                         .{ .x = 5, .y = 5 };
             }
-        }
-    }
-}
-
-pub fn resetWindowPosition(state: *State) void {
-    if (state.internal.show_sidebar) {
-        var x: c_int = 0;
-        var y: c_int = 0;
-        if (sdl.SDL_GetWindowPosition(state.window, &x, &y)) {
-            _ = sdl.SDL_SetWindowPosition(state.window, x + WINDOW_WIDTH_ADDITIONAL, y);
         }
     }
 }
@@ -392,15 +370,15 @@ pub fn recordMemoryUsage(state: *State) void {
             state.internal.memory_usage_current_index = 0;
         }
         state.internal.memory_usage[state.internal.memory_usage_current_index] =
-            state.game_allocator.total_requested_bytes;
+            state.dependencies.game_allocator.total_requested_bytes;
     }
 }
 
 pub fn drawDebugUI(state: *State) void {
     imgui.newFrame();
 
-    state.internal.fps_window.draw();
-    state.internal.output.draw();
+    state.dependencies.internal.fps_window.draw();
+    state.dependencies.internal.output.draw();
 
     if (state.internal.show_sidebar) {
         {

@@ -46,8 +46,6 @@ pub const DebugAllocator = std.heap.DebugAllocator(.{
 const INTERNAL: bool = @import("build_options").internal;
 const LOG_ALLOCATIONS: bool = @import("build_options").log_allocations;
 const MAX_ENTITY_COUNT = entities.MAX_ENTITY_COUNT;
-pub const WINDOW_WIDTH = 800;
-pub const WINDOW_HEIGHT = 600;
 const WORLD_WIDTH: u32 = 200;
 const WORLD_HEIGHT: u32 = 150;
 const BALL_VELOCITY: f32 = 64;
@@ -64,16 +62,14 @@ const LEVELS: []const []const u8 = &.{
 };
 
 pub const State = struct {
-    game_allocator: *DebugAllocator,
+    dependencies: GameLib.Dependencies.Full2D,
+
     allocator: std.mem.Allocator,
 
     window: *sdl.SDL_Window,
     renderer: *sdl.SDL_Renderer,
     render_texture: *sdl.SDL_Texture = undefined,
     dest_rect: sdl.SDL_FRect = undefined,
-
-    window_width: u32,
-    window_height: u32,
 
     world_scale: f32,
     ui_scale: f32,
@@ -299,16 +295,23 @@ pub const Assets = struct {
     }
 };
 
-pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Window) GameLib.GameStatePtr {
-    sdl_utils.logError(sdl.SDL_SetWindowTitle(window, "Diamonds"), "Failed to set window title");
+pub var settings: GameLib.Settings = .{
+    .title = "Diamonds",
+    .dependencies = .Full2D,
+};
 
-    var backing_allocator = std.heap.page_allocator;
-    var game_allocator = (backing_allocator.create(DebugAllocator) catch @panic("Failed to initialize game allocator."));
+pub export fn getSettings() GameLib.Settings {
+    return settings;
+}
+
+pub export fn init(dependencies: GameLib.Dependencies.Full2D) GameLib.GameStatePtr {
+    var game_allocator = dependencies.game_allocator;
     game_allocator.* = .init;
 
     var allocator = game_allocator.allocator();
     if (INTERNAL and LOG_ALLOCATIONS) {
         const logging_allocator = loggingAllocator(game_allocator.allocator());
+        var backing_allocator = std.heap.page_allocator;
         var logging_allocator_ptr = (backing_allocator.create(@TypeOf(logging_allocator)) catch @panic("Failed to initialize logging allocator."));
         logging_allocator_ptr.* = logging_allocator;
         allocator = logging_allocator_ptr.allocator();
@@ -316,14 +319,11 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
 
     var state: *State = allocator.create(State) catch @panic("Out of memory");
     state.* = .{
+        .dependencies = dependencies,
         .allocator = allocator,
-        .game_allocator = game_allocator,
 
-        .window = window,
-        .renderer = sdl_utils.panicIfNull(sdl.SDL_CreateRenderer(window, null), "Failed to create renderer.").?,
-
-        .window_width = window_width,
-        .window_height = window_height,
+        .window = dependencies.window,
+        .renderer = dependencies.renderer,
 
         .world_scale = 1,
         .ui_scale = 1,
@@ -351,10 +351,12 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
         .current_title_id = null,
     };
 
-    _ = sdl.SDL_SetWindowSize(state.window, WINDOW_WIDTH, WINDOW_HEIGHT);
-
     if (INTERNAL) {
-        state.internal = internal.InternalState.init(backing_allocator) catch @panic("Failed to init internal state.");
+        state.internal = internal.InternalState.init(dependencies.internal.debug_allocator.allocator()) catch
+            @panic("Failed to init internal state.");
+
+        imgui.setup(state.dependencies.internal.imgui_context, .Renderer);
+        state.internal.output = dependencies.internal.output;
         internal.updateWindowSize(state);
     }
 
@@ -366,10 +368,6 @@ pub export fn init(window_width: u32, window_height: u32, window: *sdl.SDL_Windo
 
     setupRenderTexture(state);
 
-    if (INTERNAL) {
-        imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
-    }
-
     return state;
 }
 
@@ -380,33 +378,24 @@ pub fn restart(state: *State) void {
         *State,
         @ptrCast(
             @alignCast(
-                init(
-                    state.window_width,
-                    state.window_height,
-                    state.window,
-                ),
+                init(state.dependencies),
             ),
         ),
     ).*;
 }
 
 pub export fn deinit(state_ptr: GameLib.GameStatePtr) void {
-    const state: *State = @ptrCast(@alignCast(state_ptr));
-
-    if (INTERNAL) {
-        internal.resetWindowPosition(state);
-        imgui.deinit();
-    }
-
-    sdl.SDL_DestroyRenderer(state.renderer);
+    _ = state_ptr;
 }
 
 pub fn setupRenderTexture(state: *State) void {
-    _ = sdl.SDL_GetWindowSize(state.window, @ptrCast(&state.window_width), @ptrCast(&state.window_height));
-    state.world_scale = @as(f32, @floatFromInt(state.window_height)) / @as(f32, @floatFromInt(state.world_height));
+    var window_width: c_int = 0;
+    var window_height: c_int = 0;
+    _ = sdl.SDL_GetWindowSize(state.window, &window_width, &window_height);
+    state.world_scale = @as(f32, @floatFromInt(window_height)) / @as(f32, @floatFromInt(state.world_height));
 
     var horizontal_offset: f32 =
-        (@as(f32, @floatFromInt(state.window_width)) -
+        (@as(f32, @floatFromInt(window_width)) -
             (@as(f32, @floatFromInt(state.world_width)) * state.world_scale)) / 2;
 
     if (INTERNAL) {
@@ -439,10 +428,6 @@ pub export fn willReload(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     unloadAssets(state);
-
-    if (INTERNAL) {
-        imgui.deinit();
-    }
 }
 
 pub export fn reloaded(state_ptr: GameLib.GameStatePtr) void {
@@ -450,10 +435,6 @@ pub export fn reloaded(state_ptr: GameLib.GameStatePtr) void {
 
     loadAssets(state);
     try addGameUI(state);
-
-    if (INTERNAL) {
-        imgui.init(state.window, state.renderer, @floatFromInt(state.window_width), @floatFromInt(state.window_height));
-    }
 
     if (state.getEntity(state.ball_id)) |ball| {
         ball.velocity[Y] = if (ball.velocity[Y] > 0) BALL_VELOCITY else -BALL_VELOCITY;
@@ -527,19 +508,20 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
     return continue_running;
 }
 
-pub export fn tick(state_ptr: GameLib.GameStatePtr) void {
+pub export fn tick(state_ptr: GameLib.GameStatePtr, time: u64, delta_time_int: u64) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    state.delta_time_actual = sdl.SDL_GetTicks() - state.time;
+    state.delta_time_actual = delta_time_int;
+    state.time = time;
+
     if (!state.paused and !state.pausedDueToTitle() and !state.pausedDueToEditor()) {
         state.delta_time = state.delta_time_actual;
     } else {
         state.delta_time = 0;
     }
-    state.time = sdl.SDL_GetTicks();
 
     if (INTERNAL) {
-        state.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());
+        state.dependencies.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());
         internal.recordMemoryUsage(state);
     }
 
