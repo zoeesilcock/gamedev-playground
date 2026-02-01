@@ -197,10 +197,10 @@ fn createImGuiLib(
             });
 
             dcimgui_sdl.root_module.link_libcpp = true;
-            dcimgui_sdl.addIncludePath(sdl_dep.path("include"));
-            dcimgui_sdl.addIncludePath(imgui_dep.path(""));
-            dcimgui_sdl.addIncludePath(imgui_dep.path("backends/"));
-            dcimgui_sdl.addIncludePath(dear_bindings_dep.path(""));
+            module.addIncludePath(sdl_dep.path("include"));
+            module.addIncludePath(imgui_dep.path(""));
+            module.addIncludePath(imgui_dep.path("backends/"));
+            module.addIncludePath(dear_bindings_dep.path(""));
             dcimgui_sdl.installHeadersDirectory(
                 dear_bindings_dep.path(""),
                 "",
@@ -224,7 +224,7 @@ fn createImGuiLib(
             }
 
             for (imgui_sources) |file| {
-                dcimgui_sdl.addCSourceFile(.{
+                module.addCSourceFile(.{
                     .file = file,
                     .flags = IMGUI_C_FLAGS,
                 });
