@@ -32,7 +32,6 @@ const State = struct {
         };
 
         if (INTERNAL) {
-            imgui.setup(state.dependencies.internal.imgui_context, .Renderer);
             state.internal.output = dependencies.internal.output;
         }
 
@@ -50,7 +49,12 @@ pub export fn getSettings() GameLib.Settings {
 }
 
 pub export fn init(dependencies: GameLib.Dependencies.Full2D) GameLib.GameStatePtr {
-    const state: *State = State.create(dependencies) catch @panic("Failed to init state.");
+    const state: *State = State.create(dependencies) catch @panic("Failed to create game state.");
+
+    if (INTERNAL) {
+        imgui.setup(state.dependencies.internal.imgui_context, .Renderer);
+    }
+
     return state;
 }
 

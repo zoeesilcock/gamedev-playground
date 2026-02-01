@@ -99,6 +99,51 @@ pub const State = struct {
 
     internal: if (INTERNAL) *internal.InternalState else struct {} = undefined,
 
+    pub fn create(dependencies: GameLib.Dependencies.Full2D) !*State {
+        const allocator: std.mem.Allocator = dependencies.game_allocator.allocator();
+        const state: *State = try allocator.create(State);
+
+        state.* = .{
+            .dependencies = dependencies,
+            .allocator = allocator,
+
+            .window = dependencies.window,
+            .renderer = dependencies.renderer,
+
+            .world_scale = 1,
+            .ui_scale = 1,
+            .world_width = WORLD_WIDTH,
+            .world_height = WORLD_HEIGHT,
+
+            .assets = .{},
+
+            .time = sdl.SDL_GetTicks(),
+            .delta_time = 0,
+            .delta_time_actual = 0,
+            .input = .{},
+            .ball_horizontal_bounce_start_time = 0,
+
+            .paused = false,
+            .fullscreen = false,
+
+            .level_index = 0,
+            .lives_remaining = MAX_LIVES,
+
+            .entities = [1]Entity{.{}} ** MAX_ENTITY_COUNT,
+            .next_free_entity_index = 0,
+
+            .ball_id = null,
+            .current_title_id = null,
+        };
+
+        if (INTERNAL) {
+            state.internal = internal.InternalState.init(dependencies) catch
+                @panic("Failed to init internal state.");
+        }
+
+        return state;
+    }
+
     pub fn deltaTime(self: *State) f32 {
         return @as(f32, @floatFromInt(self.delta_time)) / 1000;
     }
@@ -312,51 +357,16 @@ pub export fn init(dependencies: GameLib.Dependencies.Full2D) GameLib.GameStateP
     if (INTERNAL and LOG_ALLOCATIONS) {
         const logging_allocator = loggingAllocator(game_allocator.allocator());
         var backing_allocator = std.heap.page_allocator;
-        var logging_allocator_ptr = (backing_allocator.create(@TypeOf(logging_allocator)) catch @panic("Failed to initialize logging allocator."));
+        var logging_allocator_ptr = (backing_allocator.create(@TypeOf(logging_allocator)) catch
+            @panic("Failed to initialize logging allocator."));
         logging_allocator_ptr.* = logging_allocator;
         allocator = logging_allocator_ptr.allocator();
     }
 
-    var state: *State = allocator.create(State) catch @panic("Out of memory");
-    state.* = .{
-        .dependencies = dependencies,
-        .allocator = allocator,
-
-        .window = dependencies.window,
-        .renderer = dependencies.renderer,
-
-        .world_scale = 1,
-        .ui_scale = 1,
-        .world_width = WORLD_WIDTH,
-        .world_height = WORLD_HEIGHT,
-
-        .assets = .{},
-
-        .time = sdl.SDL_GetTicks(),
-        .delta_time = 0,
-        .delta_time_actual = 0,
-        .input = .{},
-        .ball_horizontal_bounce_start_time = 0,
-
-        .paused = false,
-        .fullscreen = false,
-
-        .level_index = 0,
-        .lives_remaining = MAX_LIVES,
-
-        .entities = [1]Entity{.{}} ** MAX_ENTITY_COUNT,
-        .next_free_entity_index = 0,
-
-        .ball_id = null,
-        .current_title_id = null,
-    };
+    const state: *State = State.create(dependencies) catch @panic("Failed to create game state.");
 
     if (INTERNAL) {
-        state.internal = internal.InternalState.init(dependencies) catch
-            @panic("Failed to init internal state.");
-
         imgui.setup(state.dependencies.internal.imgui_context, .Renderer);
-        state.internal.output = dependencies.internal.output;
         internal.updateWindowSize(state);
     }
 
