@@ -198,9 +198,9 @@ pub fn main() !void {
         imgui.deinit();
     }
 
-    if (game_settings.dependencies == .Full3D) {
-        sdl.SDL_ReleaseWindowFromGPUDevice(game_gpu_device, window);
-        sdl.SDL_DestroyGPUDevice(game_gpu_device);
+    if (game_gpu_device) |gpu_device| {
+        sdl.SDL_ReleaseWindowFromGPUDevice(gpu_device, window);
+        sdl.SDL_DestroyGPUDevice(gpu_device);
     }
 
     if (game_renderer) |renderer| {
