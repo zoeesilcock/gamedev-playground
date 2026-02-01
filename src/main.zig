@@ -23,11 +23,11 @@ const WINDOW_DECORATIONS_HEIGHT = if (PLATFORM == .windows) 31 else 0;
 var game: GameLib = .{};
 var opt_dyn_lib: ?std.DynLib = null;
 var build_process: ?std.process.Child = null;
-var dyn_lib_last_modified: i128 = 0;
-var src_last_modified: i128 = 0;
-var assets_last_modified: i128 = 0;
+var dyn_lib_last_modified: std.Io.Timestamp = .zero;
+var src_last_modified: std.Io.Timestamp = .zero;
+var assets_last_modified: std.Io.Timestamp = .zero;
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
     const allocator = debug_allocator.allocator();
 
@@ -158,7 +158,7 @@ pub fn main() !void {
     }
 
     if (INTERNAL) {
-        initChangeTimes(allocator);
+        initChangeTimes(allocator, init.io);
     }
 
     var previous_frame_start_time: u64 = 0;
@@ -169,7 +169,7 @@ pub fn main() !void {
         const delta_time = frame_start_time - previous_frame_start_time;
 
         if (INTERNAL) {
-            const reloaded = checkForChanges(state, allocator, manage_imgui_lifecycle);
+            const reloaded = checkForChanges(state, allocator, init.io, manage_imgui_lifecycle);
             if (reloaded and manage_imgui_lifecycle) {
                 initImgui(window.?, game_renderer, game_gpu_device, game_settings);
             }
@@ -238,14 +238,19 @@ fn initImgui(
     }
 }
 
-fn initChangeTimes(allocator: std.mem.Allocator) void {
-    _ = dllHasChanged();
-    _ = assetsHaveChanged(allocator);
+fn initChangeTimes(allocator: std.mem.Allocator, io: std.Io) void {
+    _ = dllHasChanged(io);
+    _ = assetsHaveChanged(allocator, io);
 }
 
-fn checkForChanges(state: GameLib.GameStatePtr, allocator: std.mem.Allocator, manage_imgui_lifecycle: bool) bool {
-    const assetsChanged = assetsHaveChanged(allocator);
-    const dllChanged = dllHasChanged();
+fn checkForChanges(
+    state: GameLib.GameStatePtr,
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    manage_imgui_lifecycle: bool,
+) bool {
+    const assetsChanged = assetsHaveChanged(allocator, io);
+    const dllChanged = dllHasChanged(io);
     var reloaded: bool = false;
 
     if (dllChanged or assetsChanged) {
@@ -267,33 +272,38 @@ fn checkForChanges(state: GameLib.GameStatePtr, allocator: std.mem.Allocator, ma
     return reloaded;
 }
 
-fn dllHasChanged() bool {
+fn dllHasChanged(io: std.Io) bool {
     var result = false;
-    const stat = std.fs.cwd().statFile(LIB_DIRECTORY ++ LIB_NAME) catch return false;
-    if (stat.mtime > dyn_lib_last_modified) {
-        dyn_lib_last_modified = stat.mtime;
+    const stat = std.Io.Dir.cwd().statFile(io, LIB_DIRECTORY ++ LIB_NAME, .{}) catch return false;
+    if (stat.mtime.nanoseconds > dyn_lib_last_modified.nanoseconds) {
+        dyn_lib_last_modified.nanoseconds = stat.mtime.nanoseconds;
         result = true;
     }
     return result;
 }
 
-fn assetsHaveChanged(allocator: std.mem.Allocator) bool {
-    return checkForChangesInDirectory(allocator, "assets", &assets_last_modified) catch false;
+fn assetsHaveChanged(allocator: std.mem.Allocator, io: std.Io) bool {
+    return checkForChangesInDirectory(allocator, io, "assets", &assets_last_modified) catch false;
 }
 
-fn checkForChangesInDirectory(allocator: std.mem.Allocator, path: []const u8, last_change: *i128) !bool {
+fn checkForChangesInDirectory(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    path: []const u8,
+    last_change: *std.Io.Timestamp,
+) !bool {
     var result = false;
 
-    var assets = try std.fs.cwd().openDir(path, .{ .access_sub_paths = true, .iterate = true });
-    defer assets.close();
+    var assets = try std.Io.Dir.cwd().openDir(io, path, .{ .access_sub_paths = true, .iterate = true });
+    defer assets.close(io);
 
     var walker = try assets.walk(allocator);
     defer walker.deinit();
 
-    while (try walker.next()) |entry| {
+    while (try walker.next(io)) |entry| {
         if (entry.kind == .file) {
-            const stat = try assets.statFile(entry.path);
-            if (stat.mtime > last_change.*) {
+            const stat = try assets.statFile(io, entry.path, .{});
+            if (stat.mtime.nanoseconds > last_change.nanoseconds) {
                 last_change.* = stat.mtime;
                 result = true;
                 break;
