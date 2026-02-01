@@ -7,6 +7,7 @@ const game = @import("root.zig");
 const entities = @import("entities.zig");
 const math = @import("math");
 
+const GameLib = playground.GameLib;
 const State = game.State;
 const Assets = game.Assets;
 const AsepriteAsset = aseprite.AsepriteAsset;
@@ -42,7 +43,6 @@ var initial_window_width: u32 = 0;
 
 pub const InternalState = struct {
     allocator: std.mem.Allocator,
-    output: *playground.internal.DebugOutputWindow,
 
     input: DebugInput,
     mode: enum(u8) {
@@ -67,12 +67,14 @@ pub const InternalState = struct {
 
     should_restart: bool,
 
-    pub fn init(allocator: std.mem.Allocator) !*InternalState {
+    output: *playground.internal.DebugOutputWindow,
+
+    pub fn init(dependencies: GameLib.Dependencies.Full2D) !*InternalState {
+        const allocator: std.mem.Allocator = dependencies.internal.debug_allocator.allocator();
         var state: *InternalState = allocator.create(InternalState) catch @panic("Out of memory.");
 
         state.* = .{
             .allocator = allocator,
-            .output = allocator.create(playground.internal.DebugOutputWindow) catch @panic("Out of memory"),
 
             .input = DebugInput{},
 
@@ -94,6 +96,8 @@ pub const InternalState = struct {
             .memory_usage_display = false,
 
             .should_restart = false,
+
+            .output = dependencies.internal.output,
         };
 
         _ = try std.fmt.bufPrintZ(&state.current_level_name, "level1", .{});

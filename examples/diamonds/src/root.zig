@@ -352,7 +352,7 @@ pub export fn init(dependencies: GameLib.Dependencies.Full2D) GameLib.GameStateP
     };
 
     if (INTERNAL) {
-        state.internal = internal.InternalState.init(dependencies.internal.debug_allocator.allocator()) catch
+        state.internal = internal.InternalState.init(dependencies) catch
             @panic("Failed to init internal state.");
 
         imgui.setup(state.dependencies.internal.imgui_context, .Renderer);
