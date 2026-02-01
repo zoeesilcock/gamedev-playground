@@ -53,12 +53,17 @@ pub const AsepriteAsset = struct {
     }
 
     // Loads an Aseprite document from the specified path and generates SDL textures for each frame.
-    pub fn load(path: []const u8, renderer: *sdl.SDL_Renderer, allocator: std.mem.Allocator) ?AsepriteAsset {
+    pub fn load(
+        path: []const u8,
+        renderer: *sdl.SDL_Renderer,
+        allocator: std.mem.Allocator,
+        io: std.Io,
+    ) ?AsepriteAsset {
         var result: ?AsepriteAsset = null;
 
         std.log.info("loadSprite: {s}", .{path});
 
-        const opt_doc = loadDocument(path, allocator) catch |err| blk: {
+        const opt_doc = loadDocument(path, allocator, io) catch |err| blk: {
             std.log.err("Asperite loadDocument failed: {t}", .{err});
             break :blk null;
         };
@@ -125,14 +130,14 @@ pub const AsepriteAsset = struct {
 };
 
 /// Load an Aseprite document from the specified path.
-pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocument {
+pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator, io: std.Io) !?AseDocument {
     var result: ?AseDocument = null;
 
-    if (std.fs.cwd().openFile(path, .{ .mode = .read_only })) |file| {
-        defer file.close();
+    if (std.Io.Dir.cwd().openFile(io, path, .{ .mode = .read_only })) |file| {
+        defer file.close(io);
 
         var buf: [1024 * 1024]u8 = undefined;
-        var file_reader = file.reader(&buf);
+        var file_reader = file.reader(io, &buf);
 
         const opt_header: ?*AseHeader = try parseHeader(&file_reader.interface, allocator);
         var frames: std.ArrayList(AseFrame) = .empty;

@@ -776,8 +776,7 @@ fn openSprite(state: *State, allocator: std.mem.Allocator, entity: *Entity) void
             sprite_asset.path,
         };
 
-        var aseprite_process = std.process.Child.init(&process_args, allocator);
-        aseprite_process.spawn() catch |err| {
+        _ = std.process.run(allocator, state.io, .{ .argv = &process_args }) catch |err| {
             std.debug.print("Error spawning process: {}\n", .{err});
         };
     }
@@ -786,11 +785,11 @@ fn openSprite(state: *State, allocator: std.mem.Allocator, entity: *Entity) void
 fn saveLevel(state: *State, name: []const u8) !void {
     var buf: [LEVEL_NAME_BUFFER_SIZE * 2]u8 = undefined;
     const path = try std.fmt.bufPrint(&buf, "assets/{s}.lvl", .{name});
-    const file = try std.fs.cwd().createFile(path, .{ .truncate = true });
-    defer file.close();
+    const file = try std.Io.Dir.cwd().createFile(state.io, path, .{ .truncate = true });
+    defer file.close(state.io);
 
     var writer_buf: [10 * 1024]u8 = undefined;
-    var file_writer = file.writer(&writer_buf);
+    var file_writer = file.writer(state.io, &writer_buf);
     var writer: *std.Io.Writer = &file_writer.interface;
 
     var walls_count: u32 = 0;
