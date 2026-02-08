@@ -70,11 +70,11 @@ pub const InternalState = struct {
     output: *playground.internal.DebugOutputWindow,
 
     pub fn init(dependencies: GameLib.Dependencies.Full2D) !*InternalState {
-        const allocator: std.mem.Allocator = dependencies.internal.debug_allocator.allocator();
+        const allocator: *std.mem.Allocator = dependencies.internal.allocator;
         var state: *InternalState = allocator.create(InternalState) catch @panic("Out of memory.");
 
         state.* = .{
-            .allocator = allocator,
+            .allocator = allocator.*,
 
             .input = DebugInput{},
 
@@ -373,8 +373,9 @@ pub fn recordMemoryUsage(state: *State) void {
         if (state.internal.memory_usage_current_index >= MAX_MEMORY_USAGE_COUNT) {
             state.internal.memory_usage_current_index = 0;
         }
-        state.internal.memory_usage[state.internal.memory_usage_current_index] =
-            state.dependencies.game_allocator.total_requested_bytes;
+        // TODO: Move this out of the library.
+        // state.internal.memory_usage[state.internal.memory_usage_current_index] =
+        //     state.dependencies.allocator.total_requested_bytes;
     }
 }
 

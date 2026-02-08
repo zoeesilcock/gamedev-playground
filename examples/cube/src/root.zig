@@ -24,12 +24,6 @@ const ScreenEffect = enum(u32) {
     DoubleWaveAllTheWayAcrossTheSky,
 };
 
-const DebugAllocator = std.heap.DebugAllocator(.{
-    .enable_memory_limit = true,
-    .retain_metadata = INTERNAL,
-    .never_unmap = INTERNAL,
-});
-
 pub const State = struct {
     dependencies: GameLib.Dependencies.Full3D,
 
@@ -259,11 +253,10 @@ pub export fn getSettings() GameLib.Settings {
 }
 
 pub export fn init(dependencies: GameLib.Dependencies.Full3D) GameLib.GameStatePtr {
-    const game_allocator = dependencies.game_allocator;
-    var allocator = game_allocator.allocator();
+    var allocator = dependencies.allocator;
 
     if (INTERNAL and LOG_ALLOCATIONS) {
-        const logging_allocator = loggingAllocator(game_allocator.allocator());
+        const logging_allocator = loggingAllocator(dependencies.allocator);
         var backing_allocator = std.heap.page_allocator;
         var logging_allocator_ptr =
             backing_allocator.create(@TypeOf(logging_allocator)) catch @panic("Failed to initialize logging allocator.");
@@ -273,7 +266,7 @@ pub export fn init(dependencies: GameLib.Dependencies.Full3D) GameLib.GameStateP
 
     var state: *State = allocator.create(State) catch @panic("Out of memory.");
     state.* = .{
-        .allocator = allocator,
+        .allocator = allocator.*,
         .dependencies = dependencies,
         .window = dependencies.window,
         .device = dependencies.gpu_device,

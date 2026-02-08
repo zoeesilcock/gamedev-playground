@@ -77,9 +77,10 @@ pub fn main() !void {
     var internal_dependencies: GameLib.Dependencies.Internal = undefined;
 
     // Prepare dependencies.
-    const game_allocator = backing_allocator.create(GameLib.DebugAllocator) catch
+    const game_gpa = backing_allocator.create(GameLib.DebugAllocator) catch
         @panic("Failed to initialize game allocator.");
-    game_allocator.* = .init;
+    game_gpa.* = .init;
+    var game_allocator: std.mem.Allocator = game_gpa.allocator();
 
     switch (game_settings.dependencies) {
         .Minimal => {
@@ -108,15 +109,16 @@ pub fn main() !void {
     }
 
     if (INTERNAL and game_settings.dependencies.batteriesIncluded()) {
-        const internal_allocator = (backing_allocator.create(GameLib.DebugAllocator) catch
+        const internal_gpa = (backing_allocator.create(GameLib.DebugAllocator) catch
             @panic("Failed to initialize game allocator."));
-        internal_allocator.* = .init;
+        internal_gpa.* = .init;
+        var internal_allocator: std.mem.Allocator = internal_gpa.allocator();
 
         internal_dependencies = .{
-            .debug_allocator = internal_allocator,
-            .output = internal_allocator.allocator().create(playground.internal.DebugOutputWindow) catch
+            .allocator = &internal_allocator,
+            .output = internal_allocator.create(playground.internal.DebugOutputWindow) catch
                 @panic("Out of memory."),
-            .fps_window = internal_allocator.allocator().create(playground.internal.FPSWindow) catch
+            .fps_window = internal_allocator.create(playground.internal.FPSWindow) catch
                 @panic("Failed to allocate FPS state."),
         };
 
@@ -137,7 +139,7 @@ pub fn main() !void {
         },
         .Full2D => {
             const dependencies: GameLib.Dependencies.Full2D = .{
-                .game_allocator = game_allocator,
+                .allocator = &game_allocator,
                 .window = window.?,
                 .renderer = game_renderer.?,
                 .internal = internal_dependencies,
@@ -147,7 +149,7 @@ pub fn main() !void {
         },
         .Full3D => {
             const dependencies: GameLib.Dependencies.Full3D = .{
-                .game_allocator = game_allocator,
+                .allocator = &game_allocator,
                 .window = window.?,
                 .gpu_device = game_gpu_device.?,
                 .internal = internal_dependencies,

@@ -47,7 +47,7 @@ pub const Dependencies = struct {
 
     /// A batteries included set of dependencies for 2D rendering, preferable in most cases.
     pub const Full2D = extern struct {
-        game_allocator: *DebugAllocator,
+        allocator: *std.mem.Allocator,
         window: *sdl.SDL_Window,
         renderer: *sdl.SDL_Renderer,
 
@@ -56,7 +56,7 @@ pub const Dependencies = struct {
 
     /// A batteries included set of dependencies for 2D rendering, preferable in most cases.
     pub const Full3D = extern struct {
-        game_allocator: *DebugAllocator,
+        allocator: *std.mem.Allocator,
         window: *sdl.SDL_Window,
         gpu_device: *sdl.SDL_GPUDevice,
 
@@ -66,7 +66,7 @@ pub const Dependencies = struct {
     /// The internal dependencies included in the Full2D and Full3D dependency sets.
     pub const Internal = if (INTERNAL) extern struct {
         imgui_context: *imgui.ImGuiContext = undefined,
-        debug_allocator: *DebugAllocator = undefined,
+        allocator: *std.mem.Allocator = undefined,
         output: *internal.DebugOutputWindow = undefined,
         fps_window: *internal.FPSWindow = undefined,
     } else extern struct {};

@@ -100,12 +100,11 @@ pub const State = struct {
     internal: if (INTERNAL) *internal.InternalState else struct {} = undefined,
 
     pub fn create(dependencies: GameLib.Dependencies.Full2D) !*State {
-        const allocator: std.mem.Allocator = dependencies.game_allocator.allocator();
-        const state: *State = try allocator.create(State);
+        const state: *State = try dependencies.allocator.create(State);
 
         state.* = .{
             .dependencies = dependencies,
-            .allocator = allocator,
+            .allocator = dependencies.allocator.*,
 
             .window = dependencies.window,
             .renderer = dependencies.renderer,
@@ -350,12 +349,10 @@ pub export fn getSettings() GameLib.Settings {
 }
 
 pub export fn init(dependencies: GameLib.Dependencies.Full2D) GameLib.GameStatePtr {
-    var game_allocator = dependencies.game_allocator;
-    game_allocator.* = .init;
+    var allocator: *std.mem.Allocator = dependencies.allocator;
 
-    var allocator = game_allocator.allocator();
     if (INTERNAL and LOG_ALLOCATIONS) {
-        const logging_allocator = loggingAllocator(game_allocator.allocator());
+        const logging_allocator = loggingAllocator(allocator);
         var backing_allocator = std.heap.page_allocator;
         var logging_allocator_ptr = (backing_allocator.create(@TypeOf(logging_allocator)) catch
             @panic("Failed to initialize logging allocator."));

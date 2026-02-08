@@ -26,7 +26,7 @@ const State = struct {
     } else extern struct {} = undefined,
 
     pub fn create(dependencies: GameLib.Dependencies.Full2D) !*State {
-        const state: *State = try dependencies.game_allocator.allocator().create(State);
+        const state: *State = try dependencies.allocator.create(State);
         state.* = .{
             .dependencies = dependencies,
         };
