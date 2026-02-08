@@ -1,6 +1,7 @@
 //! This defines the API that your game library needs to implement, do so by defining each of these functions in your
 //! game library (most likely the `root.zig` file) and marking them with `pub export`.
 const std = @import("std");
+const builtin = @import("builtin");
 const sdl = @import("sdl.zig").c;
 const imgui = @import("imgui.zig").c;
 const internal = @import("internal.zig");
@@ -121,4 +122,20 @@ pub fn load(self: *@This(), dyn_lib: *std.DynLib) !void {
     self.processInput = dyn_lib.lookup(@TypeOf(self.processInput), "processInput") orelse return error.LookupFail;
     self.tick = dyn_lib.lookup(@TypeOf(self.tick), "tick") orelse return error.LookupFail;
     self.draw = dyn_lib.lookup(@TypeOf(self.draw), "draw") orelse return error.LookupFail;
+}
+
+/// Custom logger for posix systems since the default log function doesn't work from dynamic libraries on Linux.
+pub const logFn = if (builtin.os.tag == .windows) std.log.defaultLog else posixLogFn;
+
+fn posixLogFn(
+    comptime message_level: std.log.Level,
+    comptime scope: @Type(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    const level_txt = comptime message_level.asText();
+    const prefix2 = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
+    var buffer: [1024]u8 = undefined;
+    const msg = std.fmt.bufPrint(&buffer, level_txt ++ prefix2 ++ format ++ "\n", args) catch return;
+    nosuspend _ = std.posix.write(2, msg) catch return;
 }

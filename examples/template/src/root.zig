@@ -3,6 +3,11 @@ const playground = @import("playground");
 const sdl = playground.sdl.c;
 const imgui = if (INTERNAL) playground.imgui else struct {};
 
+pub const std_options: std.Options = .{
+    .log_level = if (INTERNAL) .info else .err,
+    .logFn = GameLib.logFn,
+};
+
 // Build options.
 const INTERNAL: bool = @import("build_options").internal;
 

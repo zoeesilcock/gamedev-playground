@@ -9,6 +9,11 @@ const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAlloc
 const INTERNAL: bool = @import("build_options").internal;
 const LOG_ALLOCATIONS: bool = @import("build_options").log_allocations;
 
+pub const std_options: std.Options = .{
+    .log_level = if (INTERNAL) .info else .err,
+    .logFn = GameLib.logFn,
+};
+
 const Vector2 = math.Vector2;
 const Vector3 = math.Vector3;
 const Matrix4x4 = math.Matrix4x4;
