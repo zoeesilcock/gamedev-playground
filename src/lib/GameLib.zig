@@ -101,7 +101,7 @@ deinit: *const fn (GameStatePtr) callconv(.c) void = undefined,
 /// like unloading your assets.
 willReload: *const fn (GameStatePtr) callconv(.c) void = undefined,
 /// Called after a code/asset hot reload. Use it to load your assets again.
-reloaded: *const fn (GameStatePtr) callconv(.c) void = undefined,
+reloaded: *const fn (GameStatePtr, ?*imgui.ImGuiContext) callconv(.c) void = undefined,
 
 /// Called on every frame, return false from it to exit the game.
 processInput: *const fn (GameStatePtr) callconv(.c) bool = undefined,

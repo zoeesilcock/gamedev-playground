@@ -171,9 +171,27 @@ pub fn main() !void {
         const delta_time = frame_start_time - previous_frame_start_time;
 
         if (INTERNAL) {
-            const reloaded = checkForChanges(state, allocator, manage_imgui_lifecycle);
-            if (reloaded and manage_imgui_lifecycle) {
-                initImgui(window.?, game_renderer, game_gpu_device, game_settings);
+            const assetsChanged = assetsHaveChanged(allocator);
+            const dllChanged = dllHasChanged();
+
+            if (dllChanged or assetsChanged) {
+                game.willReload(state);
+
+                if (dllChanged) {
+                    if (manage_imgui_lifecycle) {
+                        imgui.deinit();
+                    }
+
+                    unloadDll() catch unreachable;
+                    loadDll() catch @panic("Failed to load the game lib.");
+
+                    if (manage_imgui_lifecycle) {
+                        std.log.warn("init on change", .{});
+                        initImgui(window.?, game_renderer, game_gpu_device, game_settings);
+                    }
+                }
+
+                game.reloaded(state, imgui.context);
             }
         }
 
@@ -243,30 +261,6 @@ fn initImgui(
 fn initChangeTimes(allocator: std.mem.Allocator) void {
     _ = dllHasChanged();
     _ = assetsHaveChanged(allocator);
-}
-
-fn checkForChanges(state: GameLib.GameStatePtr, allocator: std.mem.Allocator, manage_imgui_lifecycle: bool) bool {
-    const assetsChanged = assetsHaveChanged(allocator);
-    const dllChanged = dllHasChanged();
-    var reloaded: bool = false;
-
-    if (dllChanged or assetsChanged) {
-        game.willReload(state);
-
-        if (manage_imgui_lifecycle) {
-            imgui.deinit();
-        }
-
-        if (dllChanged) {
-            unloadDll() catch unreachable;
-            loadDll() catch @panic("Failed to load the game lib.");
-        }
-
-        game.reloaded(state);
-        reloaded = true;
-    }
-
-    return reloaded;
 }
 
 fn dllHasChanged() bool {
