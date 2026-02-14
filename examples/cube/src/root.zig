@@ -312,7 +312,7 @@ pub export fn reloaded(state_ptr: GameLib.GameStatePtr, imgui_context: ?*imgui.c
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     state.dependencies.internal.imgui_context = imgui_context.?;
-    imgui.setup(imgui_context, .Renderer);
+    imgui.setup(imgui_context, .GPU);
 
     initPipeline(state);
 
