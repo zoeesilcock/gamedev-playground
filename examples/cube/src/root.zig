@@ -543,7 +543,7 @@ fn initPipeline(state: *State) void {
     }
     defer sdl.SDL_ReleaseGPUShader(state.device, screen_vertex_shader);
 
-    const screen_fragment_shader = loadShader(state, "screen.frag", 1, 2, 0, 0);
+    const screen_fragment_shader = loadShader(state, "screen.frag", 1, 1, 0, 0);
     if (screen_fragment_shader == null) {
         @panic("Failed to load screen fragment shader");
     }
