@@ -580,10 +580,10 @@ fn initPipeline(state: *State) void {
 
     initWindowSize(state);
 
-    const color_target_descriptions: []const sdl.SDL_GPUColorTargetDescription = &.{.{
+    const color_target_descriptions = [_]sdl.SDL_GPUColorTargetDescription{.{
         .format = state.render_texture_format,
     }};
-    const vertex_buffer_descriptions: []const sdl.SDL_GPUVertexBufferDescription = &.{
+    const vertex_buffer_descriptions = [_]sdl.SDL_GPUVertexBufferDescription{
         .{
             .slot = 0,
             .input_rate = sdl.SDL_GPU_VERTEXINPUTRATE_VERTEX,
@@ -591,7 +591,7 @@ fn initPipeline(state: *State) void {
             .pitch = @sizeOf(PositionColorVertex),
         },
     };
-    const vertex_attributes: []const sdl.SDL_GPUVertexAttribute = &.{
+    const vertex_attributes = [_]sdl.SDL_GPUVertexAttribute{
         .{
             .buffer_slot = 0,
             .format = sdl.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
@@ -608,15 +608,15 @@ fn initPipeline(state: *State) void {
     var pipeline_create_info: sdl.SDL_GPUGraphicsPipelineCreateInfo = .{
         .target_info = .{
             .num_color_targets = 1,
-            .color_target_descriptions = color_target_descriptions.ptr,
+            .color_target_descriptions = &color_target_descriptions,
             .has_depth_stencil_target = true,
             .depth_stencil_format = state.depth_stencil_format,
         },
         .vertex_input_state = .{
             .num_vertex_buffers = 1,
-            .vertex_buffer_descriptions = vertex_buffer_descriptions.ptr,
+            .vertex_buffer_descriptions = &vertex_buffer_descriptions,
             .num_vertex_attributes = 2,
-            .vertex_attributes = vertex_attributes.ptr,
+            .vertex_attributes = &vertex_attributes,
         },
         .depth_stencil_state = .{
             .enable_depth_test = true,
@@ -666,7 +666,7 @@ fn initPipeline(state: *State) void {
         @panic("Failed to create index buffer.");
     }
 
-    const screen_vertex_buffer_descriptions: []const sdl.SDL_GPUVertexBufferDescription = &.{
+    const screen_vertex_buffer_descriptions = [_]sdl.SDL_GPUVertexBufferDescription{
         .{
             .slot = 0,
             .input_rate = sdl.SDL_GPU_VERTEXINPUTRATE_VERTEX,
@@ -674,7 +674,7 @@ fn initPipeline(state: *State) void {
             .pitch = @sizeOf(PositionUVVertex),
         },
     };
-    const screen_vertex_attributes: []const sdl.SDL_GPUVertexAttribute = &.{
+    const screen_vertex_attributes = [_]sdl.SDL_GPUVertexAttribute{
         .{
             .buffer_slot = 0,
             .format = sdl.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
@@ -691,15 +691,13 @@ fn initPipeline(state: *State) void {
     pipeline_create_info = .{
         .target_info = .{
             .num_color_targets = 1,
-            .color_target_descriptions = &.{
-                .format = state.render_texture_format,
-            },
+            .color_target_descriptions = &color_target_descriptions,
         },
         .vertex_input_state = .{
             .num_vertex_buffers = 1,
-            .vertex_buffer_descriptions = screen_vertex_buffer_descriptions.ptr,
+            .vertex_buffer_descriptions = &screen_vertex_buffer_descriptions,
             .num_vertex_attributes = 2,
-            .vertex_attributes = screen_vertex_attributes.ptr,
+            .vertex_attributes = &screen_vertex_attributes,
         },
         .primitive_type = sdl.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
         .vertex_shader = screen_vertex_shader,
@@ -842,7 +840,7 @@ fn loadShader(
     storage_texture_count: u32,
 ) ?*sdl.SDL_GPUShader {
     var shader: ?*sdl.SDL_GPUShader = null;
-    var entrypoint: []const u8 = "main";
+    var entrypoint: [*:0]const u8 = "main";
     var extension: []const u8 = "";
     var format: sdl.SDL_GPUShaderFormat = sdl.SDL_GPU_SHADERFORMAT_INVALID;
     var stage: sdl.SDL_GPUShaderStage = sdl.SDL_GPU_SHADERSTAGE_VERTEX;
@@ -876,7 +874,7 @@ fn loadShader(
         const shader_info: sdl.SDL_GPUShaderCreateInfo = .{
             .code = @ptrCast(code),
             .code_size = code_size,
-            .entrypoint = entrypoint.ptr,
+            .entrypoint = entrypoint,
             .format = format,
             .stage = stage,
             .num_samplers = sampler_count,
