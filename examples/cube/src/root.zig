@@ -308,7 +308,7 @@ pub export fn willReload(state_ptr: GameLib.GameStatePtr) void {
     deinitPipeline(state);
 }
 
-pub export fn reloaded(state_ptr: GameLib.GameStatePtr, imgui_context: ?*imgui.c.ImGuiContext) void {
+pub export fn reloaded(state_ptr: GameLib.GameStatePtr, imgui_context: ?*imgui.ImGuiContext) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
     if (INTERNAL) {

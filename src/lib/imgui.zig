@@ -1,10 +1,18 @@
 //! Exposes the Imgui C API as well as backend support fo SDL3 Renderer and SDL3 GPU.
+//!
+//! Note that importing this module without the INTERNAL build_option set to true will give an empty struct that only
+//! contains a fake ImGuiContext type since that is needed for function signatures. The point of this is to make it a
+//! compile time error to use any internal functions in a release version. This is implemented in `playground.zig`.
 
 /// The Imgui C API, generated using dear_bindings.
 pub const c = @cImport({
     @cInclude("dcimgui.h");
 });
 const sdl = @import("sdl.zig").c;
+
+/// The ImGuiContext type is used in function signatures. When INTERNAL is set to false the library exposes a fake
+/// version of this in the form of an anyopaque since the type is needed for function signatures.
+pub const ImGuiContext = c.ImGuiContext;
 
 const Backend = enum {
     Renderer,
@@ -40,12 +48,12 @@ extern fn ImGui_ImplSDLGPU3_NewFrame() void;
 extern fn ImGui_ImplSDLGPU3_PrepareDrawData(draw_data: ?*c.ImDrawData, command_buffer: ?*sdl.SDL_GPUCommandBuffer) void;
 extern fn ImGui_ImplSDLGPU3_RenderDrawData(draw_data: ?*c.ImDrawData, command_buffer: ?*sdl.SDL_GPUCommandBuffer, render_pass: ?*sdl.SDL_GPURenderPass, pipeline: ?*sdl.SDL_GPUGraphicsPipeline) void;
 
-pub var context: ?*c.ImGuiContext = null;
+pub var context: ?*ImGuiContext = null;
 var backend: Backend = .Renderer;
 
 /// Set the imgui context and backend, this is needed when using the dependency types that manage imgui the imgui
 /// lifecycle for you (all but `GameLib.Dependencies.Minimal`).
-pub fn setup(imgui_context: ?*c.ImGuiContext, imgui_backend: Backend) void {
+pub fn setup(imgui_context: ?*ImGuiContext, imgui_backend: Backend) void {
     backend = imgui_backend;
     context = imgui_context;
     c.ImGui_SetCurrentContext(context);
