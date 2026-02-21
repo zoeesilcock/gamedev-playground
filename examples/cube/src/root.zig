@@ -311,8 +311,10 @@ pub export fn willReload(state_ptr: GameLib.GameStatePtr) void {
 pub export fn reloaded(state_ptr: GameLib.GameStatePtr, imgui_context: ?*imgui.c.ImGuiContext) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    state.dependencies.internal.imgui_context = imgui_context.?;
-    imgui.setup(imgui_context, .GPU);
+    if (INTERNAL) {
+        state.dependencies.internal.imgui_context = imgui_context.?;
+        imgui.setup(imgui_context, .GPU);
+    }
 
     initPipeline(state);
 

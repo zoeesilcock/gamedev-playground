@@ -5,7 +5,7 @@ const sdl = playground.sdl.c;
 const aseprite = playground.aseprite;
 const entities = @import("entities.zig");
 const math = @import("math");
-const imgui = if (INTERNAL) playground.imgui else struct {};
+const imgui = playground.imgui;
 const internal = if (INTERNAL) @import("internal.zig") else struct {};
 
 const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
@@ -441,8 +441,10 @@ pub export fn willReload(state_ptr: GameLib.GameStatePtr) void {
 pub export fn reloaded(state_ptr: GameLib.GameStatePtr, imgui_context: ?*imgui.c.ImGuiContext) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
-    state.dependencies.internal.imgui_context = imgui_context.?;
-    imgui.setup(imgui_context, .Renderer);
+    if (INTERNAL) {
+        state.dependencies.internal.imgui_context = imgui_context.?;
+        imgui.setup(imgui_context, .Renderer);
+    }
 
     loadAssets(state);
     try addGameUI(state);

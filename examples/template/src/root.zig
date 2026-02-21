@@ -1,7 +1,7 @@
 const std = @import("std");
 const playground = @import("playground");
 const sdl = playground.sdl.c;
-const imgui = if (INTERNAL) playground.imgui else struct {};
+const imgui = playground.imgui;
 
 pub const std_options: std.Options = .{
     .log_level = if (INTERNAL) .info else .err,
@@ -74,9 +74,11 @@ pub export fn willReload(state_ptr: GameLib.GameStatePtr) void {
 }
 
 pub export fn reloaded(state_ptr: GameLib.GameStatePtr, imgui_context: ?*imgui.c.ImGuiContext) void {
-    const state: *State = @ptrCast(@alignCast(state_ptr));
-    state.dependencies.internal.imgui_context = imgui_context.?;
-    imgui.setup(imgui_context, .Renderer);
+    if (INTERNAL) {
+        const state: *State = @ptrCast(@alignCast(state_ptr));
+        state.dependencies.internal.imgui_context = imgui_context.?;
+        imgui.setup(imgui_context, .Renderer);
+    }
 }
 
 pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
