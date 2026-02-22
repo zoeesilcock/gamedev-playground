@@ -38,6 +38,8 @@ const State = struct {
 
         if (INTERNAL) {
             state.internal.output = dependencies.internal.output;
+            state.dependencies.internal.memory_usage_window.position = imgui.c.ImVec2{ .x = 320, .y = 40 };
+            state.dependencies.internal.memory_usage_window.visible = true;
         }
 
         return state;
@@ -103,7 +105,17 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
             switch (event.key.key) {
                 sdl.SDLK_F1 => {
                     if (INTERNAL) {
-                        state.dependencies.internal.fps_window.cycleMode();
+                        if (is_down) {
+                            state.dependencies.internal.fps_window.cycleMode();
+                        }
+                    }
+                },
+                sdl.SDLK_F2 => {
+                    if (INTERNAL) {
+                        if (is_down) {
+                            state.dependencies.internal.memory_usage_window.visible =
+                                !state.dependencies.internal.memory_usage_window.visible;
+                        }
                     }
                 },
                 // Process your game input here.
@@ -165,6 +177,7 @@ fn drawGame(state: *State) void {
 fn drawInternalUI(state: *State) void {
     state.dependencies.internal.fps_window.draw();
     state.dependencies.internal.output.draw();
+    state.dependencies.internal.memory_usage_window.draw();
 
     // Game state inspector
     {

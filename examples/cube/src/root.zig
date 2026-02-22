@@ -354,6 +354,12 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
                         state.dependencies.internal.fps_window.cycleMode();
                     }
                 },
+                sdl.SDLK_F2 => {
+                    if (INTERNAL) {
+                        state.dependencies.internal.memory_usage_window.visible =
+                            !state.dependencies.internal.memory_usage_window.visible;
+                    }
+                },
                 sdl.SDLK_G => {
                     if (INTERNAL) {
                         state.internal.inspect_game_state = !state.internal.inspect_game_state;
@@ -504,6 +510,7 @@ pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
             imgui.newFrame();
             state.dependencies.internal.fps_window.draw();
             state.dependencies.internal.output.draw();
+            state.dependencies.internal.memory_usage_window.draw();
 
             if (state.internal.inspect_game_state) {
                 imgui.c.ImGui_SetNextWindowPosEx(

@@ -533,11 +533,6 @@ pub export fn tick(state_ptr: GameLib.GameStatePtr, time: u64, delta_time_int: u
         state.delta_time = 0;
     }
 
-    if (INTERNAL) {
-        state.dependencies.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());
-        internal.recordMemoryUsage(state);
-    }
-
     // Update current title.
     if (state.getEntity(state.current_title_id)) |title| {
         if (title.has_title_duration) {

@@ -75,6 +75,7 @@ pub fn main() !void {
     var state: GameLib.GameStatePtr = undefined;
     var manage_imgui_lifecycle: bool = false;
     var internal_dependencies: GameLib.Dependencies.Internal = undefined;
+    var memory_usage_window: ?*playground.internal.MemoryUsageWindow = null;
 
     // Prepare dependencies.
     const game_gpa = backing_allocator.create(GameLib.DebugAllocator) catch
@@ -117,13 +118,18 @@ pub fn main() !void {
         internal_dependencies = .{
             .allocator = &internal_allocator,
             .output = internal_allocator.create(playground.internal.DebugOutputWindow) catch
-                @panic("Out of memory."),
+                @panic("Failed to allocate DebugOutputWindow."),
             .fps_window = internal_allocator.create(playground.internal.FPSWindow) catch
-                @panic("Failed to allocate FPS state."),
+                @panic("Failed to allocate FPSWindow."),
+            .memory_usage_window = internal_allocator.create(playground.internal.MemoryUsageWindow) catch
+                @panic("Failed to allocate MemoryUsageWindow."),
         };
 
         internal_dependencies.output.init();
         internal_dependencies.fps_window.init(sdl.SDL_GetPerformanceFrequency());
+
+        internal_dependencies.memory_usage_window.init();
+        memory_usage_window = internal_dependencies.memory_usage_window;
 
         manage_imgui_lifecycle = true;
         initImgui(window.?, game_renderer, game_gpu_device, game_settings);
@@ -197,6 +203,12 @@ pub fn main() !void {
 
         if (!game.processInput(state)) {
             break;
+        }
+
+        if (INTERNAL) {
+            if (memory_usage_window) |memory_usage| {
+                memory_usage.recordMemoryUsage(frame_start_time, game_gpa);
+            }
         }
 
         game.tick(state, frame_start_time, delta_time);

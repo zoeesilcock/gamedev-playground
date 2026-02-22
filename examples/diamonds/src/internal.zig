@@ -34,7 +34,6 @@ const A = math.A;
 
 const PLATFORM = @import("builtin").os.tag;
 const DOUBLE_CLICK_THRESHOLD: u64 = 300;
-const MAX_FRAME_TIME_COUNT: u32 = 300;
 const MAX_MEMORY_USAGE_COUNT: u32 = 1000;
 const MEMORY_USAGE_RECORD_INTERVAL: u64 = 16;
 const LEVEL_NAME_BUFFER_SIZE = game.LEVEL_NAME_BUFFER_SIZE;
@@ -60,11 +59,6 @@ pub const InternalState = struct {
     show_colliders: bool,
     collisions: std.ArrayList(DebugCollision),
 
-    memory_usage: [MAX_MEMORY_USAGE_COUNT]u64,
-    memory_usage_current_index: u32,
-    memory_usage_last_collected_at: u64,
-    memory_usage_display: bool,
-
     should_restart: bool,
 
     output: *playground.internal.DebugOutputWindow,
@@ -89,11 +83,6 @@ pub const InternalState = struct {
 
             .show_colliders = false,
             .collisions = .empty,
-
-            .memory_usage = [1]u64{0} ** MAX_MEMORY_USAGE_COUNT,
-            .memory_usage_current_index = 0,
-            .memory_usage_last_collected_at = 0,
-            .memory_usage_display = false,
 
             .should_restart = false,
 
@@ -166,7 +155,8 @@ pub fn processInputEvent(state: *State, event: sdl.SDL_Event) void {
                 state.dependencies.internal.fps_window.cycleMode();
             },
             sdl.SDLK_F2 => {
-                state.internal.memory_usage_display = !state.internal.memory_usage_display;
+                state.dependencies.internal.memory_usage_window.visible =
+                    !state.dependencies.internal.memory_usage_window.visible;
             },
             sdl.SDLK_C => {
                 state.internal.show_colliders = !state.internal.show_colliders;
@@ -366,19 +356,6 @@ fn getHoveredEntity(state: *State) ?EntityId {
     return result;
 }
 
-pub fn recordMemoryUsage(state: *State) void {
-    if (state.internal.memory_usage_last_collected_at + MEMORY_USAGE_RECORD_INTERVAL < state.time) {
-        state.internal.memory_usage_last_collected_at = state.time;
-        state.internal.memory_usage_current_index += 1;
-        if (state.internal.memory_usage_current_index >= MAX_MEMORY_USAGE_COUNT) {
-            state.internal.memory_usage_current_index = 0;
-        }
-        // TODO: Move this out of the library.
-        // state.internal.memory_usage[state.internal.memory_usage_current_index] =
-        //     state.dependencies.allocator.total_requested_bytes;
-    }
-}
-
 pub fn drawDebugUI(state: *State) void {
     imgui.newFrame();
 
@@ -386,47 +363,7 @@ pub fn drawDebugUI(state: *State) void {
     state.dependencies.internal.output.draw();
 
     if (state.internal.show_sidebar) {
-        {
-            _ = imgui.c.ImGui_Begin(
-                "MemoryUsage",
-                null,
-                imgui.c.ImGuiWindowFlags_NoFocusOnAppearing |
-                    imgui.c.ImGuiWindowFlags_NoNavFocus |
-                    imgui.c.ImGuiWindowFlags_NoNavInputs,
-            );
-            defer imgui.c.ImGui_End();
-
-            _ = imgui.c.ImGui_Text(
-                "Bytes: %d",
-                state.internal.memory_usage[state.internal.memory_usage_current_index],
-            );
-
-            var memory_usage: [MAX_MEMORY_USAGE_COUNT]f32 = [1]f32{0} ** MAX_MEMORY_USAGE_COUNT;
-            var max_value: f32 = 0;
-            var min_value: f32 = std.math.floatMax(f32);
-            for (0..MAX_MEMORY_USAGE_COUNT) |i| {
-                memory_usage[i] = @floatFromInt(state.internal.memory_usage[i]);
-                if (memory_usage[i] > max_value) {
-                    max_value = memory_usage[i];
-                }
-                if (memory_usage[i] < min_value and memory_usage[i] > 0) {
-                    min_value = memory_usage[i];
-                }
-            }
-            var buf: [100]u8 = undefined;
-            const min_text = std.fmt.bufPrintZ(&buf, "min: {d}", .{min_value}) catch "";
-            imgui.c.ImGui_PlotHistogramEx(
-                "##MemoryUsageGraph",
-                &memory_usage,
-                memory_usage.len,
-                @intCast(state.internal.memory_usage_current_index + 1),
-                min_text.ptr,
-                min_value,
-                max_value,
-                imgui.c.ImVec2{ .x = 300, .y = 100 },
-                @sizeOf(f32),
-            );
-        }
+        state.dependencies.internal.memory_usage_window.draw();
 
         {
             const button_size: imgui.c.ImVec2 = imgui.c.ImVec2{ .x = 140, .y = 20 };

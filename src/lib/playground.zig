@@ -5,7 +5,9 @@ pub const aseprite = @import("aseprite.zig");
 pub const imgui = if (INTERNAL) @import("imgui.zig") else struct {
     pub const ImGuiContext: type = anyopaque;
 };
-pub const internal = if (INTERNAL) @import("internal.zig") else {};
+pub const internal = if (INTERNAL) @import("internal.zig") else struct {
+    pub const MemoryUsageWindow: type = anyopaque;
+};
 
 pub const GameLib = @import("GameLib.zig");
 

@@ -7,6 +7,8 @@
 const std = @import("std");
 const imgui = @import("imgui.zig").c;
 
+const DebugAllocator = @import("GameLib.zig").DebugAllocator;
+
 /// This window displays a rolling average of frame times over the last 300 frames.
 pub const FPSWindow = struct {
     current_frame_index: u32,
@@ -124,6 +126,89 @@ pub const FPSWindow = struct {
             }
 
             imgui.ImGui_End();
+        }
+    }
+};
+
+/// This window shows a graph of the memory allocations in the game allocator.
+pub const MemoryUsageWindow = struct {
+    const MAX_MEMORY_USAGE_COUNT: u32 = 1000;
+    const MEMORY_USAGE_RECORD_INTERVAL: u64 = 16;
+
+    memory_usage: [MAX_MEMORY_USAGE_COUNT]u64,
+    memory_usage_current_index: u32,
+    memory_usage_last_collected_at: u64,
+    visible: bool,
+    position: imgui.ImVec2,
+
+    pub fn init(self: *MemoryUsageWindow) void {
+        self.* = .{
+            .memory_usage = [1]u64{0} ** MAX_MEMORY_USAGE_COUNT,
+            .memory_usage_current_index = 0,
+            .memory_usage_last_collected_at = 0,
+            .visible = false,
+            .position = imgui.ImVec2{ .x = 5, .y = 40 },
+        };
+    }
+
+    pub fn recordMemoryUsage(self: *MemoryUsageWindow, time: u64, allocator: *DebugAllocator) void {
+        if (self.memory_usage_last_collected_at + MEMORY_USAGE_RECORD_INTERVAL < time) {
+            self.memory_usage_last_collected_at = time;
+            self.memory_usage_current_index += 1;
+            if (self.memory_usage_current_index >= MAX_MEMORY_USAGE_COUNT) {
+                self.memory_usage_current_index = 0;
+            }
+            self.memory_usage[self.memory_usage_current_index] = allocator.total_requested_bytes;
+        }
+    }
+
+    pub fn draw(self: *MemoryUsageWindow) void {
+        if (self.visible) {
+            imgui.ImGui_SetNextWindowPosEx(
+                self.position,
+                imgui.ImGuiCond_FirstUseEver,
+                imgui.ImVec2{ .x = 0, .y = 0 },
+            );
+
+            _ = imgui.ImGui_Begin(
+                "MemoryUsage",
+                null,
+                imgui.ImGuiWindowFlags_NoFocusOnAppearing |
+                    imgui.ImGuiWindowFlags_NoNavFocus |
+                    imgui.ImGuiWindowFlags_NoNavInputs,
+            );
+            defer imgui.ImGui_End();
+
+            _ = imgui.ImGui_Text(
+                "Bytes: %d",
+                self.memory_usage[self.memory_usage_current_index],
+            );
+
+            var memory_usage: [MAX_MEMORY_USAGE_COUNT]f32 = [1]f32{0} ** MAX_MEMORY_USAGE_COUNT;
+            var max_value: f32 = 0;
+            var min_value: f32 = std.math.floatMax(f32);
+            for (0..MAX_MEMORY_USAGE_COUNT) |i| {
+                memory_usage[i] = @floatFromInt(self.memory_usage[i]);
+                if (memory_usage[i] > max_value) {
+                    max_value = memory_usage[i];
+                }
+                if (memory_usage[i] < min_value and memory_usage[i] > 0) {
+                    min_value = memory_usage[i];
+                }
+            }
+            var buf: [100]u8 = undefined;
+            const min_text = std.fmt.bufPrintZ(&buf, "min: {d}", .{min_value}) catch "";
+            imgui.ImGui_PlotHistogramEx(
+                "##MemoryUsageGraph",
+                &memory_usage,
+                memory_usage.len,
+                @intCast(self.memory_usage_current_index + 1),
+                min_text.ptr,
+                min_value,
+                max_value,
+                imgui.ImVec2{ .x = 300, .y = 100 },
+                @sizeOf(f32),
+            );
         }
     }
 };
