@@ -829,6 +829,8 @@ fn loadAssets(state: *State) void {
 }
 
 fn unloadAssets(state: *State) void {
+    state.assets.missing_sprite.?.deinit(state.allocator);
+
     state.assets.life_filled.?.deinit(state.allocator);
     state.assets.life_outlined.?.deinit(state.allocator);
     state.assets.life_backdrop.?.deinit(state.allocator);
