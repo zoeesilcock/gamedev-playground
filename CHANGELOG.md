@@ -10,4 +10,5 @@ The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 ## [Unreleased]
 
 ### Added
+* Renamed project to Flint to better reflect what the project has turned into.
 * Added a CHANGELOG.md file.

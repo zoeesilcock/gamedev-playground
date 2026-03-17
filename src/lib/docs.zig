@@ -1,10 +1,10 @@
-//! This is the "playground" module that is exposed by gamedev-playground which contains various building blocks that
+//! This is the "flint" module that is exposed by flint which contains various building blocks that
 //! can be imported into your game to serve as a basis for your game engine.
 //!
 //! ## Integrating
-//! * Add gamedev-playground as a dependency in your `build.zig.zon` file by running:
+//! * Add flint as a dependency in your `build.zig.zon` file by running:
 //! ```
-//! zig fetch --save git+https://github.com/zoeesilcock/gamedev-playground.git
+//! zig fetch --save git+https://github.com/zoeesilcock/flint.git
 //! ```
 //! * Add the following to your `build.zig` file:
 //! ```
@@ -19,24 +19,24 @@
 //! build_options.addOption([]const u8, "lib_base_name", lib_base_name);
 //! const build_options_mod = build_options.createModule();
 //!
-//! const playground_dep = b.dependency("gamedev_playground", .{
+//! const flint_dep = b.dependency("flint", .{
 //!     .target = target,
 //!     .optimize = optimize,
 //! });
-//! const playground_mod = playground_dep.module("playground");
-//! playground_mod.addImport("build_options", build_options_mod);
-//! module.addImport("playground", playground_mod);
-//! gamedev_playground.linkSDL(playground_dep.builder, lib, target, optimize);
+//! const flint_mod = flint_dep.module("flint");
+//! flint_mod.addImport("build_options", build_options_mod);
+//! module.addImport("flint", flint_mod);
+//! flint.linkSDL(flint_dep.builder, lib, target, optimize);
 //!
 //! if (!lib_only) {
-//!     const exe = gamedev_playground.buildExecutable(
-//!         playground_dep.builder,
+//!     const exe = flint.buildExecutable(
+//!         flint_dep.builder,
 //!         b,
 //!         "YOUR_EXECUTABLE_NAME",
 //!         build_options_mod,
 //!         target,
 //!         optimize,
-//!         playground_mod,
+//!         flint_mod,
 //!     );
 //!     b.installArtifact(exe);
 //! }

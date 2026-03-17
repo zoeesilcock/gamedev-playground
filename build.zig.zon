@@ -1,8 +1,8 @@
 .{
-    .name = .gamedev_playground,
+    .name = .flint,
     .version = "0.9.0",
     .minimum_zig_version = "0.15.2",
-    .fingerprint = 0x4d0121353119f6fd,
+    .fingerprint = 0x4ab03ee82392c43e,
     .dependencies = .{
         .sdl = .{
             .url = "git+https://github.com/castholm/SDL.git#v0.4.1+3.4.2",

@@ -2,7 +2,7 @@
 
 This example is inspired by the classic game [Diamonds](https://en.wikipedia.org/wiki/Diamonds_\(video_game\)). The objective is to clear the screen of colored blocks without hitting spiky blocks. It uses the SDL3 Renderer API to render 2D sprites based on Aseprite files.
 
-![Playground screenshot](screenshot.png)
+![Diamonds screenshot](screenshot.png)
 
 
 ## Controls

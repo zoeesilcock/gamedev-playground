@@ -1,8 +1,8 @@
 const std = @import("std");
-const playground = @import("playground");
-const sdl_utils = playground.sdl;
-const sdl = playground.sdl.c;
-const imgui = playground.imgui;
+const flint = @import("flint");
+const sdl_utils = flint.sdl;
+const sdl = flint.sdl.c;
+const imgui = flint.imgui;
 const math = @import("math");
 const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
 
@@ -20,8 +20,8 @@ const Matrix4x4 = math.Matrix4x4;
 const X = math.X;
 const Y = math.Y;
 const Z = math.Z;
-const GameLib = playground.GameLib;
-const FPSWindow = playground.internal.FPSWindow;
+const GameLib = flint.GameLib;
+const FPSWindow = flint.internal.FPSWindow;
 const ScreenEffect = enum(u32) {
     None = 0,
     VerticalWave,
@@ -64,7 +64,7 @@ pub const State = struct {
 
     // Internal.
     internal: if (INTERNAL) extern struct {
-        output: *playground.internal.DebugOutputWindow = undefined,
+        output: *flint.internal.DebugOutputWindow = undefined,
         inspect_game_state: bool = false,
     } else extern struct {} = undefined,
 
@@ -523,7 +523,7 @@ pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
                 _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
                 defer imgui.c.ImGui_End();
 
-                playground.internal.inspectStruct(state, &.{}, false, inputCustomTypes);
+                flint.internal.inspectStruct(state, &.{}, false, inputCustomTypes);
             }
 
             imgui.renderGPU(command_buffer, swapchain_texture);

@@ -1,5 +1,5 @@
 const std = @import("std");
-const sdl = @import("playground").sdl.c;
+const sdl = @import("flint").sdl.c;
 
 pub const Vector2 = @Vector(2, f32);
 pub const Vector3 = @Vector(3, f32);

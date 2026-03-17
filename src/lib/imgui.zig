@@ -2,7 +2,7 @@
 //!
 //! Note that importing this module without the INTERNAL build_option set to true will give an empty struct that only
 //! contains a fake ImGuiContext type since that is needed for function signatures. The point of this is to make it a
-//! compile time error to use any internal functions in a release version. This is implemented in `playground.zig`.
+//! compile time error to use any internal functions in a release version. This is implemented in `flint.zig`.
 
 /// The Imgui C API, generated using dear_bindings.
 pub const c = @cImport({

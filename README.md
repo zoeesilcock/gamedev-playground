@@ -1,7 +1,7 @@
-# Gamedev Playground
-*Exploring ways to make game development a more pleasurable experience.*
+# Flint
+*Strike your own engine*
 
-A collection of tools and ideas that help you build the game engine that's right for your game.
+Tools and ideas for building the game engine your game actually needs.
 
 
 ## Examples
@@ -53,10 +53,10 @@ zig build -Dlib_only --watch
 The project is built using the zig build system, use `zig build -h` for a list of options or look at the `build.zig` file for more details.
 
 ### Debugging
-Debugger configurations for VS Code are included in the main project as well as the example projects, it will prompt to install the required extension if you don't have it. When using VS Code it is also helpful to open the workspace file located in `.vscode/gamedev-playground.code-workspace` to get an overview of the full project.
+Debugger configurations for VS Code are included in the main project as well as the example projects, it will prompt to install the required extension if you don't have it. When using VS Code it is also helpful to open the workspace file located in `.vscode/flint.code-workspace` to get an overview of the full project.
 
 ### Documentation
-The documentation is generated using the zig autodoc system. It can be generated locally or [viewed online](https://zoeesilcock.github.io/gamedev-playground/).
+The documentation is generated using the zig autodoc system. It can be generated locally or [viewed online](https://zoeesilcock.github.io/flint/).
 
 To generate and run locally:
 ```
@@ -66,11 +66,11 @@ python -m http.server -b 127.0.0.1 8000 -d zig-out/docs/
 
 
 ## Usage
-To use this in your own projects you include it as a dependency, integrate it into your `build.zig` file and then implement a library which follows the API expected by the main executable. See the [documentation](https://zoeesilcock.github.io/gamedev-playground/), and the examples for more details.
+To use this in your own projects you include it as a dependency, integrate it into your `build.zig` file and then implement a library which follows the API expected by the main executable. See the [documentation](https://zoeesilcock.github.io/flint/), and the examples for more details.
 
 ### Add dependency
 ```
-zig fetch --save git+https://github.com/zoeesilcock/gamedev-playground.git
+zig fetch --save git+https://github.com/zoeesilcock/flint.git
 ```
 
 ### Exposed modules

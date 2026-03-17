@@ -1,7 +1,7 @@
 const std = @import("std");
-const playground = @import("playground");
-const sdl = playground.sdl.c;
-const imgui = playground.imgui;
+const flint = @import("flint");
+const sdl = flint.sdl.c;
+const imgui = flint.imgui;
 
 pub const std_options: std.Options = .{
     .log_level = if (INTERNAL) .info else .err,
@@ -12,7 +12,7 @@ pub const std_options: std.Options = .{
 const INTERNAL: bool = @import("build_options").internal;
 
 // Types.
-const GameLib = playground.GameLib;
+const GameLib = flint.GameLib;
 const DebugAllocator = GameLib.DebugAllocator;
 
 const State = struct {
@@ -27,7 +27,7 @@ const State = struct {
 
     // Internal.
     internal: if (INTERNAL) extern struct {
-        output: *playground.internal.DebugOutputWindow = undefined,
+        output: *flint.internal.DebugOutputWindow = undefined,
     } else extern struct {} = undefined,
 
     pub fn create(dependencies: GameLib.Dependencies.Full2D) !*State {
@@ -191,6 +191,6 @@ fn drawInternalUI(state: *State) void {
         _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
         defer imgui.c.ImGui_End();
 
-        playground.internal.inspectStruct(state, &.{}, false, null);
+        flint.internal.inspectStruct(state, &.{}, false, null);
     }
 }

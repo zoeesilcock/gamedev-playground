@@ -1,7 +1,7 @@
 const std = @import("std");
-const playground = @import("playground");
-const sdl = playground.sdl.c;
-const aseprite = playground.aseprite;
+const flint = @import("flint");
+const sdl = flint.sdl.c;
+const aseprite = flint.aseprite;
 const game = @import("root.zig");
 const math = @import("math");
 

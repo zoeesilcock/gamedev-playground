@@ -1,8 +1,8 @@
 const std = @import("std");
-const playground = @import("playground");
-const sdl = playground.sdl.c;
-const GameLib = playground.GameLib;
-const imgui = if (INTERNAL) playground.imgui else struct {};
+const flint = @import("flint");
+const sdl = flint.sdl.c;
+const GameLib = flint.GameLib;
+const imgui = if (INTERNAL) flint.imgui else struct {};
 
 const INTERNAL: bool = @import("build_options").internal;
 const PLATFORM = @import("builtin").os.tag;
@@ -46,7 +46,7 @@ pub fn main() !void {
     var window_flags: sdl.SDL_WindowFlags = 0;
     if (game_settings.fullscreen) window_flags |= sdl.SDL_WINDOW_FULLSCREEN;
     if (game_settings.window_on_top) window_flags |= sdl.SDL_WINDOW_ALWAYS_ON_TOP;
-    const window = playground.sdl.panicIfNull(sdl.SDL_CreateWindow(
+    const window = flint.sdl.panicIfNull(sdl.SDL_CreateWindow(
         game_settings.title,
         @intCast(game_settings.window_width),
         @intCast(game_settings.window_height),
@@ -75,7 +75,7 @@ pub fn main() !void {
     var state: GameLib.GameStatePtr = undefined;
     var manage_imgui_lifecycle: bool = false;
     var internal_dependencies: GameLib.Dependencies.Internal = undefined;
-    var memory_usage_window: ?*playground.internal.MemoryUsageWindow = null;
+    var memory_usage_window: ?*flint.internal.MemoryUsageWindow = null;
 
     // Prepare dependencies.
     const game_gpa = backing_allocator.create(GameLib.DebugAllocator) catch
@@ -88,13 +88,13 @@ pub fn main() !void {
             // Nothing needs to be done here.
         },
         .Full2D => {
-            game_renderer = playground.sdl.panicIfNull(
+            game_renderer = flint.sdl.panicIfNull(
                 sdl.SDL_CreateRenderer(window.?, null),
                 "Failed to create renderer.",
             );
         },
         .Full3D => {
-            game_gpu_device = playground.sdl.panicIfNull(sdl.SDL_CreateGPUDevice(
+            game_gpu_device = flint.sdl.panicIfNull(sdl.SDL_CreateGPUDevice(
                 sdl.SDL_GPU_SHADERFORMAT_SPIRV |
                     sdl.SDL_GPU_SHADERFORMAT_DXIL |
                     sdl.SDL_GPU_SHADERFORMAT_MSL |
@@ -102,7 +102,7 @@ pub fn main() !void {
                 true,
                 null,
             ), "Failed to create GPU device");
-            playground.sdl.panic(
+            flint.sdl.panic(
                 sdl.SDL_ClaimWindowForGPUDevice(game_gpu_device, window),
                 "Failed to claim window for GPU device.",
             );
@@ -117,11 +117,11 @@ pub fn main() !void {
 
         internal_dependencies = .{
             .allocator = &internal_allocator,
-            .output = internal_allocator.create(playground.internal.DebugOutputWindow) catch
+            .output = internal_allocator.create(flint.internal.DebugOutputWindow) catch
                 @panic("Failed to allocate DebugOutputWindow."),
-            .fps_window = internal_allocator.create(playground.internal.FPSWindow) catch
+            .fps_window = internal_allocator.create(flint.internal.FPSWindow) catch
                 @panic("Failed to allocate FPSWindow."),
-            .memory_usage_window = internal_allocator.create(playground.internal.MemoryUsageWindow) catch
+            .memory_usage_window = internal_allocator.create(flint.internal.MemoryUsageWindow) catch
                 @panic("Failed to allocate MemoryUsageWindow."),
         };
 
@@ -192,7 +192,6 @@ pub fn main() !void {
                     loadDll() catch @panic("Failed to load the game lib.");
 
                     if (manage_imgui_lifecycle) {
-                        std.log.warn("init on change", .{});
                         initImgui(window.?, game_renderer, game_gpu_device, game_settings);
                     }
                 }

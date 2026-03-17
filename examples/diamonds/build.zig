@@ -1,5 +1,5 @@
 const std = @import("std");
-const gamedev_playground = @import("gamedev_playground");
+const flint = @import("flint");
 
 pub fn build(b: *std.Build) void {
     const build_options = b.addOptions();
@@ -35,25 +35,25 @@ pub fn build(b: *std.Build) void {
     const check = b.step("check", "Check if it compiles");
     check.dependOn(&lib_check.step);
 
-    // Integrate gamedev_playground.
-    const playground_dep = b.dependency("gamedev_playground", .{
+    // Integrate flint.
+    const flint_dep = b.dependency("flint", .{
         .target = target,
         .optimize = optimize,
     });
-    const playground_mod = playground_dep.module("playground");
-    playground_mod.addImport("build_options", build_options_mod);
-    module.addImport("playground", playground_mod);
-    gamedev_playground.linkSDL(playground_dep.builder, lib, target, optimize);
+    const flint_mod = flint_dep.module("flint");
+    flint_mod.addImport("build_options", build_options_mod);
+    module.addImport("flint", flint_mod);
+    flint.linkSDL(flint_dep.builder, lib, target, optimize);
 
     if (!lib_only) {
-        const exe = gamedev_playground.buildExecutable(
-            playground_dep.builder,
+        const exe = flint.buildExecutable(
+            flint_dep.builder,
             b,
             "diamonds",
             build_options_mod,
             target,
             optimize,
-            playground_mod,
+            flint_mod,
         );
         b.installArtifact(exe);
     }
@@ -69,7 +69,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .imports = &.{
-            .{ .name = "playground", .module = playground_mod },
+            .{ .name = "flint", .module = flint_mod },
         },
     });
     module.addImport("math", math_mod);

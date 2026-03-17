@@ -1,13 +1,13 @@
 const std = @import("std");
-const playground = @import("playground");
-const sdl = playground.sdl.c;
-const imgui = playground.imgui;
-const aseprite = playground.aseprite;
+const flint = @import("flint");
+const sdl = flint.sdl.c;
+const imgui = flint.imgui;
+const aseprite = flint.aseprite;
 const game = @import("root.zig");
 const entities = @import("entities.zig");
 const math = @import("math");
 
-const GameLib = playground.GameLib;
+const GameLib = flint.GameLib;
 const State = game.State;
 const Assets = game.Assets;
 const AsepriteAsset = aseprite.AsepriteAsset;
@@ -61,7 +61,7 @@ pub const InternalState = struct {
 
     should_restart: bool,
 
-    output: *playground.internal.DebugOutputWindow,
+    output: *flint.internal.DebugOutputWindow,
 
     pub fn init(dependencies: GameLib.Dependencies.Full2D) !*InternalState {
         const allocator: *std.mem.Allocator = dependencies.internal.allocator;
@@ -414,9 +414,9 @@ pub fn drawDebugUI(state: *State) void {
                 state.internal.should_restart = true;
             }
 
-            playground.internal.inputEnum("Mode", &state.internal.mode);
-            playground.internal.inputEnum("Type", &state.internal.current_block_type);
-            playground.internal.inputEnum("Color", &state.internal.current_block_color);
+            flint.internal.inputEnum("Mode", &state.internal.mode);
+            flint.internal.inputEnum("Type", &state.internal.current_block_type);
+            flint.internal.inputEnum("Color", &state.internal.current_block_color);
         }
 
         {
@@ -430,7 +430,7 @@ pub fn drawDebugUI(state: *State) void {
             _ = imgui.c.ImGui_Begin("Inspector", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
             defer imgui.c.ImGui_End();
 
-            playground.internal.inspectStruct(
+            flint.internal.inspectStruct(
                 state.getEntity(state.internal.selected_entity_id),
                 &.{"is_in_use"},
                 true,
@@ -449,7 +449,7 @@ pub fn drawDebugUI(state: *State) void {
             _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
             defer imgui.c.ImGui_End();
 
-            playground.internal.inspectStruct(state, &.{"entity"}, false, &inputCustomTypes);
+            flint.internal.inspectStruct(state, &.{"entity"}, false, &inputCustomTypes);
         }
     }
 
@@ -496,7 +496,7 @@ fn inputCustomTypes(
         },
         EntityFlagsType => {
             if (std.mem.eql(u8, struct_field.name, "flags")) {
-                playground.internal.inputFlagsU32(struct_field.name, field_ptr, EntityFlags);
+                flint.internal.inputFlagsU32(struct_field.name, field_ptr, EntityFlags);
                 handled = true;
             } else {
                 handled = false;

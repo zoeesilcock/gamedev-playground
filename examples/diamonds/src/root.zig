@@ -1,11 +1,11 @@
 const std = @import("std");
-const playground = @import("playground");
-const sdl_utils = playground.sdl;
-const sdl = playground.sdl.c;
-const aseprite = playground.aseprite;
+const flint = @import("flint");
+const sdl_utils = flint.sdl;
+const sdl = flint.sdl.c;
+const aseprite = flint.aseprite;
 const entities = @import("entities.zig");
 const math = @import("math");
-const imgui = playground.imgui;
+const imgui = flint.imgui;
 const internal = if (INTERNAL) @import("internal.zig") else struct {};
 
 const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
@@ -14,7 +14,7 @@ pub const std_options: std.Options = .{
     .logFn = GameLib.logFn,
 };
 
-const GameLib = playground.GameLib;
+const GameLib = flint.GameLib;
 const Entity = entities.Entity;
 const EntityArray = entities.EntityArray;
 const EntityIterator = entities.EntityIterator;

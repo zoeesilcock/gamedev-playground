@@ -15,19 +15,19 @@ pub fn build(b: *std.Build) !void {
     build_options.addOption(bool, "internal", internal);
 
     // Exposed module.
-    const playground_mod = b.addModule("playground", .{
-        .root_source_file = b.path("src/lib/playground.zig"),
+    const flint_mod = b.addModule("flint", .{
+        .root_source_file = b.path("src/lib/flint.zig"),
         .target = target,
         .optimize = optimize,
     });
-    playground_mod.addOptions("build_options", build_options);
+    flint_mod.addOptions("build_options", build_options);
     if (getSDLIncludePath(b, target, optimize)) |sdl_include_path| {
-        playground_mod.addIncludePath(sdl_include_path);
+        flint_mod.addIncludePath(sdl_include_path);
     }
-    linkImgui(b, playground_mod, target, optimize, internal);
+    linkImgui(b, flint_mod, target, optimize, internal);
 
     // Main executable.
-    const exe = buildExecutable(b, b, "gamedev-playground", exe_build_options_mod, target, optimize, playground_mod);
+    const exe = buildExecutable(b, b, "flint", exe_build_options_mod, target, optimize, flint_mod);
     b.installArtifact(exe);
 
     // Tests.
@@ -37,7 +37,7 @@ pub fn build(b: *std.Build) !void {
     const run_exe_tests = b.addRunArtifact(exe_tests);
     test_step.dependOn(&run_exe_tests.step);
 
-    const lib_tests = b.addTest(.{ .root_module = playground_mod });
+    const lib_tests = b.addTest(.{ .root_module = flint_mod });
     const run_lib_tests = b.addRunArtifact(lib_tests);
     test_step.dependOn(&run_lib_tests.step);
 
@@ -67,14 +67,14 @@ pub fn buildExecutable(
     build_options_mod: *std.Build.Module,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    playground_mod: *std.Build.Module,
+    flint_mod: *std.Build.Module,
 ) *std.Build.Step.Compile {
     const module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{
-            .{ .name = "playground", .module = playground_mod },
+            .{ .name = "flint", .module = flint_mod },
         },
     });
     module.addImport("build_options", build_options_mod);
