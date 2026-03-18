@@ -51,7 +51,7 @@ pub fn build(b: *std.Build) !void {
     const fint_mod = flint_dep.module("flint");
     fint_mod.addImport("build_options", build_options_mod);
     module.addImport("flint", fint_mod);
-    flint.linkSDL(flint_dep.builder, lib, target, optimize);
+    flint.linkSDL(flint_dep.builder, lib, target, optimize, b.getInstallStep());
 
     if (!lib_only) {
         const exe = flint.buildExecutable(
@@ -62,6 +62,7 @@ pub fn build(b: *std.Build) !void {
             target,
             optimize,
             fint_mod,
+            b.getInstallStep(),
         );
         b.installArtifact(exe);
     }

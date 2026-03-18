@@ -14,6 +14,11 @@ pub fn build(b: *std.Build) !void {
     const build_options = b.addOptions();
     build_options.addOption(bool, "internal", internal);
 
+    var build_step = b.step("flint", "Build flint");
+
+    // Default to building Flint if no other step is specified.
+    b.default_step = build_step;
+
     // Exposed module.
     const flint_mod = b.addModule("flint", .{
         .root_source_file = b.path("src/lib/flint.zig"),
@@ -24,11 +29,20 @@ pub fn build(b: *std.Build) !void {
     if (getSDLIncludePath(b, target, optimize)) |sdl_include_path| {
         flint_mod.addIncludePath(sdl_include_path);
     }
-    linkImgui(b, flint_mod, target, optimize, internal);
+    linkImgui(b, flint_mod, target, optimize, internal, build_step);
 
     // Main executable.
-    const exe = buildExecutable(b, b, "flint", exe_build_options_mod, target, optimize, flint_mod);
-    b.installArtifact(exe);
+    const exe = buildExecutable(
+        b,
+        b,
+        "flint",
+        exe_build_options_mod,
+        target,
+        optimize,
+        flint_mod,
+        build_step,
+    );
+    build_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
 
     // Tests.
     const test_step = b.step("test", "Run unit tests");
@@ -68,6 +82,7 @@ pub fn buildExecutable(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     flint_mod: *std.Build.Module,
+    install_step: *std.Build.Step,
 ) *std.Build.Step.Compile {
     const module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -83,7 +98,7 @@ pub fn buildExecutable(
         .root_module = module,
     });
 
-    linkSDL(b, exe, target, optimize);
+    linkSDL(b, exe, target, optimize, install_step);
 
     const run_step = client_b.step("run", "Run the app");
     const run_cmd = client_b.addRunArtifact(exe);
@@ -101,10 +116,11 @@ pub fn linkSDL(
     obj: *std.Build.Step.Compile,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
+    install_step: *std.Build.Step,
 ) void {
     if (getSDL(b, target, optimize)) |sdl_lib| {
         obj.root_module.linkLibrary(sdl_lib);
-        b.installArtifact(sdl_lib);
+        install_step.dependOn(&b.addInstallArtifact(sdl_lib, .{}).step);
     }
 }
 
@@ -114,13 +130,14 @@ pub fn linkImgui(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     internal: bool,
+    install_step: *std.Build.Step,
 ) void {
     if (internal) {
         if (b.lazyDependency("imgui", .{
             .target = target,
             .optimize = optimize,
         })) |imgui_dep| {
-            if (createImGuiLib(b, target, optimize, imgui_dep)) |imgui_lib| {
+            if (createImGuiLib(b, target, optimize, imgui_dep, install_step)) |imgui_lib| {
                 module.addIncludePath(b.path("src/lib/dcimgui"));
                 module.addIncludePath(imgui_dep.path("."));
                 module.linkLibrary(imgui_lib);
@@ -168,6 +185,7 @@ fn createImGuiLib(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     imgui_dep: *std.Build.Dependency,
+    install_step: *std.Build.Step,
 ) ?*std.Build.Step.Compile {
     var imgui_lib: ?*std.Build.Step.Compile = null;
     const IMGUI_C_DEFINES: []const [2][]const u8 = &.{
@@ -230,7 +248,7 @@ fn createImGuiLib(
                 });
             }
 
-            b.installArtifact(dcimgui_sdl);
+            install_step.dependOn(&b.addInstallArtifact(dcimgui_sdl, .{}).step);
 
             imgui_lib = dcimgui_sdl;
         }
