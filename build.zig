@@ -71,6 +71,9 @@ pub fn build(b: *std.Build) !void {
     });
     const docs_step = b.step("docs", "Generate documentation");
     docs_step.dependOn(&install_docs.step);
+
+    // New project generator executable.
+    buildNewExecutable(b, exe_build_options_mod, target, optimize);
 }
 
 pub fn buildExecutable(
@@ -254,4 +257,31 @@ fn createImGuiLib(
     }
 
     return imgui_lib;
+}
+
+fn buildNewExecutable(
+    b: *std.Build,
+    build_options_mod: *std.Build.Module,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) void {
+    const module = b.createModule(.{
+        .root_source_file = b.path("src/new.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    module.addImport("build_options", build_options_mod);
+    const new_exe = b.addExecutable(.{
+        .name = "flint-new",
+        .root_module = module,
+    });
+
+    const run_step = b.step("new", "Run the new project generator");
+    const run_cmd = b.addRunArtifact(new_exe);
+    run_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
+    run_step.dependOn(&run_cmd.step);
+    run_step.dependOn(&b.addInstallArtifact(new_exe, .{}).step);
 }
