@@ -22,6 +22,10 @@ pub fn build(b: *std.Build) !void {
     build_options.addOption(bool, "log_allocations", log_allocations);
     const build_options_mod = build_options.createModule();
 
+    // Default to building all if no other step is specified.
+    var build_all_step = b.step("all", "Build all");
+    b.default_step = build_all_step;
+
     const module = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
@@ -62,9 +66,9 @@ pub fn build(b: *std.Build) !void {
             target,
             optimize,
             fint_mod,
-            b.getInstallStep(),
+            build_all_step,
         );
-        b.installArtifact(exe);
+        build_all_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
     }
     // End of integration.
 
@@ -85,7 +89,7 @@ pub fn build(b: *std.Build) !void {
     module.addImport("math", math_mod);
     module.addImport("logging_allocator", logging_allocator_mod);
 
-    b.installArtifact(lib);
+    build_all_step.dependOn(&b.addInstallArtifact(lib, .{}).step);
 
     // Tests.
     const test_step = b.step("test", "Run unit tests");

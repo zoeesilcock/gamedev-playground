@@ -14,10 +14,9 @@ pub fn build(b: *std.Build) !void {
     const build_options = b.addOptions();
     build_options.addOption(bool, "internal", internal);
 
-    var build_step = b.step("flint", "Build flint");
-
     // Default to building Flint if no other step is specified.
-    b.default_step = build_step;
+    var build_all_step = b.step("all", "Build all");
+    b.default_step = build_all_step;
 
     // Exposed module.
     const flint_mod = b.addModule("flint", .{
@@ -29,7 +28,7 @@ pub fn build(b: *std.Build) !void {
     if (getSDLIncludePath(b, target, optimize)) |sdl_include_path| {
         flint_mod.addIncludePath(sdl_include_path);
     }
-    linkImgui(b, flint_mod, target, optimize, internal, build_step);
+    linkImgui(b, flint_mod, target, optimize, internal, build_all_step);
 
     // Main executable.
     const exe = buildExecutable(
@@ -40,9 +39,9 @@ pub fn build(b: *std.Build) !void {
         target,
         optimize,
         flint_mod,
-        build_step,
+        build_all_step,
     );
-    build_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
+    build_all_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
 
     // Tests.
     const test_step = b.step("test", "Run unit tests");

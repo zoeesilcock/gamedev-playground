@@ -13,6 +13,10 @@ pub fn build(b: *std.Build) void {
     build_options.addOption([]const u8, "lib_base_name", lib_base_name);
     const build_options_mod = build_options.createModule();
 
+    // Default to building all if no other step is specified.
+    var build_all_step = b.step("all", "Build all");
+    b.default_step = build_all_step;
+
     // Game library.
     const module = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
@@ -26,7 +30,7 @@ pub fn build(b: *std.Build) void {
         .name = lib_base_name,
         .root_module = module,
     });
-    b.installArtifact(lib);
+    build_all_step.dependOn(&b.addInstallArtifact(lib, .{}).step);
 
     const lib_check = b.addLibrary(.{
         .linkage = .dynamic,
@@ -61,8 +65,8 @@ pub fn build(b: *std.Build) void {
             target,
             optimize,
             flint_mod,
-            b.getInstallStep(),
+            build_all_step,
         );
-        b.installArtifact(exe);
+        build_all_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
     }
 }
