@@ -60,7 +60,7 @@ pub fn main() !void {
         try copyDirectory(source_dir, target_dir.?, new_name, stdout, allocator, 0);
 
         try stdout.print("\nYou're all setup!\n\n", .{});
-        try stdout.print("Run your new project:\n`cd {s} && zig build run`\n\n", .{target_path});
+        try stdout.print("Run your new project:\n`cd {s} && zig build all && zig build run`\n\n", .{target_path});
     } else {
         try stdout.print("Flint received unexpected input.\n", .{});
         try stdout.print("Usage: {s} <new-project-path>\n", .{args[0]});
