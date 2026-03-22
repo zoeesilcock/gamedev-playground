@@ -3,5 +3,35 @@
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
-    "configurations": []
+    "configurations": [
+        {
+            "name": "Debug flint-new (Windows)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/zig-out/bin/${workspaceFolderBasename}-new.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build new",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug flint-new (Mac)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/zig-out/bin/${workspaceFolderBasename}-new",
+            "args": ["../hello_pixels"],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build new",
+            "MIMode": "lldb",
+        },
+        {
+            "name": "Debug flint-new (Linux)",
+            "type": "lldb-dap",
+            "request": "launch",
+            "program": "${workspaceFolder}/zig-out/bin/${workspaceFolderBasename}-new",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build new",
+        },
+    ],
 }

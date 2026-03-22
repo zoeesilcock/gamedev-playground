@@ -4,7 +4,17 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "zig build",
+            "command": "zig build all",
+            "problemMatcher": ["$zig"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "build new",
+            "type": "shell",
+            "command": "zig build new",
             "problemMatcher": ["$zig"],
             "group": {
                 "kind": "build",
