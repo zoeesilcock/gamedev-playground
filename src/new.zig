@@ -138,7 +138,7 @@ fn copyFileWithSubstitutions(
         const next_character = reader.take(1) catch break;
         try writer.print("{s}", .{next_character});
 
-        if (std.mem.eql(u8, next_character, "\"")) {
+        if (std.mem.eql(u8, next_character, "\"")) { // Match strings.
             string_length = 0;
             try string_writer.flush();
 
@@ -157,7 +157,7 @@ fn copyFileWithSubstitutions(
             }
 
             _ = reader.stream(writer, .limited(1)) catch break;
-        } else if (std.mem.eql(u8, next_character, ".")) {
+        } else if (std.mem.eql(u8, next_character, ".")) { // Match enum literals.
             string_length = 0;
             try string_writer.flush();
 
@@ -182,6 +182,27 @@ fn copyFileWithSubstitutions(
             }
 
             _ = reader.stream(writer, .limited(1)) catch break;
+        } else if (std.mem.eql(u8, reader.peek(2) catch break, "0x")) { // Match hex numbers.
+            string_length = 0;
+            try string_writer.flush();
+
+            while (true) {
+                const peek = reader.peek(1) catch break;
+
+                if (std.mem.eql(u8, peek, " ") or
+                    std.mem.eql(u8, peek, ",") or
+                    std.mem.eql(u8, peek, ")"))
+                {
+                    const string = string_buffer[0..string_length];
+                    std.log.info("hex: '{s}'", .{string});
+                    try printStringOrSubstitute(string, writer, new_name);
+                    break;
+                } else {
+                    reader.toss(1);
+                    try string_writer.print("{s}", .{peek});
+                    string_length += 1;
+                }
+            }
         }
     }
 
@@ -197,6 +218,8 @@ fn printStringOrSubstitute(
         try writer.print("{s}", .{new_name});
     } else if (std.mem.eql(u8, string, "Template")) {
         try printCapitalizedName(new_name, writer);
+    } else if (std.mem.eql(u8, string, "0x3d54e0a673bba291")) {
+        try printNewFingerprint(new_name, writer);
     } else {
         try writer.print("{s}", .{string});
     }
@@ -243,4 +266,36 @@ fn fileHasSubstitutions(path: []const u8) bool {
         }
     }
     return result;
+}
+
+/// This is borrowed from `src/Package.zig` in the zig codebase since it isn't exposed in the standard library.
+/// If the fingerprint starts to fail the original code may have changed.
+pub const Fingerprint = packed struct(u64) {
+    id: u32,
+    checksum: u32,
+
+    pub fn generate(rng: std.Random, name: []const u8) Fingerprint {
+        return .{
+            .id = rng.intRangeLessThan(u32, 1, 0xffffffff),
+            .checksum = std.hash.Crc32.hash(name),
+        };
+    }
+
+    pub fn validate(n: Fingerprint, name: []const u8) bool {
+        switch (n.id) {
+            0x00000000, 0xffffffff => return false,
+            else => return std.hash.Crc32.hash(name) == n.checksum,
+        }
+    }
+
+    pub fn int(n: Fingerprint) u64 {
+        return @bitCast(n);
+    }
+};
+
+fn printNewFingerprint(new_name: []const u8, writer: *std.Io.Writer) !void {
+    var ptr: std.Random.Xoshiro256 = .init(1);
+    const rng: std.Random = std.Random.DefaultPrng.random(&ptr);
+    const fingerprint: Fingerprint = .generate(rng, new_name);
+    try writer.print("0x{x}", .{fingerprint.int()});
 }
