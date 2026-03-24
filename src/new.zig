@@ -134,9 +134,25 @@ fn copyFileWithSubstitutions(
     var string_discarding_writer: std.Io.Writer.Discarding = .init(&string_buffer);
     const string_writer = &string_discarding_writer.writer;
 
+    const is_build_zig_zon_file: bool = std.mem.eql(u8, file_name, "build.zig.zon");
+
     while (true) {
         const next_character = reader.take(1) catch break;
         try writer.print("{s}", .{next_character});
+
+        // Strip out the Flint dependency since `zig fetch` puts the URL in the `.path` if a path entry exists.
+        if (is_build_zig_zon_file and std.mem.eql(u8, reader.peek(6) catch "", ".flint")) {
+            while (true) {
+                const peek = reader.peek(1) catch break;
+                if (std.mem.eql(u8, peek, "}")) {
+                    reader.toss(2);
+                    break;
+                } else {
+                    reader.toss(1);
+                }
+            }
+            continue;
+        }
 
         if (std.mem.eql(u8, next_character, "\"")) { // Match strings.
             string_length = 0;
@@ -194,7 +210,6 @@ fn copyFileWithSubstitutions(
                     std.mem.eql(u8, peek, ")"))
                 {
                     const string = string_buffer[0..string_length];
-                    std.log.info("hex: '{s}'", .{string});
                     try printStringOrSubstitute(string, writer, new_name);
                     break;
                 } else {
