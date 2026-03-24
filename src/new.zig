@@ -12,6 +12,7 @@ const FILES_WITH_SUBSTITUTIONS = [_][]const u8{
     "root.zig",
     "build.zig",
     "build.zig.zon",
+    "README.md",
 };
 
 pub fn main() !void {
@@ -152,10 +153,17 @@ fn copyFileWithSubstitutions(
     const string_writer = &string_discarding_writer.writer;
 
     const is_build_zig_zon_file: bool = std.mem.eql(u8, file_name, "build.zig.zon");
+    const is_readme_file: bool = std.mem.eql(u8, file_name, "README.md");
 
     while (true) {
-        const next_character = reader.take(1) catch break;
-        try writer.print("{s}", .{next_character});
+        // Replace the title in the README.md file.
+        if (is_readme_file and std.mem.eql(u8, reader.peek(10) catch "", "# Template")) {
+            _ = reader.stream(writer, .limited(2)) catch break;
+
+            const title: []const u8 = try reader.takeDelimiterExclusive('\n');
+            std.log.info("title: {s}", .{title});
+            try printStringOrSubstitute(title, writer, new_name);
+        }
 
         // Strip out the Flint dependency since `zig fetch` puts the URL in the `.path` if a path entry exists.
         if (is_build_zig_zon_file and std.mem.eql(u8, reader.peek(6) catch "", ".flint")) {
@@ -170,6 +178,9 @@ fn copyFileWithSubstitutions(
             }
             continue;
         }
+
+        const next_character = reader.take(1) catch break;
+        try writer.print("{s}", .{next_character});
 
         if (std.mem.eql(u8, next_character, "\"")) { // Match strings.
             string_length = 0;
