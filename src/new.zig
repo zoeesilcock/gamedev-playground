@@ -59,6 +59,17 @@ pub fn main() !void {
         defer source_dir.close();
         try copyDirectory(source_dir, target_dir.?, new_name, stdout, allocator, 0);
 
+        // Add the Flint dependency using `zig fetch`.
+        try stdout.print("Adding Flint dependency.\n", .{});
+        var zig_fetch_process = std.process.Child.init(&.{
+            "zig",
+            "fetch",
+            "--save",
+            "git+https://github.com/zoeesilcock/flint.git",
+        }, allocator);
+        zig_fetch_process.cwd_dir = target_dir;
+        _ = try zig_fetch_process.spawnAndWait();
+
         try stdout.print("\nYou're all setup!\n\n", .{});
         try stdout.print("Run your new project:\n`cd {s} && zig build all && zig build run`\n\n", .{target_path});
     } else {
