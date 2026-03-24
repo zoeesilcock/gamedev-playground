@@ -70,6 +70,12 @@ pub fn main() !void {
         zig_fetch_process.cwd_dir = target_dir;
         _ = try zig_fetch_process.spawnAndWait();
 
+        // Initialize git repo.
+        try stdout.print("Initializing git repo.\n", .{});
+        var git_init_proccess = std.process.Child.init(&.{ "git", "init" }, allocator);
+        git_init_proccess.cwd_dir = target_dir;
+        _ = try git_init_proccess.spawnAndWait();
+
         try stdout.print("\nYou're all setup!\n\n", .{});
         try stdout.print("Run your new project:\n`cd {s} && zig build all && zig build run`\n\n", .{target_path});
     } else {
