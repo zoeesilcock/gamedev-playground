@@ -55,7 +55,7 @@ Both the code and the assets automatically update in-game when modified. For cod
 
 
 ## Development
-The project is built using the zig build system, use `zig build -h` for a list of options or look at the `build.zig` file for more details.
+This project is built using the zig build system, use `zig build -h` for a list of options or look at the `build.zig` file for more details.
 
 ### Debugging
 Debugger configurations for VS Code are included in the main project as well as the example projects, it will prompt to install the required extension if you don't have it. When using VS Code it is also helpful to open the workspace file located in `.vscode/flint.code-workspace` to get an overview of the full project.
