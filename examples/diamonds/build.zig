@@ -14,10 +14,7 @@ pub fn build(b: *std.Build) void {
     build_options.addOption(bool, "log_allocations", log_allocations);
     const build_options_mod = build_options.createModule();
 
-    // Default to building all if no other step is specified.
-    var build_all_step = b.step("all", "Build all");
-    b.default_step = build_all_step;
-
+    // Game library.
     const module = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
@@ -30,6 +27,7 @@ pub fn build(b: *std.Build) void {
         .name = lib_base_name,
         .root_module = module,
     });
+    b.getInstallStep().dependOn(&b.addInstallArtifact(lib, .{}).step);
 
     const lib_check = b.addLibrary(.{
         .linkage = .dynamic,
@@ -58,9 +56,9 @@ pub fn build(b: *std.Build) void {
             target,
             optimize,
             flint_mod,
-            build_all_step,
+            b.getInstallStep(),
         );
-        build_all_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
+        b.getInstallStep().dependOn(&b.addInstallArtifact(exe, .{}).step);
     }
     // End of integration.
 
@@ -79,8 +77,6 @@ pub fn build(b: *std.Build) void {
     });
     module.addImport("math", math_mod);
     module.addImport("logging_allocator", logging_allocator_mod);
-
-    build_all_step.dependOn(&b.addInstallArtifact(lib, .{}).step);
 
     const test_step = b.step("test", "Run unit tests");
     const lib_tests = b.addTest(.{ .root_module = lib.root_module });

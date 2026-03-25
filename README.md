@@ -11,9 +11,7 @@ git clone https://github.com/zoeesilcock/flint.git && cd flint
 
 zig build new -- ../my-new-project
 
-cd ../my-new-project && zig build all
-
-zig build run
+cd ../my-new-project && zig build run
 ```
 
 ## Examples
