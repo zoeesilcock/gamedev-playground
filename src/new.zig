@@ -261,7 +261,7 @@ fn printStringOrSubstitute(
         try writer.print("{s}", .{new_name});
     } else if (std.mem.eql(u8, string, "Template")) {
         try printCapitalizedName(new_name, writer);
-    } else if (std.mem.eql(u8, string, "0x3d54e0a673bba291")) {
+    } else if (std.mem.eql(u8, string, "0x97601f8306db8023")) {
         try printNewFingerprint(new_name, writer);
     } else {
         try writer.print("{s}", .{string});
