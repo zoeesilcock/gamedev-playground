@@ -1,7 +1,7 @@
 # Flint
 *Strike your own engine*
 
-Tools and ideas for building the game engine your game actually needs.
+Building blocks for the game engine your game actually needs.
 
 ## Quick start
 To get your own project up and running quickly you can use the project generator to create a new project based on our template. The current template is currently 2D and uses Aseprite for assets, we will add more templates in the future as they become available.
