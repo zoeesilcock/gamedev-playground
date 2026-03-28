@@ -33,7 +33,7 @@ Making games is hard and time consuming, and it's usually not possible to know i
 
 Mainstream game engines are very general and are rarely well suited for any specific type of game. Iteration speed is often quite low which breaks us out of flow every time we make a change. Most tasks include painfully manual and repetitive workflows that require navigating complex UIs with the mouse.
 
-Since each game is unique, the best engine, editor, and workflows for any specific game are also unique. Making a general purpose game engine is a bigger undertaking than making a game, but making the part of a game engine needed for a specific game is more manageable.
+Since each game is unique, the best engine, editor, and workflows for any specific game are also unique. Making a general purpose game engine is a bigger undertaking than making a game, but making the parts of a game engine needed for a specific game is more manageable.
 
 This project aims to identify and implement tools needed to create bespoke game engines. This is not a game engine, but rather a set of tools and ideas that help you build the right engine for your game.
 
