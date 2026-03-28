@@ -34,6 +34,7 @@ pub fn main() !void {
 
         try stdout.print("\nWelcome to Flint! Let's get you started.\n\n", .{});
         try stdout.print("Generating new project in: {s}, based on: {s}.\n", .{ target_path, source_path });
+        try stdout.flush();
 
         // Make sure that the target directory doesn't exist.
         var target_dir: ?std.fs.Dir =
@@ -50,6 +51,7 @@ pub fn main() !void {
 
         // Create the target directory.
         try stdout.print("├─ Creating target directory: {s}.\n", .{target_path});
+        try stdout.flush();
         try std.fs.cwd().makePath(target_path);
         target_dir = try std.fs.cwd().openDir(target_path, .{ .access_sub_paths = false });
 
@@ -61,7 +63,8 @@ pub fn main() !void {
         try copyDirectory(source_dir, target_dir.?, new_name, stdout, allocator, 0);
 
         // Add the Flint dependency using `zig fetch`.
-        try stdout.print("Adding Flint dependency.\n", .{});
+        try stdout.print("\nAdding Flint dependency.\n", .{});
+        try stdout.flush();
         var zig_fetch_process = std.process.Child.init(&.{
             "zig",
             "fetch",
@@ -72,7 +75,8 @@ pub fn main() !void {
         _ = try zig_fetch_process.spawnAndWait();
 
         // Initialize git repo.
-        try stdout.print("Initializing git repo.\n", .{});
+        try stdout.print("\nInitializing git repo.\n", .{});
+        try stdout.flush();
         var git_init_proccess = std.process.Child.init(&.{ "git", "init" }, allocator);
         git_init_proccess.cwd_dir = target_dir;
         _ = try git_init_proccess.spawnAndWait();
@@ -106,6 +110,7 @@ fn copyDirectory(
         if (!isPathIgnored(entry.path) and entry.dir.fd == source_dir.fd) {
             if (entry.kind == .file) {
                 try stdout.print("{s}Copying file: {s}.\n", .{ prefix, entry.path });
+                try stdout.flush();
                 if (fileHasSubstitutions(entry.path)) {
                     try copyFileWithSubstitutions(source_dir, target_dir, entry.path, new_name);
                 } else {
@@ -113,6 +118,7 @@ fn copyDirectory(
                 }
             } else if (entry.kind == .directory) {
                 try stdout.print("{s}Creating directory: {s}.\n", .{ prefix, entry.path });
+                try stdout.flush();
                 try target_dir.makeDir(entry.path);
 
                 var source_sub_dir: std.fs.Dir = try source_dir.openDir(entry.path, .{ .access_sub_paths = false });
@@ -161,7 +167,6 @@ fn copyFileWithSubstitutions(
             _ = reader.stream(writer, .limited(2)) catch break;
 
             const title: []const u8 = try reader.takeDelimiterExclusive('\n');
-            std.log.info("title: {s}", .{title});
             try printStringOrSubstitute(title, writer, new_name);
         }
 
