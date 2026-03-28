@@ -30,10 +30,3 @@ Double clicking on an entity will open it's sprite in Aseprite. This works parti
 * Left click: selects the entity under the cursor.
 * Right click (in edit mode): Places the current type of block where the cursor is. If there is a block in that location then it will be replaced if it is a different block that what is being placed and removed if it is the same.
 * Alt/Option + left click: Grabs the color or block type of the clicked block like an eye dropper tool.
-
-
-## Hot reloading
-To automatically rebuild the shared library when you change the code you can leave the following command running in a separate terminal:
-```
-zig build -Dlib_only --watch
-```

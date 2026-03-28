@@ -5,10 +5,3 @@ This example aims to a minimal implementation of a project. If you want to get u
 
 ## Controls
 * Space: Switch the color of the background to green.
-
-
-## Hot reloading
-To automatically rebuild the shared library when you change the code you can leave the following command running in a separate terminal:
-```
-zig build -Dlib_only --watch
-```

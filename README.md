@@ -41,12 +41,7 @@ This project aims to identify and implement tools needed to create bespoke game 
 
 
 ## Hot reloading
-Both the code and the assets automatically update in-game when modified. For code this is achieved by having the entire game code inside a shared library with a thin executable that takes care of reloading the shared library when it changes. For assets the executable lets the game know when assets have changed so that it can react to that in whatever way that makes sense, in this case it simply reloads the assets without interrupting the game.
-
-Examples are setup to allow for automatically rebuilding the shared library when you change the code by keeping the following command running in a separate terminal:
-```
-zig build -Dlib_only --watch
-```
+Both the code and the assets automatically update in-game when modified. For code this is achieved by having the entire game code inside a shared library with a thin executable that takes care of reloading the shared library when it changes. When Flint detects a change in the code it triggers `zig build -Dlib_only`. When it detects a change in the dynamic library it loads the new one, making it fully automated. For assets the executable lets the game know when assets have changed so that it can react to that in whatever way that makes sense, the examples reload the assets which shows changes instantly without interrupting the game.
 
 
 ## Development

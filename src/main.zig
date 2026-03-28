@@ -26,6 +26,7 @@ var build_process: ?std.process.Child = null;
 var dyn_lib_last_modified: i128 = 0;
 var src_last_modified: i128 = 0;
 var assets_last_modified: i128 = 0;
+var code_last_modified: i128 = 0;
 
 pub fn main() !void {
     var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
@@ -178,7 +179,14 @@ pub fn main() !void {
 
         if (INTERNAL) {
             const assetsChanged = assetsHaveChanged(allocator);
+            const codeChanged = codeHasChanged(allocator);
             const dllChanged = dllHasChanged();
+
+            if (codeChanged) {
+                std.log.info("Code changed, rebuilding game library...", .{});
+                var zig_build_process = std.process.Child.init(&.{ "zig", "build", "-Dlib_only" }, allocator);
+                _ = try zig_build_process.spawn();
+            }
 
             if (dllChanged or assetsChanged) {
                 game.willReload(state);
@@ -272,6 +280,7 @@ fn initImgui(
 fn initChangeTimes(allocator: std.mem.Allocator) void {
     _ = dllHasChanged();
     _ = assetsHaveChanged(allocator);
+    _ = codeHasChanged(allocator);
 }
 
 fn dllHasChanged() bool {
@@ -286,6 +295,10 @@ fn dllHasChanged() bool {
 
 fn assetsHaveChanged(allocator: std.mem.Allocator) bool {
     return checkForChangesInDirectory(allocator, "assets", &assets_last_modified) catch false;
+}
+
+fn codeHasChanged(allocator: std.mem.Allocator) bool {
+    return checkForChangesInDirectory(allocator, "src", &code_last_modified) catch false;
 }
 
 fn checkForChangesInDirectory(allocator: std.mem.Allocator, path: []const u8, last_change: *i128) !bool {
