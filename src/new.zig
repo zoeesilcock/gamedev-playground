@@ -273,19 +273,19 @@ fn printCapitalizedName(name: []const u8, writer: *std.Io.Writer) !void {
     var capitalize: bool = true;
 
     while (true) {
-        var next_character = reader.take(1) catch break;
+        var next_character = (reader.take(1) catch break)[0];
 
         if (capitalize) {
             capitalize = false;
-            next_character[0] = std.ascii.toUpper(next_character[0]);
+            next_character = std.ascii.toUpper(next_character);
         }
 
-        if (std.mem.eql(u8, next_character, "-") or std.mem.eql(u8, next_character, "_")) {
-            next_character[0] = ' ';
+        if (next_character == '-' or next_character == '_') {
+            next_character = ' ';
             capitalize = true;
         }
 
-        try writer.print("{s}", .{next_character});
+        try writer.print("{c}", .{next_character});
     }
 }
 
