@@ -81,6 +81,14 @@ pub fn main() !void {
         git_init_proccess.cwd_dir = target_dir;
         _ = try git_init_proccess.spawnAndWait();
 
+        git_init_proccess = std.process.Child.init(&.{ "git", "add", "." }, allocator);
+        git_init_proccess.cwd_dir = target_dir;
+        _ = try git_init_proccess.spawnAndWait();
+
+        git_init_proccess = std.process.Child.init(&.{ "git", "commit", "-m", "Initial commit" }, allocator);
+        git_init_proccess.cwd_dir = target_dir;
+        _ = try git_init_proccess.spawnAndWait();
+
         try stdout.print("\nYou're all setup!\n\n", .{});
         try stdout.print("Run your new project:\n`cd {s} && zig build run`\n\n", .{target_path});
     } else {
