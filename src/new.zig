@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const PLATFORM = @import("builtin").os.tag;
+
 const IGNORED_PATHS = [_][]const u8{
     ".git",
     ".DS_Store",
@@ -65,13 +67,13 @@ pub fn main() !void {
         // Add the Flint dependency using `zig fetch`.
         try stdout.print("\nAdding Flint dependency.\n", .{});
         try stdout.flush();
-        var zig_fetch_process = std.process.Child.init(&.{
+
+        var zig_fetch_process = initChildProcess(&.{
             "zig",
             "fetch",
             "--save",
             "git+https://github.com/zoeesilcock/flint.git",
-        }, allocator);
-        zig_fetch_process.cwd_dir = target_dir;
+        }, target_path, target_dir, allocator);
         if (zig_fetch_process.spawnAndWait()) |_| {} else |err| {
             try stdout.print(
                 "ERROR: Failed to run `zig fetch` (error: {s}), make sure Zig is on the path.\n",
@@ -83,17 +85,15 @@ pub fn main() !void {
         try stdout.print("\nInitializing git repo.\n", .{});
         try stdout.flush();
 
-        var git_init_proccess = std.process.Child.init(&.{ "git", "init" }, allocator);
-        git_init_proccess.cwd_dir = target_dir;
+        var git_init_proccess = initChildProcess(&.{ "git", "init" }, target_path, target_dir, allocator);
         if (git_init_proccess.spawnAndWait()) |_| {
-            git_init_proccess = std.process.Child.init(&.{ "git", "add", "." }, allocator);
-            git_init_proccess.cwd_dir = target_dir;
+            git_init_proccess = initChildProcess(&.{ "git", "add", "." }, target_path, target_dir, allocator);
             if (git_init_proccess.spawnAndWait()) |_| {} else |err| {
                 try stdout.print("ERROR: Failed to run `git add .` (error: {s}).", .{@errorName(err)});
             }
 
-            git_init_proccess = std.process.Child.init(&.{ "git", "commit", "-m", "Initial commit" }, allocator);
-            git_init_proccess.cwd_dir = target_dir;
+            git_init_proccess =
+                initChildProcess(&.{ "git", "commit", "-m", "Initial commit" }, target_path, target_dir, allocator);
             if (git_init_proccess.spawnAndWait()) |_| {} else |err| {
                 try stdout.print("ERROR: Failed to run `git commit` (error: {s}).", .{@errorName(err)});
             }
@@ -111,6 +111,21 @@ pub fn main() !void {
     }
 
     try stdout.flush(); // Don't forget to flush!
+}
+
+fn initChildProcess(
+    command: []const []const u8,
+    target_path: []const u8,
+    target_dir: ?std.fs.Dir,
+    allocator: std.mem.Allocator,
+) std.process.Child {
+    var process = std.process.Child.init(command, allocator);
+    if (PLATFORM == .windows) {
+        process.cwd = target_path;
+    } else {
+        process.cwd_dir = target_dir;
+    }
+    return process;
 }
 
 fn copyDirectory(
