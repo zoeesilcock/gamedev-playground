@@ -104,7 +104,9 @@ pub fn main() !void {
         try stdout.print("\nYou're all setup!\n\n", .{});
         try stdout.print("Run your new project:\n`cd {s} && zig build run`\n\n", .{target_path});
     } else {
-        try stdout.print("Flint received unexpected input.\n", .{});
+        if (args.len != 2 or !std.mem.eql(u8, args[1], "--help")) {
+            try stdout.print("Flint received unexpected input.\n", .{});
+        }
         try stdout.print("Usage: {s} <new-project-path>\n", .{args[0]});
     }
 
