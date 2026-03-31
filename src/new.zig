@@ -72,22 +72,34 @@ pub fn main() !void {
             "git+https://github.com/zoeesilcock/flint.git",
         }, allocator);
         zig_fetch_process.cwd_dir = target_dir;
-        _ = try zig_fetch_process.spawnAndWait();
+        if (zig_fetch_process.spawnAndWait()) |_| {} else |err| {
+            try stdout.print(
+                "ERROR: Failed to run `zig fetch` (error: {s}), make sure Zig is on the path.\n",
+                .{@errorName(err)},
+            );
+        }
 
         // Initialize git repo.
         try stdout.print("\nInitializing git repo.\n", .{});
         try stdout.flush();
+
         var git_init_proccess = std.process.Child.init(&.{ "git", "init" }, allocator);
         git_init_proccess.cwd_dir = target_dir;
-        _ = try git_init_proccess.spawnAndWait();
+        if (git_init_proccess.spawnAndWait()) |_| {
+            git_init_proccess = std.process.Child.init(&.{ "git", "add", "." }, allocator);
+            git_init_proccess.cwd_dir = target_dir;
+            if (git_init_proccess.spawnAndWait()) |_| {} else |err| {
+                try stdout.print("ERROR: Failed to run `git add .` (error: {s}).", .{@errorName(err)});
+            }
 
-        git_init_proccess = std.process.Child.init(&.{ "git", "add", "." }, allocator);
-        git_init_proccess.cwd_dir = target_dir;
-        _ = try git_init_proccess.spawnAndWait();
-
-        git_init_proccess = std.process.Child.init(&.{ "git", "commit", "-m", "Initial commit" }, allocator);
-        git_init_proccess.cwd_dir = target_dir;
-        _ = try git_init_proccess.spawnAndWait();
+            git_init_proccess = std.process.Child.init(&.{ "git", "commit", "-m", "Initial commit" }, allocator);
+            git_init_proccess.cwd_dir = target_dir;
+            if (git_init_proccess.spawnAndWait()) |_| {} else |err| {
+                try stdout.print("ERROR: Failed to run `git commit` (error: {s}).", .{@errorName(err)});
+            }
+        } else |err| {
+            try stdout.print("ERROR: Failed to run `git init` (error: {s}).\n", .{@errorName(err)});
+        }
 
         try stdout.print("\nYou're all setup!\n\n", .{});
         try stdout.print("Run your new project:\n`cd {s} && zig build run`\n\n", .{target_path});
