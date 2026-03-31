@@ -73,7 +73,7 @@ pub fn build(b: *std.Build) !void {
     docs_step.dependOn(&install_docs.step);
 
     // New project generator executable.
-    buildNewExecutable(b, exe_build_options_mod, target, optimize);
+    buildNewExecutable(b, exe_build_options_mod, target);
 }
 
 pub fn buildExecutable(
@@ -263,12 +263,16 @@ fn buildNewExecutable(
     b: *std.Build,
     build_options_mod: *std.Build.Module,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
 ) void {
+    const new_optimize = b.option(
+        std.builtin.OptimizeMode,
+        "new_optimize",
+        "optimization mode for the new project generator (default: ReleaseSafe)",
+    ) orelse .ReleaseSafe;
     const module = b.createModule(.{
         .root_source_file = b.path("src/new.zig"),
         .target = target,
-        .optimize = optimize,
+        .optimize = new_optimize,
     });
     module.addImport("build_options", build_options_mod);
     const new_exe = b.addExecutable(.{

@@ -14,7 +14,7 @@
         {
             "label": "build new",
             "type": "shell",
-            "command": "zig build new",
+            "command": "zig build new -Dnew_optimize=Debug",
             "problemMatcher": ["$zig"],
             "group": {
                 "kind": "build",
@@ -30,6 +30,6 @@
                 "kind": "test",
                 "isDefault": true
             }
-        },
+        }
     ]
 }
