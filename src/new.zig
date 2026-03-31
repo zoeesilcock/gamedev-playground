@@ -28,7 +28,7 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    if (args.len == 2) {
+    if (args.len == 2 and args[1][0] != '-' and args[1][1] != '-') {
         const target_path = args[1];
         const source_path = try std.fs.cwd().realpathAlloc(allocator, "examples/template");
 
