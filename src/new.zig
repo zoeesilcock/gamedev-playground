@@ -143,7 +143,8 @@ fn copyDirectory(
                 try stdout.flush();
                 try target_dir.makeDir(entry.path);
 
-                var source_sub_dir: std.fs.Dir = try source_dir.openDir(entry.path, .{ .access_sub_paths = false });
+                var source_sub_dir: std.fs.Dir =
+                    try source_dir.openDir(entry.path, .{ .access_sub_paths = false, .iterate = true });
                 defer source_sub_dir.close();
 
                 var target_sub_dir: std.fs.Dir = try target_dir.openDir(entry.path, .{ .access_sub_paths = false });
