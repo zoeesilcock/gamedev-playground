@@ -52,7 +52,8 @@ pub fn main() !void {
         }
 
         // Create the target directory.
-        try stdout.print("├─ Creating target directory: {s}.\n", .{target_path});
+        var buffer: [64]u8 = undefined;
+        try stdout.print("{s}Creating target directory: {s}.\n", .{ getDecoration(0, .Middle, &buffer), target_path });
         try stdout.flush();
         try std.fs.cwd().makePath(target_path);
         target_dir = try std.fs.cwd().openDir(target_path, .{ .access_sub_paths = false });
@@ -128,6 +129,39 @@ fn initChildProcess(
     return process;
 }
 
+const Decoration = enum {
+    Middle,
+    Indent,
+    End,
+
+    pub fn getString(self: Decoration) []const u8 {
+        if (PLATFORM == .windows) {
+            return switch (self) {
+                .Middle => "\xC3\xC4 ",
+                .Indent => "\xB3  ",
+                .End => "\xC0\xC4 ",
+            };
+        } else {
+            return switch (self) {
+                .Middle => "├─ ",
+                .Indent => "│  ",
+                .End => "└─ ",
+            };
+        }
+    }
+};
+
+fn getDecoration(level: u32, decoration_type: Decoration, buffer: []u8) []const u8 {
+    var writer: std.Io.Writer = .fixed(buffer);
+
+    for (0..level) |_| {
+        writer.print("{s}", .{Decoration.Indent.getString()}) catch undefined;
+    }
+    writer.print("{s}", .{decoration_type.getString()}) catch undefined;
+
+    return writer.buffered();
+}
+
 fn copyDirectory(
     source_dir: std.fs.Dir,
     target_dir: std.fs.Dir,
@@ -139,14 +173,14 @@ fn copyDirectory(
     var walker = try source_dir.walk(allocator);
     defer walker.deinit();
 
-    // TODO: This only looks nice up to one level deep. Rebuild this to support deeper levels when we need it.
-    const prefix: []const u8 = if (level == 0) "├─ " else "│  ├─ ";
-    const end_prefix: []const u8 = if (level == 0) "└─ " else "│  └─ ";
-
+    var buffer: [64]u8 = undefined;
     while (try walker.next()) |entry| {
         if (!isPathIgnored(entry.path) and entry.dir.fd == source_dir.fd) {
             if (entry.kind == .file) {
-                try stdout.print("{s}Copying file: {s}.\n", .{ prefix, entry.path });
+                try stdout.print(
+                    "{s}Copying file: {s}.\n",
+                    .{ getDecoration(level, .Middle, &buffer), entry.path },
+                );
                 try stdout.flush();
                 if (fileHasSubstitutions(entry.path)) {
                     try copyFileWithSubstitutions(source_dir, target_dir, entry.path, new_name);
@@ -154,7 +188,10 @@ fn copyDirectory(
                     try entry.dir.copyFile(entry.path, target_dir, entry.path, .{});
                 }
             } else if (entry.kind == .directory) {
-                try stdout.print("{s}Creating directory: {s}.\n", .{ prefix, entry.path });
+                try stdout.print(
+                    "{s}Creating directory: {s}.\n",
+                    .{ getDecoration(level, .Middle, &buffer), entry.path },
+                );
                 try stdout.flush();
                 try target_dir.makeDir(entry.path);
 
@@ -170,7 +207,7 @@ fn copyDirectory(
         }
     }
 
-    try stdout.print("{s}Done.\n", .{end_prefix});
+    try stdout.print("{s}Done.\n", .{getDecoration(level, .End, &buffer)});
 }
 
 fn copyFileWithSubstitutions(
