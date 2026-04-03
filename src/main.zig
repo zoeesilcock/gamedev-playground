@@ -204,6 +204,11 @@ pub fn main() !void {
                     }
                 }
 
+                // TODO: This is a workaround for a bug that happens when dealing with large Aseprite files where the
+                // file is incomplete when read too soon after saving changes to it. This may need to be tuned to
+                // handle bigger files, and would be more robust if we could know when the file was ready for reading.
+                std.Thread.sleep(10_000_000);
+
                 game.reloaded(state, imgui.context);
             }
         }
