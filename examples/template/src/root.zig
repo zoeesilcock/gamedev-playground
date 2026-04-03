@@ -2,6 +2,7 @@ const std = @import("std");
 const flint = @import("flint");
 const sdl = flint.sdl.c;
 const imgui = flint.imgui;
+const aseprite = flint.aseprite;
 
 pub const std_options: std.Options = .{
     .log_level = if (INTERNAL) .info else .err,
@@ -14,6 +15,7 @@ const INTERNAL: bool = @import("build_options").internal;
 // Types.
 const GameLib = flint.GameLib;
 const DebugAllocator = GameLib.DebugAllocator;
+const AsepriteAsset = aseprite.AsepriteAsset;
 
 const State = struct {
     dependencies: GameLib.Dependencies.Full2D,
@@ -24,6 +26,14 @@ const State = struct {
 
     // Input.
     space_is_down: bool = false,
+    mouse_position_x: f32 = 0,
+    mouse_position_y: f32 = 0,
+    left_mouse_is_down: bool = false,
+    left_mouse_pressed: bool = false,
+    left_mouse_last_pressed_time: u64 = 0,
+
+    // Assets.
+    welcome_sprite: ?AsepriteAsset = null,
 
     // Internal.
     internal: if (INTERNAL) extern struct {
@@ -44,6 +54,10 @@ const State = struct {
 
         return state;
     }
+
+    pub fn resetInput(self: *State) void {
+        self.left_mouse_pressed = false;
+    }
 };
 
 const settings: GameLib.Settings = .{
@@ -58,6 +72,8 @@ pub export fn getSettings() GameLib.Settings {
 pub export fn init(dependencies: GameLib.Dependencies.Full2D) GameLib.GameStatePtr {
     const state: *State = State.create(dependencies) catch @panic("Failed to create game state.");
 
+    loadAssets(state);
+
     if (INTERNAL) {
         imgui.setup(state.dependencies.internal.imgui_context, .Renderer);
     }
@@ -70,21 +86,32 @@ pub export fn deinit(state_ptr: GameLib.GameStatePtr) void {
     _ = state;
 }
 
+fn loadAssets(state: *State) void {
+    state.welcome_sprite =
+        .load("assets/welcome.aseprite", state.dependencies.renderer, state.dependencies.allocator.*);
+}
+fn unloadAssets(state: *State) void {
+    state.welcome_sprite.?.deinit(state.dependencies.allocator.*);
+}
+
 pub export fn willReload(state_ptr: GameLib.GameStatePtr) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
-    _ = state;
+    unloadAssets(state);
 }
 
 pub export fn reloaded(state_ptr: GameLib.GameStatePtr, imgui_context: ?*imgui.ImGuiContext) void {
+    const state: *State = @ptrCast(@alignCast(state_ptr));
     if (INTERNAL) {
-        const state: *State = @ptrCast(@alignCast(state_ptr));
         state.dependencies.internal.imgui_context = imgui_context.?;
         imgui.setup(imgui_context, .Renderer);
     }
+    loadAssets(state);
 }
 
 pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
     const state: *State = @ptrCast(@alignCast(state_ptr));
+
+    state.resetInput();
 
     var continue_running: bool = true;
     var event: sdl.SDL_Event = undefined;
@@ -100,6 +127,22 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
             break;
         }
 
+        // Mouse.
+        if (event.type == sdl.SDL_EVENT_MOUSE_MOTION) {
+            state.mouse_position_x = event.motion.x;
+            state.mouse_position_y = event.motion.y;
+        } else if (event.type == sdl.SDL_EVENT_MOUSE_BUTTON_DOWN or event.type == sdl.SDL_EVENT_MOUSE_BUTTON_UP) {
+            const is_down = event.type == sdl.SDL_EVENT_MOUSE_BUTTON_DOWN;
+            switch (event.button.button) {
+                1 => {
+                    state.left_mouse_pressed = (state.left_mouse_is_down and !is_down);
+                    state.left_mouse_is_down = is_down;
+                },
+                else => {},
+            }
+        }
+
+        // Keyboard.
         if (event.type == sdl.SDL_EVENT_KEY_DOWN or event.type == sdl.SDL_EVENT_KEY_UP) {
             const is_down = event.type == sdl.SDL_EVENT_KEY_DOWN;
             switch (event.key.key) {
@@ -125,6 +168,15 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
                 else => {},
             }
         }
+    }
+
+    if (state.left_mouse_pressed) {
+        if (state.time - state.left_mouse_last_pressed_time < 300) {
+            // TODO: Check where the double click happened so we know which sprite to open.
+            aseprite.openInAseprite(&state.welcome_sprite.?, state.dependencies.allocator.*);
+        }
+
+        state.left_mouse_last_pressed_time = state.time;
     }
 
     return continue_running;
@@ -171,6 +223,11 @@ fn drawGame(state: *State) void {
     if (state.space_is_down) {
         _ = sdl.SDL_SetRenderDrawColor(state.dependencies.renderer, 0, 127, 0, 255);
         _ = sdl.SDL_RenderClear(state.dependencies.renderer);
+    }
+
+    if (state.welcome_sprite) |sprite| {
+        var sprite_rect: sdl.SDL_FRect = .{ .x = 0, .y = 0, .w = 800, .h = 600 };
+        _ = sdl.SDL_RenderTexture(state.dependencies.renderer, sprite.frames[0], null, &sprite_rect);
     }
 }
 
