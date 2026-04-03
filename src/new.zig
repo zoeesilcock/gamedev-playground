@@ -30,7 +30,9 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    if (args.len == 2 and args[1][0] != '-' and args[1][1] != '-') {
+    const has_specified_name: bool = (args.len == 4 and std.mem.eql(u8, args[2], "--name"));
+
+    if ((args.len == 2 and args[1][0] != '-' and args[1][1] != '-') or has_specified_name) {
         const target_path = args[1];
         const source_path = try std.fs.cwd().realpathAlloc(allocator, "examples/template");
 
@@ -46,7 +48,17 @@ pub fn main() !void {
             };
         if (target_dir) |*dir| {
             dir.close();
-            try stdout.print("ERROR: Target path already exists, please use a path that doesn't exist.\n", .{});
+            try stdout.print("\nERROR: Target path already exists, please use a path that doesn't exist.\n", .{});
+            try stdout.flush();
+            return;
+        }
+
+        const new_name: []const u8 = if (has_specified_name) args[3] else std.fs.path.basename(target_path);
+        if (!std.zig.isValidId(new_name)) {
+            try stdout.print(
+                "\nERROR: The target directory contains special characters that aren't allowed in the project name. Either change the directory name or provide a custom name which is valid zig bare identifier with --name <project_name>.\n",
+                .{},
+            );
             try stdout.flush();
             return;
         }
@@ -57,8 +69,6 @@ pub fn main() !void {
         try stdout.flush();
         try std.fs.cwd().makePath(target_path);
         target_dir = try std.fs.cwd().openDir(target_path, .{ .access_sub_paths = false });
-
-        const new_name: []const u8 = std.fs.path.basename(target_path);
 
         // Copy template files to target directory.
         var source_dir = try std.fs.cwd().openDir(source_path, .{ .access_sub_paths = false, .iterate = true });
@@ -108,7 +118,7 @@ pub fn main() !void {
         if (args.len != 2 or !std.mem.eql(u8, args[1], "--help")) {
             try stdout.print("Flint received unexpected input.\n", .{});
         }
-        try stdout.print("Usage: {s} <new-project-path>\n", .{args[0]});
+        try stdout.print("Usage: {s} <new_project_path> (--name <project_name>)\n", .{args[0]});
     }
 
     try stdout.flush(); // Don't forget to flush!

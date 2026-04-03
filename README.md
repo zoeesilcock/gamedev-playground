@@ -9,9 +9,9 @@ To get your own project up and running quickly you can use the project generator
 ```
 git clone https://github.com/zoeesilcock/flint.git && cd flint
 
-zig build new -- ../my-new-project
+zig build new -- ../my_new_project
 
-cd ../my-new-project && zig build run
+cd ../my_new_project && zig build run
 ```
 
 ## Examples
