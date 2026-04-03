@@ -3,6 +3,24 @@ const std = @import("std");
 const sdl = @import("sdl.zig").c;
 const sdl_utils = @import("sdl.zig");
 
+const PLATFORM = @import("builtin").os.tag;
+
+/// Opens an Aseprite document in Aseprite.
+pub fn openInAseprite(sprite_asset: *AsepriteAsset, allocator: std.mem.Allocator) void {
+    const process_args = if (PLATFORM == .windows) [_][]const u8{
+        "Aseprite.exe",
+        sprite_asset.path,
+    } else [_][]const u8{
+        "open",
+        sprite_asset.path,
+    };
+
+    var aseprite_process = std.process.Child.init(&process_args, allocator);
+    aseprite_process.spawn() catch |err| {
+        std.debug.print("Error spawning process: {}\n", .{err});
+    };
+}
+
 /// All data and metadata contained in an Aseprite document.
 pub const AseDocument = struct {
     header: *const AseHeader,

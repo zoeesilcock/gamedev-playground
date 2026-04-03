@@ -706,18 +706,7 @@ fn getTiledPosition(position: Vector2, asset: *const AsepriteAsset) Vector2 {
 
 fn openSprite(state: *State, allocator: std.mem.Allocator, entity: *Entity) void {
     if (state.assets.getSpriteAsset(state, entity)) |sprite_asset| {
-        const process_args = if (PLATFORM == .windows) [_][]const u8{
-            "Aseprite.exe",
-            sprite_asset.path,
-        } else [_][]const u8{
-            "open",
-            sprite_asset.path,
-        };
-
-        var aseprite_process = std.process.Child.init(&process_args, allocator);
-        aseprite_process.spawn() catch |err| {
-            std.debug.print("Error spawning process: {}\n", .{err});
-        };
+        aseprite.openInAseprite(sprite_asset, allocator);
     }
 }
 
