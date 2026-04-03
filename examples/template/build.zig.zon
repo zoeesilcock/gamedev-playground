@@ -1,8 +1,8 @@
 .{
-    .name = .template_example,
+    .name = .template,
     .version = "0.1.0",
     .minimum_zig_version = "0.15.2",
-    .fingerprint = 0x3d54e0a673bba291,
+    .fingerprint = 0x97601f8306db8023,
     .dependencies = .{
         .flint = .{
             .path = "../../",

@@ -1,8 +1,18 @@
 # Flint
 *Strike your own engine*
 
-Tools and ideas for building the game engine your game actually needs.
+Building blocks for the game engine your game actually needs.
 
+## Quick start
+To get your own project up and running quickly you can use the project generator to create a new project based on our template. The current template is currently 2D and uses Aseprite for assets, we will add more templates in the future as they become available.
+
+```
+git clone https://github.com/zoeesilcock/flint.git && cd flint
+
+zig build new -- ../my_new_project
+
+cd ../my_new_project && zig build run
+```
 
 ## Examples
 
@@ -23,7 +33,7 @@ Making games is hard and time consuming, and it's usually not possible to know i
 
 Mainstream game engines are very general and are rarely well suited for any specific type of game. Iteration speed is often quite low which breaks us out of flow every time we make a change. Most tasks include painfully manual and repetitive workflows that require navigating complex UIs with the mouse.
 
-Since each game is unique, the best engine, editor, and workflows for any specific game are also unique. Making a general purpose game engine is a bigger undertaking than making a game, but making the part of a game engine needed for a specific game is more manageable.
+Since each game is unique, the best engine, editor, and workflows for any specific game are also unique. Making a general purpose game engine is a bigger undertaking than making a game, but making the parts of a game engine needed for a specific game is more manageable.
 
 This project aims to identify and implement tools needed to create bespoke game engines. This is not a game engine, but rather a set of tools and ideas that help you build the right engine for your game.
 
@@ -45,7 +55,7 @@ Both the code and the assets automatically update in-game when modified. For cod
 
 
 ## Development
-The project is built using the zig build system, use `zig build -h` for a list of options or look at the `build.zig` file for more details.
+This project is built using the zig build system, use `zig build -h` for a list of options or look at the `build.zig` file for more details.
 
 ### Debugging
 Debugger configurations for VS Code are included in the main project as well as the example projects, it will prompt to install the required extension if you don't have it. When using VS Code it is also helpful to open the workspace file located in `.vscode/flint.code-workspace` to get an overview of the full project.

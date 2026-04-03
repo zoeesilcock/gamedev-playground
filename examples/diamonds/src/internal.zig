@@ -430,12 +430,8 @@ pub fn drawDebugUI(state: *State) void {
             _ = imgui.c.ImGui_Begin("Inspector", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
             defer imgui.c.ImGui_End();
 
-            flint.internal.inspectStruct(
-                state.getEntity(state.internal.selected_entity_id),
-                &.{"is_in_use"},
-                true,
-                &inputCustomTypes,
-            );
+            const selected_entity: ?*Entity = state.getEntity(state.internal.selected_entity_id);
+            flint.internal.inspectStruct(selected_entity, &.{"is_in_use"}, true, &inputCustomTypes);
         }
 
         {

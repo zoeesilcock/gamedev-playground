@@ -4,7 +4,17 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "zig build",
+            "command": "zig build all",
+            "problemMatcher": ["$zig"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "build new",
+            "type": "shell",
+            "command": "zig build new -Dnew_optimize=Debug",
             "problemMatcher": ["$zig"],
             "group": {
                 "kind": "build",
@@ -20,6 +30,6 @@
                 "kind": "test",
                 "isDefault": true
             }
-        },
+        }
     ]
 }

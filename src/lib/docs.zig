@@ -19,6 +19,10 @@
 //! build_options.addOption([]const u8, "lib_base_name", lib_base_name);
 //! const build_options_mod = build_options.createModule();
 //!
+//! // Game library.
+//! // Build your game library here...
+//!
+//! // Integrate Flint.
 //! const flint_dep = b.dependency("flint", .{
 //!     .target = target,
 //!     .optimize = optimize,
@@ -32,14 +36,14 @@
 //!     const exe = flint.buildExecutable(
 //!         flint_dep.builder,
 //!         b,
-//!         "YOUR_EXECUTABLE_NAME",
+//!         "template",
 //!         build_options_mod,
 //!         target,
 //!         optimize,
 //!         flint_mod,
 //!         b.getInstallStep(),
 //!     );
-//!     b.installArtifact(exe);
+//!     b.getInstallStep().dependOn(&b.addInstallArtifact(exe, .{}).step);
 //! }
 //! ```
 //! * In this example `lib` is your game library, and `module` is the root module of that library.
@@ -51,7 +55,7 @@
 //!     const INTERNAL: bool = @import("build_options").internal;
 //!     ```
 //!     * **lib_base_name**: a string which decides the name of the dynamic library that the executable will look for.
-//! * See the examples for complete integrations.
+//! * See `src/examples/template/build.zig` for a complete example.
 pub const sdl = @import("sdl.zig");
 pub const imgui = @import("imgui.zig");
 pub const aseprite = @import("aseprite.zig");

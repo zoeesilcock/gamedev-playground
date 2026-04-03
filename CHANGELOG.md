@@ -12,5 +12,7 @@ The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 ### Added
 * Renamed project to Flint to better reflect what the project has turned into.
 * Added a CHANGELOG.md file.
+* Added a quick start command that allows creating a new Flint project based on the template example using `zig build new -- ../my_new_project`.
+
 ### Changed
 * Changed the `linkSDL` and `buildExecutable` exposed build functions to take the install step which decides when to install artifacts like the executable and the SDL/Imgui libraries. If you want them to always be istalled you can pass `b.getInstallStep()` to get the default step that is triggered on all `zig build` invocations.
