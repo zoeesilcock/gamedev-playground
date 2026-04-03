@@ -3,6 +3,7 @@
 
 Building blocks for the game engine your game actually needs.
 
+
 ## Quick start
 To get your own project up and running quickly you can use the project generator to create a new project based on our template. The current template is currently 2D and uses Aseprite for assets, we will add more templates in the future as they become available.
 
@@ -13,6 +14,31 @@ zig build new -- ../my_new_project
 
 cd ../my_new_project && zig build run
 ```
+
+
+## Demo
+A quick demo of some of the coolest features: comptime generated inspector windows, and code/asset hot reloading:
+![Flint demo](demo.gif)
+
+
+## Usage
+To use this in your own projects you include it as a dependency, integrate it into your `build.zig` file and then implement a library which follows the API expected by the main executable. See the [documentation](https://zoeesilcock.github.io/flint/), and the examples for more details.
+
+### Add dependency
+```
+zig fetch --save git+https://github.com/zoeesilcock/flint.git
+```
+
+### Exposed modules
+* sdl - exposes the SDL C API.
+* imgui - exposes the ImGui C API and backend integrations for the SDL3 Renderer and SDL3 GPU APIs.
+* internal - exposes tools used to generate editors and tools for internal builds.
+* aseprite - exposes the aseprite importer.
+
+
+### Hot reloading
+Both the code and the assets automatically update in-game when modified. For code this is achieved by having the entire game code inside a shared library with a thin executable that takes care of reloading the shared library when it changes. When Flint detects a change in the code it triggers `zig build -Dlib_only`. When it detects a change in the dynamic library it loads the new one, making it fully automated. For assets the executable lets the game know when assets have changed so that it can react to that in whatever way that makes sense, the examples reload the assets which shows changes instantly without interrupting the game.
+
 
 ## Examples
 
@@ -50,10 +76,6 @@ This project aims to identify and implement tools needed to create bespoke game 
     We prefer the freedom to use our tools however we like without arbitrary rules, licensing fees, vendor lock-in or rug pulls.
 
 
-## Hot reloading
-Both the code and the assets automatically update in-game when modified. For code this is achieved by having the entire game code inside a shared library with a thin executable that takes care of reloading the shared library when it changes. When Flint detects a change in the code it triggers `zig build -Dlib_only`. When it detects a change in the dynamic library it loads the new one, making it fully automated. For assets the executable lets the game know when assets have changed so that it can react to that in whatever way that makes sense, the examples reload the assets which shows changes instantly without interrupting the game.
-
-
 ## Development
 This project is built using the zig build system, use `zig build -h` for a list of options or look at the `build.zig` file for more details.
 
@@ -68,18 +90,3 @@ To generate and run locally:
 zig build docs
 python -m http.server -b 127.0.0.1 8000 -d zig-out/docs/
 ```
-
-
-## Usage
-To use this in your own projects you include it as a dependency, integrate it into your `build.zig` file and then implement a library which follows the API expected by the main executable. See the [documentation](https://zoeesilcock.github.io/flint/), and the examples for more details.
-
-### Add dependency
-```
-zig fetch --save git+https://github.com/zoeesilcock/flint.git
-```
-
-### Exposed modules
-* sdl - exposes the SDL C API.
-* imgui - exposes the ImGui C API and backend integrations for the SDL3 Renderer and SDL3 GPU APIs.
-* internal - exposes tools used to generate editors and tools for internal builds.
-* aseprite - exposes the aseprite importer.
