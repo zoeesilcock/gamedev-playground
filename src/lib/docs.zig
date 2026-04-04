@@ -4,7 +4,7 @@
 //! ## Integrating
 //! * Add flint as a dependency in your `build.zig.zon` file by running:
 //! ```
-//! zig fetch --save git+https://github.com/zoeesilcock/flint.git
+//! zig fetch --save git+https://github.com/zoeesilcock/flint.git#v0.10.0
 //! ```
 //! * Add the following to your `build.zig` file:
 //! ```

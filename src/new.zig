@@ -83,7 +83,7 @@ pub fn main() !void {
             "zig",
             "fetch",
             "--save",
-            "git+https://github.com/zoeesilcock/flint.git",
+            "git+https://github.com/zoeesilcock/flint.git#v0.10.0",
         }, target_path, target_dir, allocator);
         if (zig_fetch_process.spawnAndWait()) |_| {} else |err| {
             try stdout.print(

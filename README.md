@@ -26,7 +26,7 @@ To use this in your own projects you include it as a dependency, integrate it in
 
 ### Add dependency
 ```
-zig fetch --save git+https://github.com/zoeesilcock/flint.git
+zig fetch --save git+https://github.com/zoeesilcock/flint.git#v0.10.0
 ```
 
 ### Exposed modules
