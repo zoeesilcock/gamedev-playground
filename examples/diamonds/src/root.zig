@@ -524,6 +524,10 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
 pub export fn tick(state_ptr: GameLib.GameStatePtr, time: u64, delta_time_int: u64) void {
     const state: *State = @ptrCast(@alignCast(state_ptr));
 
+    if (INTERNAL) {
+        state.dependencies.internal.fps_window.addFrameTime(sdl.SDL_GetPerformanceCounter());
+    }
+
     state.delta_time_actual = delta_time_int;
     state.time = time;
 

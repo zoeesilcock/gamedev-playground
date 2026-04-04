@@ -136,12 +136,6 @@ const DebugCollision = struct {
     time_added: u64,
 };
 
-const FPSDisplayMode = enum {
-    None,
-    Number,
-    NumberAndGraph,
-};
-
 pub fn processInputEvent(state: *State, event: sdl.SDL_Event) void {
     var input = &state.internal.input;
 
