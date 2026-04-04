@@ -243,7 +243,7 @@ fn drawInternalUI(state: *State) void {
             imgui.c.ImGuiCond_FirstUseEver,
             imgui.c.ImVec2{ .x = 0, .y = 0 },
         );
-        imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 300, .y = 400 }, imgui.c.ImGuiCond_FirstUseEver);
+        imgui.c.ImGui_SetNextWindowSize(imgui.c.ImVec2{ .x = 300, .y = 285 }, imgui.c.ImGuiCond_FirstUseEver);
 
         _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
         defer imgui.c.ImGui_End();
