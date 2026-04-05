@@ -100,7 +100,7 @@ pub fn buildExecutable(
         .root_module = module,
     });
 
-    linkSDL(b, exe, target, optimize, install_step);
+    linkSDL(b, b, exe, target, optimize, install_step);
 
     const run_step = client_b.step("run", "Run the app");
     const run_cmd = client_b.addRunArtifact(exe);
@@ -115,6 +115,7 @@ pub fn buildExecutable(
 
 pub fn linkSDL(
     b: *std.Build,
+    client_b: *std.Build,
     obj: *std.Build.Step.Compile,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
@@ -122,7 +123,7 @@ pub fn linkSDL(
 ) void {
     if (getSDL(b, target, optimize)) |sdl_lib| {
         obj.root_module.linkLibrary(sdl_lib);
-        install_step.dependOn(&b.addInstallArtifact(sdl_lib, .{}).step);
+        install_step.dependOn(&client_b.addInstallArtifact(sdl_lib, .{}).step);
     }
 }
 

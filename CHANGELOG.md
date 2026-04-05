@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 but until we reach 1.0 we are shifting the numbers so that we stay on 0.x.x.
 The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 
+## [Unreleased]
+### Added
+### Changed
+### Fixed
+* Fixed installation of the SDL library artifact when using `linkSDL`. That function now needs the client_b so it can install SDL in the right location.
+
 ## [0.10.0]
 
 ### Added

@@ -8,6 +8,8 @@
 //! ```
 //! * Add the following to your `build.zig` file:
 //! ```
+//! const flint = @import("flint");
+//!
 //! const target = b.standardTargetOptions(.{});
 //! const optimize = b.standardOptimizeOption(.{});
 //! const internal = b.option(bool, "internal", "include debug interface") orelse true;
@@ -30,7 +32,7 @@
 //! const flint_mod = flint_dep.module("flint");
 //! flint_mod.addImport("build_options", build_options_mod);
 //! module.addImport("flint", flint_mod);
-//! flint.linkSDL(flint_dep.builder, lib, target, optimize, b.getInstallStep());
+//! flint.linkSDL(flint_dep.builder, b, lib, target, optimize, b.getInstallStep());
 //!
 //! if (!lib_only) {
 //!     const exe = flint.buildExecutable(
