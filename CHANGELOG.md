@@ -9,6 +9,7 @@ The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 
 ## [Unreleased]
 ### Added
+* Added RPath entries to Linux/Mac builds so the executable can find libraries in the executable directory and in ./lib. This allows for packaging the executable with the libraries. On Windows it will follow the normal DLL search order, so it's easiest to place the libraries in the same directory as the executable.
 ### Changed
 ### Fixed
 * Fixed installation of the SDL library artifact when using `linkSDL`. That function now needs the client_b so it can install SDL in the right location.

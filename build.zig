@@ -102,6 +102,14 @@ pub fn buildExecutable(
 
     linkSDL(b, b, exe, target, optimize, install_step);
 
+    if (target.result.os.tag.isDarwin()) {
+        exe.root_module.addRPathSpecial("@loader_path/lib");
+        exe.root_module.addRPathSpecial("@loader_path");
+    } else if (target.result.os.tag == .linux) {
+        exe.root_module.addRPathSpecial("$ORIGIN/lib");
+        exe.root_module.addRPathSpecial("$ORIGIN");
+    }
+
     const run_step = client_b.step("run", "Run the app");
     const run_cmd = client_b.addRunArtifact(exe);
     run_cmd.step.dependOn(client_b.getInstallStep());
