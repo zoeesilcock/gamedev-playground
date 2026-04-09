@@ -12,6 +12,8 @@ The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 * Added RPath entries to Linux/Mac builds so the executable can find libraries in the executable directory and in ./lib. This allows for packaging the executable with the libraries. On Windows it will follow the normal DLL search order, so it's easiest to place the libraries in the same directory as the executable.
 ### Changed
 * Updated SDL to version 3.4.4.
+* Changed where we look for the game library to make the executable more portable. The order is now: zig-out if internal build, same directory as executable, and finally a directory called "lib" in the same directory as the executable.
+* The workaround to deal with building the game library while it is open on Windows is now only applied if the library is found in the dev directory (zig-out/bin), otherwise we skip it. This allows internal builds to be portable.
 ### Fixed
 * Fixed installation of the SDL library artifact when using `linkSDL`. That function now needs the client_b so it can install SDL in the right location.
 
