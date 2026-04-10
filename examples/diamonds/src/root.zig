@@ -903,7 +903,7 @@ fn unloadLevel(state: *State) void {
 pub fn loadLevel(state: *State, name: []const u8) !void {
     var buf: [LEVEL_NAME_BUFFER_SIZE * 2]u8 = undefined;
     const path = try std.fmt.bufPrint(&buf, "assets/{s}.lvl", .{name});
-    const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
+    const file = try flint.fs.openFileRelative(path, .{ .mode = .read_only });
 
     var reader_buf: [10 * 1024]u8 = undefined;
     var file_reader = file.reader(&reader_buf);

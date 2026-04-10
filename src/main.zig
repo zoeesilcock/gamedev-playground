@@ -309,15 +309,15 @@ fn codeHasChanged(allocator: std.mem.Allocator) bool {
 fn checkForChangesInDirectory(allocator: std.mem.Allocator, path: []const u8, last_change: *i128) !bool {
     var result = false;
 
-    var assets = try std.fs.cwd().openDir(path, .{ .access_sub_paths = true, .iterate = true });
-    defer assets.close();
+    var directory = try flint.fs.openDirRelative(path, .{ .access_sub_paths = true, .iterate = true });
+    defer directory.close();
 
-    var walker = try assets.walk(allocator);
+    var walker = try directory.walk(allocator);
     defer walker.deinit();
 
     while (try walker.next()) |entry| {
         if (entry.kind == .file) {
-            const stat = try assets.statFile(entry.path);
+            const stat = try directory.statFile(entry.path);
             if (stat.mtime > last_change.*) {
                 last_change.* = stat.mtime;
                 result = true;
@@ -338,19 +338,6 @@ fn unloadDll() !void {
     }
 }
 
-fn fileExists(file_name: []const u8) bool {
-    var result: bool = false;
-
-    const opt_file: ?std.fs.File = std.fs.cwd().openFile(file_name, .{ .mode = .read_only }) catch null;
-    defer if (opt_file) |file| file.close();
-
-    if (opt_file != null) {
-        result = true;
-    }
-
-    return result;
-}
-
 fn loadDll() !void {
     if (opt_dyn_lib != null) return error.AlreadyLoaded;
 
@@ -360,7 +347,7 @@ fn loadDll() !void {
     // otherwise the zig build wouldn't be allowed to overwrite the .dll file.
     if (INTERNAL and PLATFORM == .windows) {
         // Only make a copy of the library if we are in the dev directory (zig-out/bin/ on Windows).
-        if (fileExists(LIB_DEV_DIRECTORY ++ LIB_NAME)) {
+        if (flint.fs.fileExists(LIB_DEV_DIRECTORY ++ LIB_NAME)) {
             const temp_copy_name: []const u8 = LIB_BASE_NAME ++ "_temp.dll";
             var dev_directory = try std.fs.cwd().openDir(LIB_DEV_DIRECTORY, .{});
             try dev_directory.copyFile(LIB_NAME, dev_directory, temp_copy_name, .{});

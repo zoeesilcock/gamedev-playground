@@ -2,23 +2,30 @@
 const std = @import("std");
 const sdl = @import("sdl.zig").c;
 const sdl_utils = @import("sdl.zig");
+const flint = @import("flint.zig");
 
 const PLATFORM = @import("builtin").os.tag;
 
 /// Opens an Aseprite document in Aseprite.
 pub fn openInAseprite(sprite_asset: *AsepriteAsset, allocator: std.mem.Allocator) void {
-    const process_args = if (PLATFORM == .windows) [_][]const u8{
-        "Aseprite.exe",
-        sprite_asset.path,
-    } else [_][]const u8{
-        "open",
-        sprite_asset.path,
-    };
+    if (flint.fs.getFilePathRelative(sprite_asset.path, allocator)) |path| {
+        defer allocator.free(path);
 
-    var aseprite_process = std.process.Child.init(&process_args, allocator);
-    aseprite_process.spawn() catch |err| {
-        std.debug.print("Error spawning process: {}\n", .{err});
-    };
+        const process_args = if (PLATFORM == .windows) [_][]const u8{
+            "Aseprite.exe",
+            path,
+        } else [_][]const u8{
+            "open",
+            path,
+        };
+
+        var aseprite_process = std.process.Child.init(&process_args, allocator);
+        aseprite_process.spawn() catch |err| {
+            std.log.err("Error spawning process: {t}\n", .{err});
+        };
+    } else |err| {
+        std.log.info("Error creating path to AsepriteAsset: {t}\n", .{err});
+    }
 }
 
 /// All data and metadata contained in an Aseprite document.
@@ -141,32 +148,7 @@ pub const AsepriteAsset = struct {
 pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !AseDocument {
     var result: AseDocument = undefined;
 
-    // Default to opening the file based on the current working directory.
-    var opt_file: ?std.fs.File = std.fs.cwd().openFile(path, .{ .mode = .read_only }) catch null;
-
-    if (opt_file == null) {
-        var buffer: [1024]u8 = undefined;
-        const exe_path = try std.fs.selfExeDirPath(&buffer);
-
-        var exe_dir = try std.fs.cwd().openDir(exe_path, .{});
-        defer exe_dir.close();
-
-        // If the file wasn't found in the current working directory, look in the exe directory instead.
-        opt_file = exe_dir.openFile(path, .{ .mode = .read_only }) catch |err| switch (err) {
-            error.FileNotFound => {
-                std.log.err("Cannot find Aseprite file, tried at '{s}' and at '{s}/{s}': {t}", .{
-                    path,
-                    exe_path,
-                    path,
-                    err,
-                });
-                return err;
-            },
-            else => return err,
-        };
-    }
-
-    const file: std.fs.File = opt_file.?;
+    const file = try flint.fs.openFileRelative(path, .{ .mode = .read_only });
     defer file.close();
 
     var buf: [1024 * 1024]u8 = undefined;
