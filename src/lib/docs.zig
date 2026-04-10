@@ -59,8 +59,9 @@
 //!     * **lib_base_name**: a string which decides the name of the dynamic library that the executable will look for.
 //! * See `src/examples/template/build.zig` for a complete example.
 pub const sdl = @import("sdl.zig");
-pub const imgui = @import("imgui.zig");
+pub const fs = @import("fs.zig");
 pub const aseprite = @import("aseprite.zig");
+pub const imgui = @import("imgui.zig");
 pub const internal = @import("internal.zig");
 
 pub const GameLib = @import("GameLib.zig");

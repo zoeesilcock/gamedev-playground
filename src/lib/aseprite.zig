@@ -2,23 +2,30 @@
 const std = @import("std");
 const sdl = @import("sdl.zig").c;
 const sdl_utils = @import("sdl.zig");
+const flint = @import("flint.zig");
 
 const PLATFORM = @import("builtin").os.tag;
 
 /// Opens an Aseprite document in Aseprite.
 pub fn openInAseprite(sprite_asset: *AsepriteAsset, allocator: std.mem.Allocator) void {
-    const process_args = if (PLATFORM == .windows) [_][]const u8{
-        "Aseprite.exe",
-        sprite_asset.path,
-    } else [_][]const u8{
-        "open",
-        sprite_asset.path,
-    };
+    if (flint.fs.getFilePathRelative(sprite_asset.path, allocator)) |path| {
+        defer allocator.free(path);
 
-    var aseprite_process = std.process.Child.init(&process_args, allocator);
-    aseprite_process.spawn() catch |err| {
-        std.debug.print("Error spawning process: {}\n", .{err});
-    };
+        const process_args = if (PLATFORM == .windows) [_][]const u8{
+            "Aseprite.exe",
+            path,
+        } else [_][]const u8{
+            "open",
+            path,
+        };
+
+        var aseprite_process = std.process.Child.init(&process_args, allocator);
+        aseprite_process.spawn() catch |err| {
+            std.log.err("Error spawning process: {t}\n", .{err});
+        };
+    } else |err| {
+        std.log.info("Error creating path to AsepriteAsset: {t}\n", .{err});
+    }
 }
 
 /// All data and metadata contained in an Aseprite document.
@@ -74,14 +81,9 @@ pub const AsepriteAsset = struct {
     pub fn load(path: []const u8, renderer: *sdl.SDL_Renderer, allocator: std.mem.Allocator) ?AsepriteAsset {
         var result: ?AsepriteAsset = null;
 
-        std.log.info("loadSprite: {s}", .{path});
+        std.log.info("Loading AsepriteAsset: {s}", .{path});
 
-        const opt_doc = loadDocument(path, allocator) catch |err| blk: {
-            std.log.err("Asperite loadDocument failed: {t}", .{err});
-            break :blk null;
-        };
-
-        if (opt_doc) |doc| {
+        if (loadDocument(path, allocator)) |doc| {
             var textures: std.ArrayList(*sdl.SDL_Texture) = .empty;
 
             for (doc.frames) |frame| {
@@ -127,99 +129,98 @@ pub const AsepriteAsset = struct {
                 textures.append(allocator, texture.?) catch undefined;
             }
 
-            std.log.info("loadSprite: {s}: {d}", .{ path, doc.frames.len });
+            std.log.info("Loaded AsepriteAsset: {s}, frame count: {d}", .{ path, doc.frames.len });
 
             result = AsepriteAsset{
                 .path = path,
                 .document = doc,
                 .frames = textures.toOwnedSlice(allocator) catch &.{},
             };
-        } else {
-            @panic("aseprite.loadDocument failed");
+        } else |err| {
+            std.log.err("Failed to load AsepriteAsset: {t}", .{err});
         }
 
         return result;
     }
 };
 
-/// Load an Aseprite document from the specified path.
-pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !?AseDocument {
-    var result: ?AseDocument = null;
+/// Load an Aseprite document from the specified path relative to CWD, with fallback relative to exe directory.
+pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !AseDocument {
+    var result: AseDocument = undefined;
 
-    if (std.fs.cwd().openFile(path, .{ .mode = .read_only })) |file| {
-        defer file.close();
+    const file = try flint.fs.openFileRelative(path, .{ .mode = .read_only });
+    defer file.close();
 
-        var buf: [1024 * 1024]u8 = undefined;
-        var file_reader = file.reader(&buf);
+    var buf: [1024 * 1024]u8 = undefined;
+    var file_reader = file.reader(&buf);
 
-        const opt_header: ?*AseHeader = try parseHeader(&file_reader.interface, allocator);
-        var frames: std.ArrayList(AseFrame) = .empty;
-        defer frames.deinit(allocator);
+    const opt_header: ?*AseHeader = try parseHeader(&file_reader.interface, allocator);
+    var frames: std.ArrayList(AseFrame) = .empty;
+    defer frames.deinit(allocator);
 
-        std.log.info("loadDocument: {s}", .{path});
+    std.log.info("loadDocument: {s}", .{path});
 
-        if (opt_header) |header| {
-            std.debug.assert(header.magic_number == 0xA5E0);
-            std.log.info("Frame count: {d}", .{header.frames});
+    if (opt_header) |header| {
+        std.debug.assert(header.magic_number == 0xA5E0);
+        std.log.info("Frame count: {d}", .{header.frames});
 
-            for (0..header.frames) |_| {
-                if (try parseFrameHeader(&file_reader.interface, allocator)) |frame_header| {
-                    std.debug.assert(frame_header.magic_number == 0xF1FA);
-                    std.log.info(
-                        "Frame size: {d}, chunks: {d}",
-                        .{ frame_header.byte_count, frame_header.chunkCount() },
-                    );
+        for (0..header.frames) |_| {
+            if (try parseFrameHeader(&file_reader.interface, allocator)) |frame_header| {
+                std.debug.assert(frame_header.magic_number == 0xF1FA);
+                std.log.info(
+                    "Frame size: {d}, chunks: {d}",
+                    .{ frame_header.byte_count, frame_header.chunkCount() },
+                );
 
-                    var cel_chunks: std.ArrayList(*AseCelChunk) = .empty;
-                    var opt_tags: ?[]*AseTagsChunk = null;
+                var cel_chunks: std.ArrayList(*AseCelChunk) = .empty;
+                var opt_tags: ?[]*AseTagsChunk = null;
 
-                    for (0..frame_header.chunkCount()) |_| {
-                        if (try parseChunkHeader(&file_reader.interface, allocator)) |chunk_header| {
-                            defer allocator.destroy(chunk_header);
-                            std.log.info(
-                                "Chunk size: {d}, chunk_type: {}",
-                                .{ chunk_header.chunkSize(), chunk_header.chunk_type },
-                            );
+                for (0..frame_header.chunkCount()) |_| {
+                    if (try parseChunkHeader(&file_reader.interface, allocator)) |chunk_header| {
+                        defer allocator.destroy(chunk_header);
+                        std.log.info(
+                            "Chunk size: {d}, chunk_type: {}",
+                            .{ chunk_header.chunkSize(), chunk_header.chunk_type },
+                        );
 
-                            switch (chunk_header.chunk_type) {
-                                .Cel => {
-                                    if (try parseCelChunk(&file_reader.interface, chunk_header, allocator)) |cel_chunk| {
-                                        try cel_chunks.append(allocator, cel_chunk);
-                                    }
-                                },
-                                .Tags => {
-                                    opt_tags = try parseTagsChunks(&file_reader.interface, allocator);
-                                },
-                                else => {
-                                    file_reader.interface.toss(chunk_header.chunkSize());
-                                },
-                            }
+                        switch (chunk_header.chunk_type) {
+                            .Cel => {
+                                if (try parseCelChunk(&file_reader.interface, chunk_header, allocator)) |cel_chunk| {
+                                    try cel_chunks.append(allocator, cel_chunk);
+                                }
+                            },
+                            .Tags => {
+                                opt_tags = try parseTagsChunks(&file_reader.interface, allocator);
+                            },
+                            else => {
+                                file_reader.interface.toss(chunk_header.chunkSize());
+                            },
                         }
                     }
+                }
 
-                    if (cel_chunks.items.len > 0) {
-                        try frames.append(allocator, AseFrame{
-                            .header = frame_header,
-                            .cel_chunks = try cel_chunks.toOwnedSlice(allocator),
-                            .tags = opt_tags orelse &.{},
-                        });
-                    }
+                if (cel_chunks.items.len > 0) {
+                    try frames.append(allocator, AseFrame{
+                        .header = frame_header,
+                        .cel_chunks = try cel_chunks.toOwnedSlice(allocator),
+                        .tags = opt_tags orelse &.{},
+                    });
                 }
             }
-
-            if (frames.items.len > 0) {
-                result = .{
-                    .header = header,
-                    .frames = try frames.toOwnedSlice(allocator),
-                };
-            } else {
-                std.log.err("No frames found in aseprite file.", .{});
-            }
-        } else {
-            std.log.err("Failed to parse aseprite header.", .{});
         }
-    } else |err| {
-        std.log.info("Cannot find file '{s}': {s}", .{ path, @errorName(err) });
+
+        if (frames.items.len > 0) {
+            result = .{
+                .header = header,
+                .frames = try frames.toOwnedSlice(allocator),
+            };
+        } else {
+            std.log.err("No frames found in aseprite file.", .{});
+            return error.NoFrames;
+        }
+    } else {
+        std.log.err("Failed to parse aseprite header.", .{});
+        return error.InvalidHeader;
     }
 
     return result;

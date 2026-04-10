@@ -8,7 +8,7 @@ const INTERNAL: bool = @import("build_options").internal;
 const PLATFORM = @import("builtin").os.tag;
 const LIB_BASE_NAME = @import("build_options").lib_base_name;
 
-const LIB_DIRECTORY = if (PLATFORM == .windows) "zig-out/bin/" else "zig-out/lib/";
+const LIB_DEV_DIRECTORY = if (PLATFORM == .windows) "zig-out/bin/" else "zig-out/lib/";
 const LIB_NAME =
     if (PLATFORM == .windows)
         LIB_BASE_NAME ++ ".dll"
@@ -16,7 +16,7 @@ const LIB_NAME =
         "lib" ++ LIB_BASE_NAME ++ ".dylib"
     else
         "lib" ++ LIB_BASE_NAME ++ ".so";
-const LIB_NAME_RUNTIME = if (PLATFORM == .windows and INTERNAL) LIB_BASE_NAME ++ "_temp.dll" else LIB_NAME;
+
 const WINDOW_DECORATIONS_WIDTH = if (PLATFORM == .windows) 0 else 0;
 const WINDOW_DECORATIONS_HEIGHT = if (PLATFORM == .windows) 31 else 0;
 
@@ -33,7 +33,7 @@ pub fn main() !void {
     const allocator = debug_allocator.allocator();
 
     loadDll() catch |err| {
-        std.log.err("Failed to load the game DLL.", .{});
+        std.log.err("Failed to load the game library. Error: {s}", .{@errorName(err)});
         return err;
     };
 
@@ -290,7 +290,7 @@ fn initChangeTimes(allocator: std.mem.Allocator) void {
 
 fn dllHasChanged() bool {
     var result = false;
-    const stat = std.fs.cwd().statFile(LIB_DIRECTORY ++ LIB_NAME) catch return false;
+    const stat = std.fs.cwd().statFile(LIB_DEV_DIRECTORY ++ LIB_NAME) catch return false;
     if (stat.mtime > dyn_lib_last_modified) {
         dyn_lib_last_modified = stat.mtime;
         result = true;
@@ -309,15 +309,15 @@ fn codeHasChanged(allocator: std.mem.Allocator) bool {
 fn checkForChangesInDirectory(allocator: std.mem.Allocator, path: []const u8, last_change: *i128) !bool {
     var result = false;
 
-    var assets = try std.fs.cwd().openDir(path, .{ .access_sub_paths = true, .iterate = true });
-    defer assets.close();
+    var directory = try flint.fs.openDirRelative(path, .{ .access_sub_paths = true, .iterate = true });
+    defer directory.close();
 
-    var walker = try assets.walk(allocator);
+    var walker = try directory.walk(allocator);
     defer walker.deinit();
 
     while (try walker.next()) |entry| {
         if (entry.kind == .file) {
-            const stat = try assets.statFile(entry.path);
+            const stat = try directory.statFile(entry.path);
             if (stat.mtime > last_change.*) {
                 last_change.* = stat.mtime;
                 result = true;
@@ -341,23 +341,50 @@ fn unloadDll() !void {
 fn loadDll() !void {
     if (opt_dyn_lib != null) return error.AlreadyLoaded;
 
+    var lib_name: []const u8 = LIB_NAME;
+
+    // For hot reloading the game library to work on Windows we need to load a copy of the library,
+    // otherwise the zig build wouldn't be allowed to overwrite the .dll file.
     if (INTERNAL and PLATFORM == .windows) {
-        var output = try std.fs.cwd().openDir(LIB_DIRECTORY, .{});
-        try output.copyFile(LIB_NAME, output, LIB_NAME_RUNTIME, .{});
+        // Only make a copy of the library if we are in the dev directory (zig-out/bin/ on Windows).
+        if (flint.fs.fileExists(LIB_DEV_DIRECTORY ++ LIB_NAME)) {
+            const temp_copy_name: []const u8 = LIB_BASE_NAME ++ "_temp.dll";
+            var dev_directory = try std.fs.cwd().openDir(LIB_DEV_DIRECTORY, .{});
+            try dev_directory.copyFile(LIB_NAME, dev_directory, temp_copy_name, .{});
+            lib_name = temp_copy_name;
+        }
     }
 
-    opt_dyn_lib = std.DynLib.open(LIB_DIRECTORY ++ LIB_NAME_RUNTIME) catch null;
+    var buffer: [1024]u8 = undefined;
+    var lib_path: []const u8 = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ LIB_DEV_DIRECTORY, lib_name });
+
+    // Try to load the game library from the dev directory.
+    opt_dyn_lib = std.DynLib.open(lib_path) catch null;
+    if (opt_dyn_lib != null) {
+        std.log.info("Loading game library ({s}).", .{lib_path});
+    }
+
     if (opt_dyn_lib == null) {
-        std.log.info("Failed to load DLL from first location ({s}).", .{LIB_DIRECTORY ++ LIB_NAME_RUNTIME});
-        opt_dyn_lib = std.DynLib.open(LIB_NAME_RUNTIME) catch {
-            std.log.err("Failed to load DLL from secondary location ({s}).", .{LIB_NAME_RUNTIME});
-            return error.OpenFail;
-        };
+        // Try to load the game library from the current working directory.
+        lib_path = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ "./", lib_name });
+        opt_dyn_lib = std.DynLib.open(lib_path) catch null;
+        if (opt_dyn_lib != null) {
+            std.log.info("Loading game library ({s}).", .{lib_path});
+        }
+    }
+
+    if (opt_dyn_lib == null) {
+        // Try to load the game library from the "lib" directory in the current working directory.
+        lib_path = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ "./lib/", lib_name });
+        opt_dyn_lib = std.DynLib.open(lib_path) catch null;
+        if (opt_dyn_lib != null) {
+            std.log.info("Loading game library ({s}).", .{lib_path});
+        }
     }
 
     if (opt_dyn_lib) |*dyn_lib| {
         try game.load(dyn_lib);
+    } else {
+        return error.LibraryNotFound;
     }
-
-    std.log.info("Game DLL loaded.", .{});
 }
