@@ -371,12 +371,10 @@ fn loadDll() !void {
     var buffer: [1024]u8 = undefined;
     var lib_path: []const u8 = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ LIB_DEV_DIRECTORY, lib_name });
 
-    if (INTERNAL) {
-        // Try to load the game library from the dev directory.
-        opt_dyn_lib = std.DynLib.open(lib_path) catch null;
-        if (opt_dyn_lib != null) {
-            std.log.info("Loading game library ({s}).", .{lib_path});
-        }
+    // Try to load the game library from the dev directory.
+    opt_dyn_lib = std.DynLib.open(lib_path) catch null;
+    if (opt_dyn_lib != null) {
+        std.log.info("Loading game library ({s}).", .{lib_path});
     }
 
     if (opt_dyn_lib == null) {
