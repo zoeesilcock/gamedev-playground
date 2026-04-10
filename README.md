@@ -35,9 +35,19 @@ zig fetch --save git+https://github.com/zoeesilcock/flint.git#v0.10.0
 * internal - exposes tools used to generate editors and tools for internal builds.
 * aseprite - exposes the aseprite importer.
 
-
 ### Hot reloading
 Both the code and the assets automatically update in-game when modified. For code this is achieved by having the entire game code inside a shared library with a thin executable that takes care of reloading the shared library when it changes. When Flint detects a change in the code it triggers `zig build -Dlib_only`. When it detects a change in the dynamic library it loads the new one, making it fully automated. For assets the executable lets the game know when assets have changed so that it can react to that in whatever way that makes sense, the examples reload the assets which shows changes instantly without interrupting the game.
+
+### Packaging
+Building and packaging for release is a broad topic and works differently on each platform. Flint doesn't provide an automated way to do this yet, so it has to be done manually. The executable looks for the game library and assets in a few different places to help make it portable.
+
+#### Asset search paths
+Asset paths default to being relative to the current working directory, if not found there it will try relative to the directory of the executable. This allows the assets to be in the root directory of the project during development and in the same directory as the executable for release. Internal builds support hot reloading of assets even when the executable is not in the development environment, so it's possible to share an internal build with an artist to work on the assets. We might consider baking the assets into the library for release builds in the future.
+
+#### Library search paths
+In development mode it defaults to looking for the library in zig-out (zig-out/bin on Windows and zig-out/lib otherwise). If it fails to find the game library it will look in the same directory as the executable as well as in `./lib` relative to the executable. This allows using the default output locations while developing and then a couple of options when packaging for release.
+
+For other libraries like SDL, the executable looks in the same directory as the executable and in `./lib` relative to the executable. Windows is an exception here as it has its own [search order](https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-search-order) for DLLs. The simplest approach is to place the SDL library in the same directory as the executable.
 
 
 ## Examples
