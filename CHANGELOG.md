@@ -14,6 +14,7 @@ The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 * Updated SDL to version 3.4.4.
 * Changed where we look for the game library to make the executable more portable. The order is now: zig-out if internal build, same directory as executable, and finally a directory called "lib" in the same directory as the executable.
 * The workaround to deal with building the game library while it is open on Windows is now only applied if the library is found in the dev directory (zig-out/bin), otherwise we skip it. This allows internal builds to be portable.
+* Changed where we look for assets to make the executable more portable. Previously the asset paths only worked relative to the current working directory, now we have a fallback which looks relative to the executable directory if not found in the current directory.
 ### Fixed
 * Fixed installation of the SDL library artifact when using `linkSDL`. That function now needs the client_b so it can install SDL in the right location.
 
