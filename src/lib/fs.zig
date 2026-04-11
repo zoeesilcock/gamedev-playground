@@ -34,10 +34,10 @@ pub fn openFileRelative(sub_path: []const u8, flags: std.fs.File.OpenFlags) !std
 }
 
 /// Returns the provided path if it exists relative to the current working directory, otherwise it returns the path
-/// relative to the executable directory.
+/// relative to the executable directory. Allocates memory for the result, which must be freed by the caller.
 pub fn getFilePathRelative(sub_path: []const u8, allocator: std.mem.Allocator) ![]const u8 {
     if (fileExists(sub_path)) {
-        return sub_path;
+        return try std.fmt.allocPrint(allocator, "{s}", .{sub_path});
     } else {
         var buffer: [1024]u8 = undefined;
         const exe_path = try std.fs.selfExeDirPath(&buffer);
