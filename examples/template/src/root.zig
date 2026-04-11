@@ -20,6 +20,8 @@ const AsepriteAsset = aseprite.AsepriteAsset;
 const State = struct {
     dependencies: GameLib.Dependencies.Full2D,
 
+    fullscreen: bool = false,
+
     // Time.
     time: u64 = 0,
     delta_time: u64 = 0,
@@ -151,6 +153,12 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
                         if (is_down) {
                             state.dependencies.internal.fps_window.cycleMode();
                         }
+                    }
+                },
+                sdl.SDLK_F => {
+                    if (is_down) {
+                        state.fullscreen = !state.fullscreen;
+                        _ = sdl.SDL_SetWindowFullscreen(state.dependencies.window, state.fullscreen);
                     }
                 },
                 sdl.SDLK_F2 => {

@@ -5,6 +5,7 @@ This is a minimal example of how to use Flint. Replace this section with informa
 
 ## Controls
 * Space: Switch the color of the background to green.
+* F: Toggle fullscreen.
 
 
 ## Development
