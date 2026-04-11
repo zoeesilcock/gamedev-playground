@@ -344,7 +344,7 @@ pub const DebugOutputWindow = struct {
                 try writer.print("{s}", .{@tagName(value)});
             },
             .error_set => {
-                try writer.print("error.{s}", .{@errorName(value)});
+                try writer.print("error.{t}", .{value});
             },
             .vector => |vector_info| {
                 try writer.print("{{", .{});

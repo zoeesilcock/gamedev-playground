@@ -33,7 +33,7 @@ pub fn main() !void {
     const allocator = debug_allocator.allocator();
 
     loadDll() catch |err| {
-        std.log.err("Failed to load the game library. Error: {s}", .{@errorName(err)});
+        std.log.err("Failed to load the game library. Error: {t}", .{err});
         return err;
     };
 

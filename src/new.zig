@@ -87,8 +87,8 @@ pub fn main() !void {
         }, target_path, target_dir, allocator);
         if (zig_fetch_process.spawnAndWait()) |_| {} else |err| {
             try stdout.print(
-                "ERROR: Failed to run `zig fetch` (error: {s}), make sure Zig is on the path.\n",
-                .{@errorName(err)},
+                "ERROR: Failed to run `zig fetch` (error: {t}), make sure Zig is on the path.\n",
+                .{err},
             );
         }
 
@@ -100,16 +100,16 @@ pub fn main() !void {
         if (git_init_proccess.spawnAndWait()) |_| {
             git_init_proccess = initChildProcess(&.{ "git", "add", "." }, target_path, target_dir, allocator);
             if (git_init_proccess.spawnAndWait()) |_| {} else |err| {
-                try stdout.print("ERROR: Failed to run `git add .` (error: {s}).", .{@errorName(err)});
+                try stdout.print("ERROR: Failed to run `git add .` (error: {t}).", .{err});
             }
 
             git_init_proccess =
                 initChildProcess(&.{ "git", "commit", "-m", "Initial commit" }, target_path, target_dir, allocator);
             if (git_init_proccess.spawnAndWait()) |_| {} else |err| {
-                try stdout.print("ERROR: Failed to run `git commit` (error: {s}).", .{@errorName(err)});
+                try stdout.print("ERROR: Failed to run `git commit` (error: {t}).", .{err});
             }
         } else |err| {
-            try stdout.print("ERROR: Failed to run `git init` (error: {s}).\n", .{@errorName(err)});
+            try stdout.print("ERROR: Failed to run `git init` (error: {t}).\n", .{err});
         }
 
         try stdout.print("\nYou're all setup!\n\n", .{});
