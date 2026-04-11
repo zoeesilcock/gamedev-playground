@@ -136,7 +136,7 @@ pub const logFn = if (builtin.os.tag == .windows) std.log.defaultLog else posixL
 
 fn posixLogFn(
     comptime message_level: std.log.Level,
-    comptime scope: @Type(.enum_literal),
+    comptime scope: @TypeOf(.enum_literal),
     comptime format: []const u8,
     args: anytype,
 ) void {
