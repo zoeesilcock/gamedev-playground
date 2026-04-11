@@ -178,20 +178,20 @@ pub fn main() !void {
         const delta_time = frame_start_time - previous_frame_start_time;
 
         if (INTERNAL) {
-            const assetsChanged = assetsHaveChanged(allocator);
-            const codeChanged = codeHasChanged(allocator);
-            const dllChanged = dllHasChanged();
+            const assets_changed = assetsHaveChanged(allocator);
+            const code_changed = codeHasChanged(allocator);
+            const dll_changed = dllHasChanged();
 
-            if (codeChanged) {
+            if (code_changed) {
                 std.log.info("Code changed, rebuilding game library...", .{});
                 var zig_build_process = std.process.Child.init(&.{ "zig", "build", "-Dlib_only" }, allocator);
                 _ = try zig_build_process.spawn();
             }
 
-            if (dllChanged or assetsChanged) {
+            if (dll_changed or assets_changed) {
                 game.willReload(state);
 
-                if (dllChanged) {
+                if (dll_changed) {
                     if (manage_imgui_lifecycle) {
                         imgui.deinit();
                     }
