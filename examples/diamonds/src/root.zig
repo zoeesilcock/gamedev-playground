@@ -807,29 +807,30 @@ fn drawTextureAt(state: *State, texture: *sdl.SDL_Texture, position: Vector2, sc
 }
 
 fn loadAssets(state: *State) void {
-    state.assets.missing_sprite = .load("assets/missing_sprite.aseprite", state.renderer, state.allocator);
+    const io: std.Io = state.dependencies.io.*;
+    state.assets.missing_sprite = .load("assets/missing_sprite.aseprite", state.renderer, state.allocator, io);
 
-    state.assets.life_filled = .load("assets/life_filled.aseprite", state.renderer, state.allocator);
-    state.assets.life_outlined = .load("assets/life_outlined.aseprite", state.renderer, state.allocator);
-    state.assets.life_backdrop = .load("assets/life_backdrop.aseprite", state.renderer, state.allocator);
+    state.assets.life_filled = .load("assets/life_filled.aseprite", state.renderer, state.allocator, io);
+    state.assets.life_outlined = .load("assets/life_outlined.aseprite", state.renderer, state.allocator, io);
+    state.assets.life_backdrop = .load("assets/life_backdrop.aseprite", state.renderer, state.allocator, io);
 
-    state.assets.ball_red = .load("assets/ball_red.aseprite", state.renderer, state.allocator);
-    state.assets.ball_blue = .load("assets/ball_blue.aseprite", state.renderer, state.allocator);
+    state.assets.ball_red = .load("assets/ball_red.aseprite", state.renderer, state.allocator, io);
+    state.assets.ball_blue = .load("assets/ball_blue.aseprite", state.renderer, state.allocator, io);
 
-    state.assets.block_gray = .load("assets/block_gray.aseprite", state.renderer, state.allocator);
-    state.assets.block_red = .load("assets/block_red.aseprite", state.renderer, state.allocator);
-    state.assets.block_blue = .load("assets/block_blue.aseprite", state.renderer, state.allocator);
-    state.assets.block_change_red = .load("assets/block_change_red.aseprite", state.renderer, state.allocator);
-    state.assets.block_change_blue = .load("assets/block_change_blue.aseprite", state.renderer, state.allocator);
-    state.assets.block_deadly = .load("assets/block_deadly.aseprite", state.renderer, state.allocator);
+    state.assets.block_gray = .load("assets/block_gray.aseprite", state.renderer, state.allocator, io);
+    state.assets.block_red = .load("assets/block_red.aseprite", state.renderer, state.allocator, io);
+    state.assets.block_blue = .load("assets/block_blue.aseprite", state.renderer, state.allocator, io);
+    state.assets.block_change_red = .load("assets/block_change_red.aseprite", state.renderer, state.allocator, io);
+    state.assets.block_change_blue = .load("assets/block_change_blue.aseprite", state.renderer, state.allocator, io);
+    state.assets.block_deadly = .load("assets/block_deadly.aseprite", state.renderer, state.allocator, io);
 
-    state.assets.background = .load("assets/background.aseprite", state.renderer, state.allocator);
+    state.assets.background = .load("assets/background.aseprite", state.renderer, state.allocator, io);
 
-    state.assets.title_paused = .load("assets/title_paused.aseprite", state.renderer, state.allocator);
-    state.assets.title_get_ready = .load("assets/title_get_ready.aseprite", state.renderer, state.allocator);
-    state.assets.title_cleared = .load("assets/title_cleared.aseprite", state.renderer, state.allocator);
-    state.assets.title_death = .load("assets/title_death.aseprite", state.renderer, state.allocator);
-    state.assets.title_game_over = .load("assets/title_game_over.aseprite", state.renderer, state.allocator);
+    state.assets.title_paused = .load("assets/title_paused.aseprite", state.renderer, state.allocator, io);
+    state.assets.title_get_ready = .load("assets/title_get_ready.aseprite", state.renderer, state.allocator, io);
+    state.assets.title_cleared = .load("assets/title_cleared.aseprite", state.renderer, state.allocator, io);
+    state.assets.title_death = .load("assets/title_death.aseprite", state.renderer, state.allocator, io);
+    state.assets.title_game_over = .load("assets/title_game_over.aseprite", state.renderer, state.allocator, io);
 }
 
 fn unloadAssets(state: *State) void {
@@ -903,10 +904,10 @@ fn unloadLevel(state: *State) void {
 pub fn loadLevel(state: *State, name: []const u8) !void {
     var buf: [LEVEL_NAME_BUFFER_SIZE * 2]u8 = undefined;
     const path = try std.fmt.bufPrint(&buf, "assets/{s}.lvl", .{name});
-    const file = try flint.fs.openFileRelative(path, .{ .mode = .read_only });
+    const file = try flint.fs.openFileRelative(state.dependencies.io.*, path, .{ .mode = .read_only });
 
     var reader_buf: [10 * 1024]u8 = undefined;
-    var file_reader = file.reader(&reader_buf);
+    var file_reader = file.reader(state.dependencies.io.*, &reader_buf);
     var reader: *std.Io.Reader = &file_reader.interface;
     const wall_count = try reader.takeInt(u32, .little);
 

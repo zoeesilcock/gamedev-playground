@@ -55,6 +55,7 @@ pub const Dependencies = struct {
     /// A batteries included set of dependencies for 2D rendering, preferable in most cases.
     pub const Full2D = extern struct {
         allocator: *std.mem.Allocator,
+        io: *const std.Io,
         window: *sdl.SDL_Window,
         renderer: *sdl.SDL_Renderer,
 
@@ -64,6 +65,7 @@ pub const Dependencies = struct {
     /// A batteries included set of dependencies for 2D rendering, preferable in most cases.
     pub const Full3D = extern struct {
         allocator: *std.mem.Allocator,
+        io: *const std.Io,
         window: *sdl.SDL_Window,
         gpu_device: *sdl.SDL_GPUDevice,
 

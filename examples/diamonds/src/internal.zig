@@ -700,18 +700,19 @@ fn getTiledPosition(position: Vector2, asset: *const AsepriteAsset) Vector2 {
 
 fn openSprite(state: *State, allocator: std.mem.Allocator, entity: *Entity) void {
     if (state.assets.getSpriteAsset(state, entity)) |sprite_asset| {
-        aseprite.openInAseprite(sprite_asset, allocator);
+        aseprite.openInAseprite(sprite_asset, allocator, state.dependencies.io.*);
     }
 }
 
 fn saveLevel(state: *State, name: []const u8) !void {
+    const io: std.Io = state.dependencies.io.*;
     var buf: [LEVEL_NAME_BUFFER_SIZE * 2]u8 = undefined;
     const path = try std.fmt.bufPrint(&buf, "assets/{s}.lvl", .{name});
-    const file = try std.fs.cwd().createFile(path, .{ .truncate = true });
-    defer file.close();
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{ .truncate = true });
+    defer file.close(io);
 
     var writer_buf: [10 * 1024]u8 = undefined;
-    var file_writer = file.writer(&writer_buf);
+    var file_writer = file.writer(io, &writer_buf);
     var writer: *std.Io.Writer = &file_writer.interface;
 
     var walls_count: u32 = 0;

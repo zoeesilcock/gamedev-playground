@@ -89,8 +89,12 @@ pub export fn deinit(state_ptr: GameLib.GameStatePtr) void {
 }
 
 fn loadAssets(state: *State) void {
-    state.welcome_sprite =
-        .load("assets/welcome.aseprite", state.dependencies.renderer, state.dependencies.allocator.*);
+    state.welcome_sprite = .load(
+        "assets/welcome.aseprite",
+        state.dependencies.renderer,
+        state.dependencies.allocator.*,
+        state.dependencies.io.*,
+    );
 }
 fn unloadAssets(state: *State) void {
     state.welcome_sprite.?.deinit(state.dependencies.allocator.*);
@@ -181,7 +185,7 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
     if (state.left_mouse_pressed) {
         if (state.time - state.left_mouse_last_pressed_time < 300) {
             // TODO: Check where the double click happened so we know which sprite to open.
-            aseprite.openInAseprite(&state.welcome_sprite.?, state.dependencies.allocator.*);
+            aseprite.openInAseprite(&state.welcome_sprite.?, state.dependencies.allocator.*, state.dependencies.io.*);
         }
 
         state.left_mouse_last_pressed_time = state.time;

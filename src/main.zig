@@ -28,11 +28,11 @@ var src_last_modified: i128 = 0;
 var assets_last_modified: i128 = 0;
 var code_last_modified: i128 = 0;
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
     const allocator = debug_allocator.allocator();
 
-    loadDll() catch |err| {
+    loadDll(init.io) catch |err| {
         std.log.err("Failed to load the game library. Error: {t}", .{err});
         return err;
     };
@@ -147,6 +147,7 @@ pub fn main() !void {
         .Full2D => {
             const dependencies: GameLib.Dependencies.Full2D = .{
                 .allocator = &game_allocator,
+                .io = &init.io,
                 .window = window.?,
                 .renderer = game_renderer.?,
                 .internal = internal_dependencies,
@@ -157,6 +158,7 @@ pub fn main() !void {
         .Full3D => {
             const dependencies: GameLib.Dependencies.Full3D = .{
                 .allocator = &game_allocator,
+                .io = &init.io,
                 .window = window.?,
                 .gpu_device = game_gpu_device.?,
                 .internal = internal_dependencies,
@@ -167,7 +169,7 @@ pub fn main() !void {
     }
 
     if (INTERNAL) {
-        initChangeTimes(allocator);
+        initChangeTimes(allocator, init.io);
     }
 
     var previous_frame_start_time: u64 = 0;
@@ -178,14 +180,13 @@ pub fn main() !void {
         const delta_time = frame_start_time - previous_frame_start_time;
 
         if (INTERNAL) {
-            const assets_changed = assetsHaveChanged(allocator);
-            const code_changed = codeHasChanged(allocator);
-            const dll_changed = dllHasChanged();
+            const assets_changed = assetsHaveChanged(allocator, init.io);
+            const code_changed = codeHasChanged(allocator, init.io);
+            const dll_changed = dllHasChanged(init.io);
 
             if (code_changed) {
                 std.log.info("Code changed, rebuilding game library...", .{});
-                var zig_build_process = std.process.Child.init(&.{ "zig", "build", "-Dlib_only" }, allocator);
-                _ = try zig_build_process.spawn();
+                _ = try std.process.run(allocator, init.io, .{ .argv = &.{ "zig", "build", "-Dlib_only" } });
             }
 
             if (dll_changed or assets_changed) {
@@ -197,7 +198,7 @@ pub fn main() !void {
                     }
 
                     unloadDll() catch unreachable;
-                    loadDll() catch @panic("Failed to load the game lib.");
+                    loadDll(init.io) catch @panic("Failed to load the game lib.");
 
                     if (manage_imgui_lifecycle) {
                         initImgui(window.?, game_renderer, game_gpu_device, game_settings);
@@ -207,7 +208,7 @@ pub fn main() !void {
                 // TODO: This is a workaround for a bug that happens when dealing with large Aseprite files where the
                 // file is incomplete when read too soon after saving changes to it. This may need to be tuned to
                 // handle bigger files, and would be more robust if we could know when the file was ready for reading.
-                std.Thread.sleep(10_000_000);
+                try std.Io.sleep(init.io, .fromMilliseconds(10), .awake);
 
                 game.reloaded(state, imgui.context);
             }
@@ -282,44 +283,40 @@ fn initImgui(
     }
 }
 
-fn initChangeTimes(allocator: std.mem.Allocator) void {
-    _ = dllHasChanged();
-    _ = assetsHaveChanged(allocator);
-    _ = codeHasChanged(allocator);
+fn initChangeTimes(allocator: std.mem.Allocator, io: std.Io) void {
+    _ = dllHasChanged(io);
+    _ = assetsHaveChanged(allocator, io);
+    _ = codeHasChanged(allocator, io);
 }
 
-fn dllHasChanged() bool {
+fn dllHasChanged(io: std.Io) bool {
     var result = false;
-    const stat = std.fs.cwd().statFile(LIB_DEV_DIRECTORY ++ LIB_NAME) catch return false;
-    if (stat.mtime > dyn_lib_last_modified) {
-        dyn_lib_last_modified = stat.mtime;
+    const stat = std.Io.Dir.cwd().statFile(io, LIB_DEV_DIRECTORY ++ LIB_NAME, .{}) catch return false;
         result = true;
     }
     return result;
 }
 
-fn assetsHaveChanged(allocator: std.mem.Allocator) bool {
-    return checkForChangesInDirectory(allocator, "assets", &assets_last_modified) catch false;
+fn assetsHaveChanged(allocator: std.mem.Allocator, io: std.Io) bool {
+    return checkForChangesInDirectory(allocator, io, "assets", &assets_last_modified) catch false;
 }
 
-fn codeHasChanged(allocator: std.mem.Allocator) bool {
-    return checkForChangesInDirectory(allocator, "src", &code_last_modified) catch false;
+fn codeHasChanged(allocator: std.mem.Allocator, io: std.Io) bool {
+    return checkForChangesInDirectory(allocator, io, "src", &code_last_modified) catch false;
 }
 
-fn checkForChangesInDirectory(allocator: std.mem.Allocator, path: []const u8, last_change: *i128) !bool {
+fn checkForChangesInDirectory(allocator: std.mem.Allocator, io: std.Io, path: []const u8, last_change: *i128) !bool {
     var result = false;
 
-    var directory = try flint.fs.openDirRelative(path, .{ .access_sub_paths = true, .iterate = true });
-    defer directory.close();
+    var directory = try flint.fs.openDirRelative(io, path, .{ .access_sub_paths = true, .iterate = true });
+    defer directory.close(io);
 
     var walker = try directory.walk(allocator);
     defer walker.deinit();
 
-    while (try walker.next()) |entry| {
+    while (try walker.next(io)) |entry| {
         if (entry.kind == .file) {
-            const stat = try directory.statFile(entry.path);
-            if (stat.mtime > last_change.*) {
-                last_change.* = stat.mtime;
+            const stat = try directory.statFile(io, entry.path, .{});
                 result = true;
                 break;
             }
@@ -338,7 +335,7 @@ fn unloadDll() !void {
     }
 }
 
-fn loadDll() !void {
+fn loadDll(io: std.Io) !void {
     if (opt_dyn_lib != null) return error.AlreadyLoaded;
 
     var lib_name: []const u8 = LIB_NAME;
@@ -347,7 +344,7 @@ fn loadDll() !void {
     // otherwise the zig build wouldn't be allowed to overwrite the .dll file.
     if (INTERNAL and PLATFORM == .windows) {
         // Only make a copy of the library if we are in the dev directory (zig-out/bin/ on Windows).
-        if (flint.fs.fileExists(LIB_DEV_DIRECTORY ++ LIB_NAME)) {
+        if (flint.fs.fileExists(io, LIB_DEV_DIRECTORY ++ LIB_NAME)) {
             const temp_copy_name: []const u8 = LIB_BASE_NAME ++ "_temp.dll";
             var dev_directory = try std.fs.cwd().openDir(LIB_DEV_DIRECTORY, .{});
             try dev_directory.copyFile(LIB_NAME, dev_directory, temp_copy_name, .{});

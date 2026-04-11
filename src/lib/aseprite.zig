@@ -7,8 +7,8 @@ const flint = @import("flint.zig");
 const PLATFORM = @import("builtin").os.tag;
 
 /// Opens an Aseprite document in Aseprite.
-pub fn openInAseprite(sprite_asset: *AsepriteAsset, allocator: std.mem.Allocator) void {
-    if (flint.fs.getFilePathRelative(sprite_asset.path, allocator)) |path| {
+pub fn openInAseprite(sprite_asset: *AsepriteAsset, allocator: std.mem.Allocator, io: std.Io) void {
+    if (flint.fs.getFilePathRelative(io, sprite_asset.path, allocator)) |path| {
         defer allocator.free(path);
 
         const process_args = if (PLATFORM == .windows) [_][]const u8{
@@ -19,8 +19,7 @@ pub fn openInAseprite(sprite_asset: *AsepriteAsset, allocator: std.mem.Allocator
             path,
         };
 
-        var aseprite_process = std.process.Child.init(&process_args, allocator);
-        aseprite_process.spawn() catch |err| {
+        _ = std.process.run(allocator, io, .{ .argv = &process_args }) catch |err| {
             std.log.err("Error spawning process: {t}\n", .{err});
         };
     } else |err| {
@@ -78,12 +77,17 @@ pub const AsepriteAsset = struct {
     }
 
     // Loads an Aseprite document from the specified path and generates SDL textures for each frame.
-    pub fn load(path: []const u8, renderer: *sdl.SDL_Renderer, allocator: std.mem.Allocator) ?AsepriteAsset {
+    pub fn load(
+        path: []const u8,
+        renderer: *sdl.SDL_Renderer,
+        allocator: std.mem.Allocator,
+        io: std.Io,
+    ) ?AsepriteAsset {
         var result: ?AsepriteAsset = null;
 
         std.log.info("Loading AsepriteAsset: {s}", .{path});
 
-        if (loadDocument(path, allocator)) |doc| {
+        if (loadDocument(path, allocator, io)) |doc| {
             var textures: std.ArrayList(*sdl.SDL_Texture) = .empty;
 
             for (doc.frames) |frame| {
@@ -145,14 +149,14 @@ pub const AsepriteAsset = struct {
 };
 
 /// Load an Aseprite document from the specified path relative to CWD, with fallback relative to exe directory.
-pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator) !AseDocument {
+pub fn loadDocument(path: []const u8, allocator: std.mem.Allocator, io: std.Io) !AseDocument {
     var result: AseDocument = undefined;
 
-    const file = try flint.fs.openFileRelative(path, .{ .mode = .read_only });
-    defer file.close();
+    const file = try flint.fs.openFileRelative(io, path, .{ .mode = .read_only });
+    defer file.close(io);
 
     var buf: [1024 * 1024]u8 = undefined;
-    var file_reader = file.reader(&buf);
+    var file_reader = file.reader(io, &buf);
 
     const opt_header: ?*AseHeader = try parseHeader(&file_reader.interface, allocator);
     var frames: std.ArrayList(AseFrame) = .empty;
