@@ -292,6 +292,8 @@ fn initChangeTimes(allocator: std.mem.Allocator, io: std.Io) void {
 fn dllHasChanged(io: std.Io) bool {
     var result = false;
     const stat = std.Io.Dir.cwd().statFile(io, LIB_DEV_DIRECTORY ++ LIB_NAME, .{}) catch return false;
+    if (stat.mtime.nanoseconds > dyn_lib_last_modified) {
+        dyn_lib_last_modified = stat.mtime.nanoseconds;
         result = true;
     }
     return result;
@@ -317,6 +319,8 @@ fn checkForChangesInDirectory(allocator: std.mem.Allocator, io: std.Io, path: []
     while (try walker.next(io)) |entry| {
         if (entry.kind == .file) {
             const stat = try directory.statFile(io, entry.path, .{});
+            if (stat.mtime.nanoseconds > last_change.*) {
+                last_change.* = stat.mtime.nanoseconds;
                 result = true;
                 break;
             }
