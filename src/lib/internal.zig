@@ -448,7 +448,7 @@ pub fn inspectStruct(
     ignored_fields: []const []const u8,
     expand_sections: bool,
     /// Function pointer which allows you to handle specific fields manually, see `handleCustomTypesFn`.
-    optHandleCustomTypes: handleCustomTypesFn,
+    comptime optHandleCustomTypes: handleCustomTypesFn,
 ) void {
     switch (@typeInfo(@TypeOf(struct_ptr))) {
         .optional => {
@@ -466,7 +466,7 @@ fn inspectStructInternal(
     struct_ptr: anytype,
     ignored_fields: []const []const u8,
     expand_sections: bool,
-    optHandleCustomTypes: handleCustomTypesFn,
+    comptime optHandleCustomTypes: handleCustomTypesFn,
 ) void {
     const struct_info = @typeInfo(@TypeOf(struct_ptr.*));
     switch (struct_info) {
@@ -519,7 +519,7 @@ fn inputStruct(
     field_ptr: anytype,
     ignored_fields: []const []const u8,
     expand_sections: bool,
-    optHandleCustomTypes: handleCustomTypesFn,
+    comptime optHandleCustomTypes: handleCustomTypesFn,
 ) void {
     var handled: bool = false;
     if (optHandleCustomTypes) |handleCustomTypes| {
@@ -620,7 +620,7 @@ fn inputStructSection(
     heading: ?[*:0]const u8,
     ignored_fields: []const []const u8,
     expand_sections: bool,
-    optHandleCustomTypes: handleCustomTypesFn,
+    comptime optHandleCustomTypes: handleCustomTypesFn,
 ) void {
     imgui.ImGui_PushIDPtr(@ptrCast(heading));
     defer imgui.ImGui_PopID();
