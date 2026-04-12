@@ -6,7 +6,7 @@ const imgui = if (INTERNAL) flint.imgui else struct {};
 
 const INTERNAL: bool = @import("build_options").internal;
 const PLATFORM = @import("builtin").os.tag;
-const LIB_BASE_NAME = @import("build_options").lib_base_name;
+const LIB_BASE_NAME = @import("build_options").name;
 
 const LIB_DEV_DIRECTORY = if (PLATFORM == .windows) "zig-out/bin/" else "zig-out/lib/";
 const LIB_NAME =

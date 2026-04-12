@@ -12,56 +12,57 @@
 //!
 //! const target = b.standardTargetOptions(.{});
 //! const optimize = b.standardOptimizeOption(.{});
-//! const internal = b.option(bool, "internal", "include debug interface") orelse true;
-//! const lib_base_name = b.option([]const u8, "lib_base_name", "name of the shared library") orelse "your_lib_name";
-//! const lib_only = b.option(bool, "lib_only", "only build the shared library") orelse false;
-//!
-//! const build_options = b.addOptions();
-//! build_options.addOption(bool, "internal", internal);
-//! build_options.addOption([]const u8, "lib_base_name", lib_base_name);
-//! const build_options_mod = build_options.createModule();
-//!
-//! // Game library.
-//! // Build your game library here...
 //!
 //! // Integrate Flint.
-//! const flint_dep = b.dependency("flint", .{
+//! const result = flint.integrate(b, .{
+//!     .dependency = b.dependency("flint", .{ .target = target, .optimize = optimize }),
+//!     .target = target,
+//!     .optimize = optimize,
+//!     .build_options = b.addOptions(),
+//!     .name = b.option([]const u8, "name", "name of the shared library") orelse "your_lib_name",
+//!     .internal = b.option(bool, "internal", "include debug interface") orelse true,
+//!     .lib_only = b.option(bool, "lib_only", "only build the shared library") orelse false,
+//! });
+//!
+//! // Game library.
+//! const module = b.createModule(.{
+//!     .root_source_file = b.path("src/root.zig"),
 //!     .target = target,
 //!     .optimize = optimize,
 //! });
-//! const flint_mod = flint.getFlintModule(
-//!     flint_dep.builder,
-//!     b,
-//!     target,
-//!     optimize,
-//!     b.getInstallStep(),
-//!     build_options_mod,
-//!     internal,
-//! );
-//! module.addImport("flint", flint_mod);
+//! module.addImport("build_options", result.build_options_mod);
+//! module.addImport("flint", result.flint_mod);
 //!
-//! if (!lib_only) {
-//!     const exe = flint.buildExecutable(
-//!         flint_dep.builder,
-//!         b,
-//!         target,
-//!         optimize,
-//!         build_options_mod,
-//!         flint_mod,
-//!         "your_executable_name",
-//!     );
+//! // Build the game as a dynamic library.
+//! const lib = b.addLibrary(.{
+//!     .name = "your_lib_name",
+//!     .linkage = .dynamic,
+//!     .root_module = module,
+//! });
+//! b.getInstallStep().dependOn(&b.addInstallArtifact(lib, .{}).step);
+//!
+//! if (result.exe) |exe| {
 //!     b.getInstallStep().dependOn(&b.addInstallArtifact(exe, .{}).step);
 //! }
 //! ```
-//! * In this example `lib` is your game library, and `module` is the root module of that library.
-//! * The `build_options` passed to `buildExecutable` need to include the following options:
-//!     * **internal**: a boolean that decides if things like inspectors, editors, debug visualizations, and such will
-//!     be included in the build. This aims to be the main way of defining whether a build is meant for internal
-//!     testing or for release. Import it into your own code like this:
+//! * The `build_options` field accepts a `*std.Build.Step.Options`. You can add your own
+//!   custom options to it before passing it to `integrate`. Flint will add its required
+//!   options (`internal` and `name`) and create the module for you:
+//! ```
+//! const build_options = b.addOptions();
+//! build_options.addOption(bool, "my_custom_flag", true);
+//!
+//! const result = flint.integrate(b, .{
+//!     // ...
+//!     .build_options = build_options,
+//! });
+//! ```
+//! * The `internal` option decides if things like inspectors, editors, debug visualizations,
+//!   and such will be included in the build. This aims to be the main way of defining whether
+//!   a build is meant for internal testing or for release. Import it into your own code like this:
 //!     ```
 //!     const INTERNAL: bool = @import("build_options").internal;
 //!     ```
-//!     * **lib_base_name**: a string which decides the name of the dynamic library that the executable will look for.
 //! * See `src/examples/template/build.zig` for a complete example.
 pub const sdl = @import("sdl.zig");
 pub const fs = @import("fs.zig");

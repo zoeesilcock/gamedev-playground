@@ -3,12 +3,12 @@ const std = @import("std");
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const lib_base_name = b.option([]const u8, "lib_base_name", "name of the shared library") orelse "game";
+    const name = b.option([]const u8, "name", "name of the shared library") orelse "game";
     const internal = b.option(bool, "internal", "include debug interface") orelse true;
 
     const exe_build_options = b.addOptions();
     exe_build_options.addOption(bool, "internal", internal);
-    exe_build_options.addOption([]const u8, "lib_base_name", lib_base_name);
+    exe_build_options.addOption([]const u8, "name", name);
     const exe_build_options_mod = exe_build_options.createModule();
 
     const build_options = b.addOptions();
@@ -20,10 +20,10 @@ pub fn build(b: *std.Build) !void {
     b.default_step = build_all_step;
 
     // Flint module.
-    const flint_mod = getFlintModule(b, b, target, optimize, build_all_step, build_options_mod, internal);
+    const flint_mod = addFlintModule(b, b, target, optimize, build_all_step, build_options_mod, internal);
 
     // Main executable.
-    const exe = buildExecutable(b, b, target, optimize, exe_build_options_mod, flint_mod, "flint");
+    const exe = addFlintExecutable(b, target, optimize, exe_build_options_mod, flint_mod, "flint");
     build_all_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
 
     // Tests.
@@ -59,7 +59,67 @@ pub fn build(b: *std.Build) !void {
     buildNewExecutable(b, exe_build_options_mod, target);
 }
 
-pub fn getFlintModule(
+pub const IntegrateOptions = struct {
+    dependency: *std.Build.Dependency,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    build_options: *std.Build.Step.Options,
+    internal: bool = true,
+    name: []const u8 = "game",
+    lib_only: bool = false,
+};
+
+pub const IntegrateResult = struct {
+    flint_mod: *std.Build.Module,
+    exe: ?*std.Build.Step.Compile,
+    build_options_mod: *std.Build.Module,
+};
+
+pub fn integrate(b: *std.Build, options: IntegrateOptions) IntegrateResult {
+    const flint_b = options.dependency.builder;
+
+    options.build_options.addOption(bool, "internal", options.internal);
+    options.build_options.addOption([]const u8, "name", options.name);
+    const build_options_mod = options.build_options.createModule();
+
+    const flint_mod = addFlintModule(
+        flint_b,
+        b,
+        options.target,
+        options.optimize,
+        b.getInstallStep(),
+        build_options_mod,
+        options.internal,
+    );
+
+    var exe: ?*std.Build.Step.Compile = null;
+    if (!options.lib_only) {
+        exe = addFlintExecutable(
+            flint_b,
+            options.target,
+            options.optimize,
+            build_options_mod,
+            flint_mod,
+            options.name,
+        );
+
+        const run_step = b.step("run", "Run the game");
+        const run_cmd = b.addRunArtifact(exe.?);
+        run_cmd.step.dependOn(b.getInstallStep());
+        if (b.args) |args| {
+            run_cmd.addArgs(args);
+        }
+        run_step.dependOn(&run_cmd.step);
+    }
+
+    return .{
+        .flint_mod = flint_mod,
+        .exe = exe,
+        .build_options_mod = build_options_mod,
+    };
+}
+
+pub fn addFlintModule(
     b: *std.Build,
     client_b: *std.Build,
     target: std.Build.ResolvedTarget,
@@ -84,9 +144,8 @@ pub fn getFlintModule(
     return flint_mod;
 }
 
-pub fn buildExecutable(
+pub fn addFlintExecutable(
     b: *std.Build,
-    client_b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     build_options_mod: *std.Build.Module,
@@ -114,14 +173,6 @@ pub fn buildExecutable(
         exe.root_module.addRPathSpecial("$ORIGIN/lib");
         exe.root_module.addRPathSpecial("$ORIGIN");
     }
-
-    const run_step = client_b.step("run", "Run the app");
-    const run_cmd = client_b.addRunArtifact(exe);
-    run_cmd.step.dependOn(client_b.getInstallStep());
-    if (client_b.args) |args| {
-        run_cmd.addArgs(args);
-    }
-    run_step.dependOn(&run_cmd.step);
 
     return exe;
 }
