@@ -3,8 +3,14 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const sdl = @import("sdl.zig").c;
-const imgui = @import("imgui.zig").c;
-const internal = @import("internal.zig");
+const imgui = if (INTERNAL) @import("imgui.zig").c else struct {
+    pub const ImGuiContext: type = anyopaque;
+};
+const internal = if (INTERNAL) @import("internal.zig") else struct {
+    pub const DebugOutputWindow: type = anyopaque;
+    pub const FPSWindow: type = anyopaque;
+    pub const MemoryUsageWindow: type = anyopaque;
+};
 
 // Build options.
 const INTERNAL: bool = @import("build_options").internal;
