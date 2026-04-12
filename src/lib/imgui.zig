@@ -5,9 +5,7 @@
 //! compile time error to use any internal functions in a release version. This is implemented in `flint.zig`.
 
 /// The Imgui C API, generated using dear_bindings.
-pub const c = @cImport({
-    @cInclude("dcimgui.h");
-});
+pub const c = @import("imgui_c");
 const sdl = @import("sdl.zig").c;
 
 /// The ImGuiContext type is used in function signatures. When INTERNAL is set to false the library exposes a fake

@@ -13,34 +13,17 @@ pub fn build(b: *std.Build) !void {
 
     const build_options = b.addOptions();
     build_options.addOption(bool, "internal", internal);
+    const build_options_mod = build_options.createModule();
 
     // Default to building Flint if no other step is specified.
     var build_all_step = b.step("all", "Build all");
     b.default_step = build_all_step;
 
-    // Exposed module.
-    const flint_mod = b.addModule("flint", .{
-        .root_source_file = b.path("src/lib/flint.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    flint_mod.addOptions("build_options", build_options);
-    if (getSDLIncludePath(b, target, optimize)) |sdl_include_path| {
-        flint_mod.addIncludePath(sdl_include_path);
-    }
-    linkImgui(b, flint_mod, target, optimize, internal, build_all_step);
+    // Flint module.
+    const flint_mod = getFlintModule(b, b, target, optimize, build_all_step, build_options_mod, internal);
 
     // Main executable.
-    const exe = buildExecutable(
-        b,
-        b,
-        "flint",
-        exe_build_options_mod,
-        target,
-        optimize,
-        flint_mod,
-        build_all_step,
-    );
+    const exe = buildExecutable(b, b, target, optimize, exe_build_options_mod, flint_mod, "flint");
     build_all_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
 
     // Tests.
@@ -76,15 +59,39 @@ pub fn build(b: *std.Build) !void {
     buildNewExecutable(b, exe_build_options_mod, target);
 }
 
+pub fn getFlintModule(
+    b: *std.Build,
+    client_b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    install_step: *std.Build.Step,
+    build_options_mod: *std.Build.Module,
+    internal: bool,
+) *std.Build.Module {
+    const flint_mod = b.addModule("flint", .{
+        .root_source_file = b.path("src/lib/flint.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    flint_mod.addImport("build_options", build_options_mod);
+    if (getSDLIncludePath(b, target, optimize)) |sdl_include_path| {
+        flint_mod.addIncludePath(sdl_include_path);
+    }
+    if (internal) {
+        linkImgui(b, flint_mod, target, optimize, install_step);
+    }
+    linkSDL(b, client_b, flint_mod, target, optimize, install_step);
+    return flint_mod;
+}
+
 pub fn buildExecutable(
     b: *std.Build,
     client_b: *std.Build,
-    name: []const u8,
-    build_options_mod: *std.Build.Module,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
+    build_options_mod: *std.Build.Module,
     flint_mod: *std.Build.Module,
-    install_step: *std.Build.Step,
+    name: []const u8,
 ) *std.Build.Step.Compile {
     const module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -99,8 +106,6 @@ pub fn buildExecutable(
         .name = name,
         .root_module = module,
     });
-
-    linkSDL(b, b, exe, target, optimize, install_step);
 
     if (target.result.os.tag.isDarwin()) {
         exe.root_module.addRPathSpecial("@loader_path/lib");
@@ -121,39 +126,27 @@ pub fn buildExecutable(
     return exe;
 }
 
-pub fn linkSDL(
+fn linkSDL(
     b: *std.Build,
     client_b: *std.Build,
-    obj: *std.Build.Step.Compile,
+    module: *std.Build.Module,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     install_step: *std.Build.Step,
 ) void {
     if (getSDL(b, target, optimize)) |sdl_lib| {
-        obj.root_module.linkLibrary(sdl_lib);
-        install_step.dependOn(&client_b.addInstallArtifact(sdl_lib, .{}).step);
-    }
-}
-
-pub fn linkImgui(
-    b: *std.Build,
-    module: *std.Build.Module,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    internal: bool,
-    install_step: *std.Build.Step,
-) void {
-    if (internal) {
-        if (b.lazyDependency("imgui", .{
+        const translate_c = b.addTranslateC(.{
+            .root_source_file = b.path("src/lib/sdl.h"),
             .target = target,
             .optimize = optimize,
-        })) |imgui_dep| {
-            if (createImGuiLib(b, target, optimize, imgui_dep, install_step)) |imgui_lib| {
-                module.addIncludePath(b.path("src/lib/dcimgui"));
-                module.addIncludePath(imgui_dep.path("."));
-                module.linkLibrary(imgui_lib);
-            }
+        });
+        if (getSDLIncludePath(b, target, optimize)) |sdl_include_path| {
+            translate_c.addIncludePath(sdl_include_path);
         }
+        module.addImport("sdl_c", translate_c.createModule());
+
+        module.linkLibrary(sdl_lib);
+        install_step.dependOn(&client_b.addInstallArtifact(sdl_lib, .{}).step);
     }
 }
 
@@ -191,14 +184,31 @@ pub fn getSDLIncludePath(
     return result;
 }
 
-fn createImGuiLib(
+fn linkImgui(
+    b: *std.Build,
+    module: *std.Build.Module,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    install_step: *std.Build.Step,
+) void {
+    if (b.lazyDependency("imgui", .{
+        .target = target,
+        .optimize = optimize,
+    })) |imgui_dep| {
+        if (createImGuiModule(b, target, optimize, imgui_dep, install_step)) |imgui_mod| {
+            module.addImport("imgui_c", imgui_mod);
+        }
+    }
+}
+
+fn createImGuiModule(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     imgui_dep: *std.Build.Dependency,
     install_step: *std.Build.Step,
-) ?*std.Build.Step.Compile {
-    var imgui_lib: ?*std.Build.Step.Compile = null;
+) ?*std.Build.Module {
+    var imgui_mod: ?*std.Build.Module = null;
     const IMGUI_C_DEFINES: []const [2][]const u8 = &.{
         .{ "IMGUI_DISABLE_OBSOLETE_FUNCTIONS", "1" },
         .{ "IMGUI_DISABLE_OBSOLETE_KEYIO", "1" },
@@ -227,7 +237,7 @@ fn createImGuiLib(
 
             dcimgui_sdl.root_module.link_libcpp = true;
             dcimgui_sdl.addIncludePath(sdl_dep.path("include"));
-            dcimgui_sdl.addIncludePath(imgui_dep.path(""));
+            dcimgui_sdl.addIncludePath(imgui_dep.path("."));
             dcimgui_sdl.addIncludePath(imgui_dep.path("backends/"));
             dcimgui_sdl.addIncludePath(dear_bindings_dep.path(""));
             dcimgui_sdl.installHeadersDirectory(
@@ -261,11 +271,20 @@ fn createImGuiLib(
 
             install_step.dependOn(&b.addInstallArtifact(dcimgui_sdl, .{}).step);
 
-            imgui_lib = dcimgui_sdl;
+            const translate_c = b.addTranslateC(.{
+                .root_source_file = b.path("src/lib/imgui.h"),
+                .target = target,
+                .optimize = optimize,
+            });
+            translate_c.addIncludePath(dear_bindings_dep.path(""));
+            translate_c.addIncludePath(imgui_dep.path("."));
+
+            imgui_mod = translate_c.createModule();
+            imgui_mod.?.linkLibrary(dcimgui_sdl);
         }
     }
 
-    return imgui_lib;
+    return imgui_mod;
 }
 
 fn buildNewExecutable(

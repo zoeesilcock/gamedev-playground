@@ -42,21 +42,26 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const flint_mod = flint_dep.module("flint");
-    flint_mod.addImport("build_options", build_options_mod);
+    const flint_mod = flint.getFlintModule(
+        flint_dep.builder,
+        b,
+        target,
+        optimize,
+        b.getInstallStep(),
+        build_options_mod,
+        internal,
+    );
     module.addImport("flint", flint_mod);
-    flint.linkSDL(flint_dep.builder, b, lib, target, optimize, b.getInstallStep());
 
     if (!lib_only) {
         const exe = flint.buildExecutable(
             flint_dep.builder,
             b,
-            "diamonds",
-            build_options_mod,
             target,
             optimize,
+            build_options_mod,
             flint_mod,
-            b.getInstallStep(),
+            "diamonds",
         );
         b.getInstallStep().dependOn(&b.addInstallArtifact(exe, .{}).step);
     }

@@ -50,21 +50,26 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
-    const fint_mod = flint_dep.module("flint");
-    fint_mod.addImport("build_options", build_options_mod);
-    module.addImport("flint", fint_mod);
-    flint.linkSDL(flint_dep.builder, b, lib, target, optimize, b.getInstallStep());
+    const flint_mod = flint.getFlintModule(
+        flint_dep.builder,
+        b,
+        target,
+        optimize,
+        b.getInstallStep(),
+        build_options_mod,
+        internal,
+    );
+    module.addImport("flint", flint_mod);
 
     if (!lib_only) {
         const exe = flint.buildExecutable(
             flint_dep.builder,
             b,
-            "cube",
-            build_options_mod,
             target,
             optimize,
-            fint_mod,
-            b.getInstallStep(),
+            build_options_mod,
+            flint_mod,
+            "cube",
         );
         b.getInstallStep().dependOn(&b.addInstallArtifact(exe, .{}).step);
     }
@@ -80,7 +85,7 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
         .imports = &.{
-            .{ .name = "flint", .module = fint_mod },
+            .{ .name = "flint", .module = flint_mod },
         },
     });
 

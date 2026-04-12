@@ -13,7 +13,7 @@
 //! const target = b.standardTargetOptions(.{});
 //! const optimize = b.standardOptimizeOption(.{});
 //! const internal = b.option(bool, "internal", "include debug interface") orelse true;
-//! const lib_base_name = b.option([]const u8, "lib_base_name", "name of the shared library") orelse "diamonds";
+//! const lib_base_name = b.option([]const u8, "lib_base_name", "name of the shared library") orelse "your_lib_name";
 //! const lib_only = b.option(bool, "lib_only", "only build the shared library") orelse false;
 //!
 //! const build_options = b.addOptions();
@@ -29,21 +29,26 @@
 //!     .target = target,
 //!     .optimize = optimize,
 //! });
-//! const flint_mod = flint_dep.module("flint");
-//! flint_mod.addImport("build_options", build_options_mod);
+//! const flint_mod = flint.getFlintModule(
+//!     flint_dep.builder,
+//!     b,
+//!     target,
+//!     optimize,
+//!     b.getInstallStep(),
+//!     build_options_mod,
+//!     internal,
+//! );
 //! module.addImport("flint", flint_mod);
-//! flint.linkSDL(flint_dep.builder, b, lib, target, optimize, b.getInstallStep());
 //!
 //! if (!lib_only) {
 //!     const exe = flint.buildExecutable(
 //!         flint_dep.builder,
 //!         b,
-//!         "template",
-//!         build_options_mod,
 //!         target,
 //!         optimize,
+//!         build_options_mod,
 //!         flint_mod,
-//!         b.getInstallStep(),
+//!         "your_executable_name",
 //!     );
 //!     b.getInstallStep().dependOn(&b.addInstallArtifact(exe, .{}).step);
 //! }
