@@ -38,7 +38,7 @@ pub fn main(init: std.process.Init) !void {
     };
 
     const game_settings: GameLib.Settings = game.getSettings();
-    const target_frame_time: u64 = @intFromFloat(1000 / @as(f32, @floatFromInt(game_settings.target_frame_rate)));
+    const target_frame_time: u64 = @trunc(1000 / @as(f32, @floatFromInt(game_settings.target_frame_rate)));
 
     if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO | sdl.SDL_INIT_EVENTS)) {
         @panic("SDL_Init failed.");

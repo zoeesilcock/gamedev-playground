@@ -637,7 +637,7 @@ pub export fn tick(state_ptr: GameLib.GameStatePtr, time: u64, delta_time_int: u
         // Update tweens.
         if (entity.hasFlag(.has_tween)) {
             const total_duration = entity.tween_delay + entity.tween_duration;
-            entity.tween_time_passed += @intFromFloat(delta_time_actual * 1000);
+            entity.tween_time_passed += @trunc(delta_time_actual * 1000);
 
             if (entity.tween_time_passed <= total_duration and entity.tween_delay <= entity.tween_time_passed) {
                 const t: f32 =
