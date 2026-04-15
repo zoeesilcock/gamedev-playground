@@ -547,7 +547,8 @@ fn parseTagsChunks(reader: *std.Io.Reader, allocator: std.mem.Allocator) !?[]*As
 }
 
 test "single frame" {
-    const aseprite_doc: ?AseDocument = try loadDocument("fixtures/test.aseprite", std.testing.allocator);
+    const aseprite_doc: ?AseDocument =
+        try loadDocument("fixtures/test.aseprite", std.testing.allocator, std.testing.io);
 
     try std.testing.expect(aseprite_doc != null);
 
@@ -570,7 +571,8 @@ test "single frame" {
 }
 
 test "multiple frames" {
-    const aseprite_doc: ?AseDocument = try loadDocument("fixtures/test_animation.aseprite", std.testing.allocator);
+    const aseprite_doc: ?AseDocument =
+        try loadDocument("fixtures/test_animation.aseprite", std.testing.allocator, std.testing.io);
 
     try std.testing.expect(aseprite_doc != null);
 

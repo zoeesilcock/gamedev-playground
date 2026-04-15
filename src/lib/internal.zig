@@ -348,8 +348,9 @@ pub const DebugOutputWindow = struct {
             },
             .vector => |vector_info| {
                 try writer.print("{{", .{});
-                for (0..vector_info.len) |i| {
-                    try writer.print("{d}", .{value[i]});
+                const array: [vector_info.len]vector_info.child = value;
+                for (&array, 0..) |elem, i| {
+                    try writer.print("{d}", .{elem});
 
                     if (i < vector_info.len - 1) {
                         try writer.print(", ", .{});
