@@ -523,7 +523,7 @@ pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
                 _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
                 defer imgui.c.ImGui_End();
 
-                flint.internal.inspectStruct(state, &.{}, false, inputCustomTypes);
+                flint.internal.inspectStruct(state, &.{ "io", "allocator", "arena" }, false, inputCustomTypes);
             }
 
             imgui.renderGPU(command_buffer, swapchain_texture);

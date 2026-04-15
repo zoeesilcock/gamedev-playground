@@ -260,6 +260,6 @@ fn drawInternalUI(state: *State) void {
         _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
         defer imgui.c.ImGui_End();
 
-        flint.internal.inspectStruct(state, &.{}, false, null);
+        flint.internal.inspectStruct(state, &.{ "io", "allocator", "arena" }, false, null);
     }
 }
