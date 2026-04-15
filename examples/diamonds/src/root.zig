@@ -11,7 +11,6 @@ const internal = if (INTERNAL) @import("internal.zig") else struct {};
 const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
 pub const std_options: std.Options = .{
     .log_level = if (INTERNAL) .warn else .err,
-    .logFn = GameLib.logFn,
 };
 
 const GameLib = flint.GameLib;

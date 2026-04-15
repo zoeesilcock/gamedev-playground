@@ -6,7 +6,6 @@ const aseprite = flint.aseprite;
 
 pub const std_options: std.Options = .{
     .log_level = if (INTERNAL) .info else .err,
-    .logFn = GameLib.logFn,
 };
 
 // Build options.

@@ -132,19 +132,3 @@ pub fn load(self: *@This(), dyn_lib: *std.DynLib) !void {
     self.tick = dyn_lib.lookup(@TypeOf(self.tick), "tick") orelse return error.LookupFail;
     self.draw = dyn_lib.lookup(@TypeOf(self.draw), "draw") orelse return error.LookupFail;
 }
-
-/// Custom logger for posix systems since the default log function doesn't work from dynamic libraries on Linux.
-pub const logFn = if (builtin.os.tag == .windows) std.log.defaultLog else posixLogFn;
-
-fn posixLogFn(
-    comptime message_level: std.log.Level,
-    comptime scope: @TypeOf(.enum_literal),
-    comptime format: []const u8,
-    args: anytype,
-) void {
-    const level_txt = comptime message_level.asText();
-    const prefix2 = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
-    var buffer: [1024]u8 = undefined;
-    const msg = std.fmt.bufPrint(&buffer, level_txt ++ prefix2 ++ format ++ "\n", args) catch return;
-    nosuspend _ = std.posix.write(2, msg) catch return;
-}
