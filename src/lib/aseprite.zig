@@ -19,7 +19,7 @@ pub fn openInAseprite(sprite_asset: *AsepriteAsset, allocator: std.mem.Allocator
             path,
         };
 
-        _ = std.process.run(allocator, io, .{ .argv = &process_args }) catch |err| {
+        _ = std.process.spawn(io, .{ .argv = &process_args }) catch |err| {
             std.log.err("Error spawning process: {t}\n", .{err});
         };
     } else |err| {
