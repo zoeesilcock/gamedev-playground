@@ -3,6 +3,7 @@ const INTERNAL: bool = @import("build_options").internal;
 pub const sdl = @import("sdl.zig");
 pub const aseprite = @import("aseprite.zig");
 pub const fs = @import("fs.zig");
+pub const os = @import("os.zig");
 pub const imgui = if (INTERNAL) @import("imgui.zig") else struct {
     pub const ImGuiContext: type = anyopaque;
 };

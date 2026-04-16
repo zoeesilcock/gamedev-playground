@@ -3,6 +3,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const sdl = @import("sdl.zig").c;
+const os = @import("os.zig");
 const imgui = if (INTERNAL) @import("imgui.zig").c else struct {
     pub const ImGuiContext: type = anyopaque;
 };
@@ -14,6 +15,7 @@ const internal = if (INTERNAL) @import("internal.zig") else struct {
 
 // Build options.
 const INTERNAL: bool = @import("build_options").internal;
+const PLATFORM = @import("builtin").os.tag;
 
 // Types.
 pub const DebugAllocator = std.heap.DebugAllocator(.{
@@ -117,18 +119,34 @@ processInput: *const fn (GameStatePtr) callconv(.c) bool = undefined,
 tick: *const fn (GameStatePtr, time: u64, delta_time: u64) callconv(.c) void = undefined,
 draw: *const fn (GameStatePtr) callconv(.c) void = undefined,
 
-pub fn load(self: *@This(), dyn_lib: *std.DynLib) !void {
-    self.getSettings = dyn_lib.lookup(@TypeOf(self.getSettings), "getSettings") orelse return error.LookupFail;
-    self.initMinimal = dyn_lib.lookup(@TypeOf(self.initMinimal), "init") orelse return error.LookupFail;
-    self.initFull2D = dyn_lib.lookup(@TypeOf(self.initFull2D), "init") orelse return error.LookupFail;
-    self.initFull3D = dyn_lib.lookup(@TypeOf(self.initFull3D), "init") orelse return error.LookupFail;
+pub fn load(self: *@This(), dyn_lib: os.LoadedLibrary) !void {
+    if (PLATFORM == .windows) {
+        self.getSettings = @ptrCast(os.windows.GetProcAddress(dyn_lib, "getSettings") orelse return error.LookupFail);
+        self.initMinimal = @ptrCast(os.windows.GetProcAddress(dyn_lib, "init") orelse return error.LookupFail);
+        self.initFull2D = @ptrCast(os.windows.GetProcAddress(dyn_lib, "init") orelse return error.LookupFail);
+        self.initFull3D = @ptrCast(os.windows.GetProcAddress(dyn_lib, "init") orelse return error.LookupFail);
 
-    self.deinit = dyn_lib.lookup(@TypeOf(self.deinit), "deinit") orelse return error.LookupFail;
+        self.deinit = @ptrCast(os.windows.GetProcAddress(dyn_lib, "deinit") orelse return error.LookupFail);
 
-    self.willReload = dyn_lib.lookup(@TypeOf(self.willReload), "willReload") orelse return error.LookupFail;
-    self.reloaded = dyn_lib.lookup(@TypeOf(self.reloaded), "reloaded") orelse return error.LookupFail;
+        self.willReload = @ptrCast(os.windows.GetProcAddress(dyn_lib, "willReload") orelse return error.LookupFail);
+        self.reloaded = @ptrCast(os.windows.GetProcAddress(dyn_lib, "reloaded") orelse return error.LookupFail);
 
-    self.processInput = dyn_lib.lookup(@TypeOf(self.processInput), "processInput") orelse return error.LookupFail;
-    self.tick = dyn_lib.lookup(@TypeOf(self.tick), "tick") orelse return error.LookupFail;
-    self.draw = dyn_lib.lookup(@TypeOf(self.draw), "draw") orelse return error.LookupFail;
+        self.processInput = @ptrCast(os.windows.GetProcAddress(dyn_lib, "processInput") orelse return error.LookupFail);
+        self.tick = @ptrCast(os.windows.GetProcAddress(dyn_lib, "tick") orelse return error.LookupFail);
+        self.draw = @ptrCast(os.windows.GetProcAddress(dyn_lib, "draw") orelse return error.LookupFail);
+    } else {
+        self.getSettings = dyn_lib.lookup(@TypeOf(self.getSettings), "getSettings") orelse return error.LookupFail;
+        self.initMinimal = dyn_lib.lookup(@TypeOf(self.initMinimal), "init") orelse return error.LookupFail;
+        self.initFull2D = dyn_lib.lookup(@TypeOf(self.initFull2D), "init") orelse return error.LookupFail;
+        self.initFull3D = dyn_lib.lookup(@TypeOf(self.initFull3D), "init") orelse return error.LookupFail;
+
+        self.deinit = dyn_lib.lookup(@TypeOf(self.deinit), "deinit") orelse return error.LookupFail;
+
+        self.willReload = dyn_lib.lookup(@TypeOf(self.willReload), "willReload") orelse return error.LookupFail;
+        self.reloaded = dyn_lib.lookup(@TypeOf(self.reloaded), "reloaded") orelse return error.LookupFail;
+
+        self.processInput = dyn_lib.lookup(@TypeOf(self.processInput), "processInput") orelse return error.LookupFail;
+        self.tick = dyn_lib.lookup(@TypeOf(self.tick), "tick") orelse return error.LookupFail;
+        self.draw = dyn_lib.lookup(@TypeOf(self.draw), "draw") orelse return error.LookupFail;
+    }
 }

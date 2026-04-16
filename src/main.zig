@@ -21,7 +21,7 @@ const WINDOW_DECORATIONS_WIDTH = if (PLATFORM == .windows) 0 else 0;
 const WINDOW_DECORATIONS_HEIGHT = if (PLATFORM == .windows) 31 else 0;
 
 var game: GameLib = .{};
-var opt_dyn_lib: ?std.DynLib = null;
+var opt_dyn_lib: ?flint.os.LoadedLibrary = null;
 var build_process: ?std.process.Child = null;
 var dyn_lib_last_modified: i128 = 0;
 var src_last_modified: i128 = 0;
@@ -32,7 +32,7 @@ pub fn main(init: std.process.Init) !void {
     var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
     const allocator = debug_allocator.allocator();
 
-    loadDll(init.io) catch |err| {
+    loadDll(init.io, allocator) catch |err| {
         std.log.err("Failed to load the game library. Error: {t}", .{err});
         return err;
     };
@@ -198,7 +198,7 @@ pub fn main(init: std.process.Init) !void {
                     }
 
                     unloadDll() catch unreachable;
-                    loadDll(init.io) catch @panic("Failed to load the game lib.");
+                    loadDll(init.io, allocator) catch @panic("Failed to load the game lib.");
 
                     if (manage_imgui_lifecycle) {
                         initImgui(window.?, game_renderer, game_gpu_device, game_settings);
@@ -332,14 +332,14 @@ fn checkForChangesInDirectory(allocator: std.mem.Allocator, io: std.Io, path: []
 
 fn unloadDll() !void {
     if (opt_dyn_lib) |*dyn_lib| {
-        dyn_lib.close();
+        flint.os.unloadLibrary(dyn_lib.*);
         opt_dyn_lib = null;
     } else {
         return error.AlreadyUnloaded;
     }
 }
 
-fn loadDll(io: std.Io) !void {
+fn loadDll(io: std.Io, allocator: std.mem.Allocator) !void {
     if (opt_dyn_lib != null) return error.AlreadyLoaded;
 
     var lib_name: []const u8 = LIB_NAME;
@@ -350,8 +350,8 @@ fn loadDll(io: std.Io) !void {
         // Only make a copy of the library if we are in the dev directory (zig-out/bin/ on Windows).
         if (flint.fs.fileExists(io, LIB_DEV_DIRECTORY ++ LIB_NAME)) {
             const temp_copy_name: []const u8 = LIB_BASE_NAME ++ "_temp.dll";
-            var dev_directory = try std.fs.cwd().openDir(LIB_DEV_DIRECTORY, .{});
-            try dev_directory.copyFile(LIB_NAME, dev_directory, temp_copy_name, .{});
+            var dev_directory = try std.Io.Dir.cwd().openDir(io, LIB_DEV_DIRECTORY, .{});
+            try dev_directory.copyFile(LIB_NAME, dev_directory, temp_copy_name, io, .{});
             lib_name = temp_copy_name;
         }
     }
@@ -359,31 +359,21 @@ fn loadDll(io: std.Io) !void {
     var buffer: [1024]u8 = undefined;
     var lib_path: []const u8 = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ LIB_DEV_DIRECTORY, lib_name });
 
-    // Try to load the game library from the dev directory.
-    opt_dyn_lib = std.DynLib.open(lib_path) catch null;
-    if (opt_dyn_lib != null) {
-        std.log.info("Loading game library ({s}).", .{lib_path});
-    }
+    // Try to load the game library from the dev directory first.
+    opt_dyn_lib = try flint.os.loadLibrary(lib_path, allocator);
 
     if (opt_dyn_lib == null) {
-        // Try to load the game library from the current working directory.
         lib_path = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ "./", lib_name });
-        opt_dyn_lib = std.DynLib.open(lib_path) catch null;
-        if (opt_dyn_lib != null) {
-            std.log.info("Loading game library ({s}).", .{lib_path});
-        }
+        opt_dyn_lib = try flint.os.loadLibrary(lib_path, allocator);
     }
 
     if (opt_dyn_lib == null) {
-        // Try to load the game library from the "lib" directory in the current working directory.
         lib_path = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ "./lib/", lib_name });
-        opt_dyn_lib = std.DynLib.open(lib_path) catch null;
-        if (opt_dyn_lib != null) {
-            std.log.info("Loading game library ({s}).", .{lib_path});
-        }
+        opt_dyn_lib = try flint.os.loadLibrary(lib_path, allocator);
     }
 
-    if (opt_dyn_lib) |*dyn_lib| {
+    if (opt_dyn_lib) |dyn_lib| {
+        std.log.info("Loading game library ({s}).", .{lib_path});
         try game.load(dyn_lib);
     } else {
         return error.LibraryNotFound;
