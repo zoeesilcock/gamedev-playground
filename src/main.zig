@@ -29,8 +29,7 @@ var assets_last_modified: i128 = 0;
 var code_last_modified: i128 = 0;
 
 pub fn main(init: std.process.Init) !void {
-    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
-    const allocator = debug_allocator.allocator();
+    const allocator = init.gpa;
 
     loadDll(init.io, allocator) catch |err| {
         std.log.err("Failed to load the game library. Error: {t}", .{err});
@@ -254,10 +253,6 @@ pub fn main(init: std.process.Init) !void {
 
     sdl.SDL_DestroyWindow(window);
     sdl.SDL_Quit();
-
-    if (INTERNAL) {
-        _ = debug_allocator.detectLeaks();
-    }
 }
 
 fn initImgui(
