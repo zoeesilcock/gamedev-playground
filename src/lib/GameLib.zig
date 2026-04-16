@@ -119,21 +119,21 @@ processInput: *const fn (GameStatePtr) callconv(.c) bool = undefined,
 tick: *const fn (GameStatePtr, time: u64, delta_time: u64) callconv(.c) void = undefined,
 draw: *const fn (GameStatePtr) callconv(.c) void = undefined,
 
-pub fn load(self: *@This(), dyn_lib: os.LoadedLibrary) !void {
+pub fn load(self: *@This(), dyn_lib: *os.LoadedLibrary) !void {
     if (PLATFORM == .windows) {
-        self.getSettings = @ptrCast(os.windows.GetProcAddress(dyn_lib, "getSettings") orelse return error.LookupFail);
-        self.initMinimal = @ptrCast(os.windows.GetProcAddress(dyn_lib, "init") orelse return error.LookupFail);
-        self.initFull2D = @ptrCast(os.windows.GetProcAddress(dyn_lib, "init") orelse return error.LookupFail);
-        self.initFull3D = @ptrCast(os.windows.GetProcAddress(dyn_lib, "init") orelse return error.LookupFail);
+        self.getSettings = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "getSettings") orelse return error.LookupFail);
+        self.initMinimal = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "init") orelse return error.LookupFail);
+        self.initFull2D = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "init") orelse return error.LookupFail);
+        self.initFull3D = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "init") orelse return error.LookupFail);
 
-        self.deinit = @ptrCast(os.windows.GetProcAddress(dyn_lib, "deinit") orelse return error.LookupFail);
+        self.deinit = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "deinit") orelse return error.LookupFail);
 
-        self.willReload = @ptrCast(os.windows.GetProcAddress(dyn_lib, "willReload") orelse return error.LookupFail);
-        self.reloaded = @ptrCast(os.windows.GetProcAddress(dyn_lib, "reloaded") orelse return error.LookupFail);
+        self.willReload = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "willReload") orelse return error.LookupFail);
+        self.reloaded = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "reloaded") orelse return error.LookupFail);
 
-        self.processInput = @ptrCast(os.windows.GetProcAddress(dyn_lib, "processInput") orelse return error.LookupFail);
-        self.tick = @ptrCast(os.windows.GetProcAddress(dyn_lib, "tick") orelse return error.LookupFail);
-        self.draw = @ptrCast(os.windows.GetProcAddress(dyn_lib, "draw") orelse return error.LookupFail);
+        self.processInput = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "processInput") orelse return error.LookupFail);
+        self.tick = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "tick") orelse return error.LookupFail);
+        self.draw = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "draw") orelse return error.LookupFail);
     } else {
         self.getSettings = dyn_lib.lookup(@TypeOf(self.getSettings), "getSettings") orelse return error.LookupFail;
         self.initMinimal = dyn_lib.lookup(@TypeOf(self.initMinimal), "init") orelse return error.LookupFail;

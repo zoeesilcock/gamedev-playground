@@ -327,7 +327,7 @@ fn checkForChangesInDirectory(allocator: std.mem.Allocator, io: std.Io, path: []
 
 fn unloadDll() !void {
     if (opt_dyn_lib) |*dyn_lib| {
-        flint.os.unloadLibrary(dyn_lib.*);
+        flint.os.unloadLibrary(dyn_lib);
         opt_dyn_lib = null;
     } else {
         return error.AlreadyUnloaded;
@@ -367,7 +367,7 @@ fn loadDll(io: std.Io, allocator: std.mem.Allocator) !void {
         opt_dyn_lib = try flint.os.loadLibrary(lib_path, allocator);
     }
 
-    if (opt_dyn_lib) |dyn_lib| {
+    if (opt_dyn_lib) |*dyn_lib| {
         std.log.info("Loading game library ({s}).", .{lib_path});
         try game.load(dyn_lib);
     } else {

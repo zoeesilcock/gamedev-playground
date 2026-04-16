@@ -23,9 +23,9 @@ pub fn loadLibrary(path: []const u8, allocator: std.mem.Allocator) !?LoadedLibra
 }
 
 /// A wrapper which uses kernel32 on Windows and the standard library on other platforms.
-pub fn unloadLibrary(library: LoadedLibrary) void {
+pub fn unloadLibrary(library: *LoadedLibrary) void {
     if (PLATFORM == .windows) {
-        _ = windows.FreeLibrary(library);
+        _ = windows.FreeLibrary(library.*);
     } else {
         library.close();
     }
