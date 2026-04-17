@@ -13,6 +13,7 @@ The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 * Added a module with utilities for dealing with the file system, to begin with it covers Flints own needs.
 * Added a simpler way to integrate the Flint build into a project build.zig by providing a single function that returns both the module and executable.
 ### Changed
+* Updated minimum Zig version to 0.16.0.
 * Updated SDL to version 3.4.4.
 * Changed where we look for the game library to make the executable more portable. The order is now: zig-out if internal build, same directory as executable, and finally a directory called "lib" in the same directory as the executable.
 * The workaround to deal with building the game library while it is open on Windows is now only applied if the library is found in the dev directory (zig-out/bin), otherwise we skip it. This allows internal builds to be portable.

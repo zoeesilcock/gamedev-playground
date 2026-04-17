@@ -348,8 +348,9 @@ pub const DebugOutputWindow = struct {
             },
             .vector => |vector_info| {
                 try writer.print("{{", .{});
-                for (0..vector_info.len) |i| {
-                    try writer.print("{d}", .{value[i]});
+                const array: [vector_info.len]vector_info.child = value;
+                for (&array, 0..) |elem, i| {
+                    try writer.print("{d}", .{elem});
 
                     if (i < vector_info.len - 1) {
                         try writer.print(", ", .{});
@@ -445,10 +446,10 @@ pub const handleCustomTypesFn = ?*const fn (
 /// Generates imgui inputs for all fields on a struct.
 pub fn inspectStruct(
     struct_ptr: anytype,
-    ignored_fields: []const []const u8,
+    comptime ignored_fields: []const []const u8,
     expand_sections: bool,
     /// Function pointer which allows you to handle specific fields manually, see `handleCustomTypesFn`.
-    optHandleCustomTypes: handleCustomTypesFn,
+    comptime optHandleCustomTypes: handleCustomTypesFn,
 ) void {
     switch (@typeInfo(@TypeOf(struct_ptr))) {
         .optional => {
@@ -464,19 +465,21 @@ pub fn inspectStruct(
 
 fn inspectStructInternal(
     struct_ptr: anytype,
-    ignored_fields: []const []const u8,
+    comptime ignored_fields: []const []const u8,
     expand_sections: bool,
-    optHandleCustomTypes: handleCustomTypesFn,
+    comptime optHandleCustomTypes: handleCustomTypesFn,
 ) void {
     const struct_info = @typeInfo(@TypeOf(struct_ptr.*));
     switch (struct_info) {
         .@"struct" => {
             inline for (struct_info.@"struct".fields) |struct_field| {
-                var skip_field = false;
-                for (ignored_fields) |ignored| {
-                    if (std.mem.eql(u8, ignored, struct_field.name)) {
-                        skip_field = true;
-                        break;
+                comptime var skip_field = false;
+                comptime {
+                    for (ignored_fields) |ignored| {
+                        if (std.mem.eql(u8, ignored, struct_field.name)) {
+                            skip_field = true;
+                            break;
+                        }
                     }
                 }
 
@@ -517,9 +520,9 @@ fn inspectStructInternal(
 fn inputStruct(
     struct_field: std.builtin.Type.StructField,
     field_ptr: anytype,
-    ignored_fields: []const []const u8,
+    comptime ignored_fields: []const []const u8,
     expand_sections: bool,
-    optHandleCustomTypes: handleCustomTypesFn,
+    comptime optHandleCustomTypes: handleCustomTypesFn,
 ) void {
     var handled: bool = false;
     if (optHandleCustomTypes) |handleCustomTypes| {
@@ -618,9 +621,9 @@ fn inputStruct(
 fn inputStructSection(
     target: anytype,
     heading: ?[*:0]const u8,
-    ignored_fields: []const []const u8,
+    comptime ignored_fields: []const []const u8,
     expand_sections: bool,
-    optHandleCustomTypes: handleCustomTypesFn,
+    comptime optHandleCustomTypes: handleCustomTypesFn,
 ) void {
     imgui.ImGui_PushIDPtr(@ptrCast(heading));
     defer imgui.ImGui_PopID();

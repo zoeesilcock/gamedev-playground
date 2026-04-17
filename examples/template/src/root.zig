@@ -6,7 +6,6 @@ const aseprite = flint.aseprite;
 
 pub const std_options: std.Options = .{
     .log_level = if (INTERNAL) .info else .err,
-    .logFn = GameLib.logFn,
 };
 
 // Build options.
@@ -89,8 +88,12 @@ pub export fn deinit(state_ptr: GameLib.GameStatePtr) void {
 }
 
 fn loadAssets(state: *State) void {
-    state.welcome_sprite =
-        .load("assets/welcome.aseprite", state.dependencies.renderer, state.dependencies.allocator.*);
+    state.welcome_sprite = .load(
+        "assets/welcome.aseprite",
+        state.dependencies.renderer,
+        state.dependencies.allocator.*,
+        state.dependencies.io.*,
+    );
 }
 fn unloadAssets(state: *State) void {
     state.welcome_sprite.?.deinit(state.dependencies.allocator.*);
@@ -181,7 +184,7 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
     if (state.left_mouse_pressed) {
         if (state.time - state.left_mouse_last_pressed_time < 300) {
             // TODO: Check where the double click happened so we know which sprite to open.
-            aseprite.openInAseprite(&state.welcome_sprite.?, state.dependencies.allocator.*);
+            aseprite.openInAseprite(&state.welcome_sprite.?, state.dependencies.allocator.*, state.dependencies.io.*);
         }
 
         state.left_mouse_last_pressed_time = state.time;
@@ -256,6 +259,6 @@ fn drawInternalUI(state: *State) void {
         _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
         defer imgui.c.ImGui_End();
 
-        flint.internal.inspectStruct(state, &.{}, false, null);
+        flint.internal.inspectStruct(state, &.{ "io", "allocator", "arena" }, false, null);
     }
 }

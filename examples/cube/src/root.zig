@@ -11,7 +11,6 @@ const LOG_ALLOCATIONS: bool = @import("build_options").log_allocations;
 
 pub const std_options: std.Options = .{
     .log_level = if (INTERNAL) .info else .err,
-    .logFn = GameLib.logFn,
 };
 
 const Vector2 = math.Vector2;
@@ -409,7 +408,7 @@ pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
 
     // Draw to texture.
     var command_buffer: ?*sdl.SDL_GPUCommandBuffer =
-        sdl_utils.panicIfNull(sdl.SDL_AcquireGPUCommandBuffer(state.device), "Failed to acquire GPU commmand buffer");
+        sdl_utils.panicIfNull(sdl.SDL_AcquireGPUCommandBuffer(state.device), "Failed to acquire GPU command buffer");
 
     var color_target_info: sdl.SDL_GPUColorTargetInfo = .{
         .texture = state.render_texture,
@@ -523,7 +522,7 @@ pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
                 _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
                 defer imgui.c.ImGui_End();
 
-                flint.internal.inspectStruct(state, &.{}, false, inputCustomTypes);
+                flint.internal.inspectStruct(state, &.{ "io", "allocator", "arena" }, false, inputCustomTypes);
             }
 
             imgui.renderGPU(command_buffer, swapchain_texture);

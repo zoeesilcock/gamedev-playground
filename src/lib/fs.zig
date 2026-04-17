@@ -3,54 +3,57 @@ const std = @import("std");
 
 /// Opens a directory relative to the current working directory.
 /// Falls back to the executable directory if the directory isn't found.
-pub fn openDirRelative(sub_path: []const u8, args: std.fs.Dir.OpenOptions) !std.fs.Dir {
-    if (std.fs.cwd().openDir(sub_path, args)) |directory| {
+pub fn openDirRelative(io: std.Io, sub_path: []const u8, args: std.Io.Dir.OpenOptions) !std.Io.Dir {
+    if (std.Io.Dir.cwd().openDir(io, sub_path, args)) |directory| {
         return directory;
     } else |_| {
         var buffer: [1024]u8 = undefined;
-        const exe_path = try std.fs.selfExeDirPath(&buffer);
+        const path_length = try std.process.executableDirPath(io, &buffer);
+        const exe_path = buffer[0..path_length];
 
-        var exe_dir = try std.fs.cwd().openDir(exe_path, .{});
-        defer exe_dir.close();
+        var exe_dir = try std.Io.Dir.cwd().openDir(io, exe_path, .{});
+        defer exe_dir.close(io);
 
-        return try exe_dir.openDir(sub_path, args);
+        return try exe_dir.openDir(io, sub_path, args);
     }
 }
 
 /// Opens a file relative to the current working directory.
 /// Falls back to the executable directory if the file isn't found.
-pub fn openFileRelative(sub_path: []const u8, flags: std.fs.File.OpenFlags) !std.fs.File {
-    if (std.fs.cwd().openFile(sub_path, flags)) |file| {
+pub fn openFileRelative(io: std.Io, sub_path: []const u8, flags: std.Io.File.OpenFlags) !std.Io.File {
+    if (std.Io.Dir.cwd().openFile(io, sub_path, flags)) |file| {
         return file;
     } else |_| {
         var buffer: [1024]u8 = undefined;
-        const exe_path = try std.fs.selfExeDirPath(&buffer);
+        const path_length = try std.process.executableDirPath(io, &buffer);
+        const exe_path = buffer[0..path_length];
 
-        var exe_dir = try std.fs.cwd().openDir(exe_path, .{});
-        defer exe_dir.close();
+        var exe_dir = try std.Io.Dir.cwd().openDir(io, exe_path, .{});
+        defer exe_dir.close(io);
 
-        return try exe_dir.openFile(sub_path, flags);
+        return try exe_dir.openFile(io, sub_path, flags);
     }
 }
 
 /// Returns the provided path if it exists relative to the current working directory, otherwise it returns the path
 /// relative to the executable directory. Allocates memory for the result, which must be freed by the caller.
-pub fn getFilePathRelative(sub_path: []const u8, allocator: std.mem.Allocator) ![]const u8 {
-    if (fileExists(sub_path)) {
+pub fn getFilePathRelative(io: std.Io, sub_path: []const u8, allocator: std.mem.Allocator) ![]const u8 {
+    if (fileExists(io, sub_path)) {
         return try std.fmt.allocPrint(allocator, "{s}", .{sub_path});
     } else {
         var buffer: [1024]u8 = undefined;
-        const exe_path = try std.fs.selfExeDirPath(&buffer);
+        const path_length = try std.process.executableDirPath(io, &buffer);
+        const exe_path = buffer[0..path_length];
         return try std.fs.path.join(allocator, &.{ exe_path, sub_path });
     }
 }
 
 /// Checks if a file exists.
-pub fn fileExists(file_name: []const u8) bool {
+pub fn fileExists(io: std.Io, file_name: []const u8) bool {
     var result: bool = false;
 
-    const opt_file: ?std.fs.File = std.fs.cwd().openFile(file_name, .{ .mode = .read_only }) catch null;
-    defer if (opt_file) |file| file.close();
+    const opt_file: ?std.Io.File = std.Io.Dir.cwd().openFile(io, file_name, .{ .mode = .read_only }) catch null;
+    defer if (opt_file) |file| file.close(io);
 
     if (opt_file != null) {
         result = true;

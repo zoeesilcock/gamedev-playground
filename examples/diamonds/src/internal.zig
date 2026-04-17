@@ -439,7 +439,7 @@ pub fn drawDebugUI(state: *State) void {
             _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
             defer imgui.c.ImGui_End();
 
-            flint.internal.inspectStruct(state, &.{"entity"}, false, &inputCustomTypes);
+            flint.internal.inspectStruct(state, &.{ "io", "allocator", "arena" }, false, &inputCustomTypes);
         }
     }
 
@@ -527,7 +527,7 @@ pub fn drawDebugOverlay(state: *State) void {
                 const time_remaining: f32 =
                     @as(f32, @floatFromInt(((collision.time_added + show_time) - state.time))) /
                     @as(f32, @floatFromInt(show_time));
-                const color: Color = .{ 255, 128, 0, @intFromFloat(255 * time_remaining) };
+                const color: Color = .{ 255, 128, 0, @trunc(255 * time_remaining) };
                 if (state.getEntity(collision.collision.other_id)) |other_entity| {
                     drawDebugCollider(state.renderer, other_entity, color, scale, offset);
                 }
@@ -700,18 +700,19 @@ fn getTiledPosition(position: Vector2, asset: *const AsepriteAsset) Vector2 {
 
 fn openSprite(state: *State, allocator: std.mem.Allocator, entity: *Entity) void {
     if (state.assets.getSpriteAsset(state, entity)) |sprite_asset| {
-        aseprite.openInAseprite(sprite_asset, allocator);
+        aseprite.openInAseprite(sprite_asset, allocator, state.dependencies.io.*);
     }
 }
 
 fn saveLevel(state: *State, name: []const u8) !void {
+    const io: std.Io = state.dependencies.io.*;
     var buf: [LEVEL_NAME_BUFFER_SIZE * 2]u8 = undefined;
     const path = try std.fmt.bufPrint(&buf, "assets/{s}.lvl", .{name});
-    const file = try std.fs.cwd().createFile(path, .{ .truncate = true });
-    defer file.close();
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{ .truncate = true });
+    defer file.close(io);
 
     var writer_buf: [10 * 1024]u8 = undefined;
-    var file_writer = file.writer(&writer_buf);
+    var file_writer = file.writer(io, &writer_buf);
     var writer: *std.Io.Writer = &file_writer.interface;
 
     var walls_count: u32 = 0;
@@ -728,8 +729,8 @@ fn saveLevel(state: *State, name: []const u8) !void {
         if (entity.hasFlag(.has_block) and entity.hasFlag(.has_transform)) {
             try writer.writeInt(u32, @intFromEnum(entity.color), .little);
             try writer.writeInt(u32, @intFromEnum(entity.block_type), .little);
-            try writer.writeInt(i32, @intFromFloat(@round(entity.position[X])), .little);
-            try writer.writeInt(i32, @intFromFloat(@round(entity.position[Y])), .little);
+            try writer.writeInt(i32, @round(entity.position[X]), .little);
+            try writer.writeInt(i32, @round(entity.position[Y]), .little);
         }
     }
 
