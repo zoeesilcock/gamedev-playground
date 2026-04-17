@@ -355,16 +355,16 @@ fn loadDll(io: std.Io, allocator: std.mem.Allocator) !void {
     var lib_path: []const u8 = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ LIB_DEV_DIRECTORY, lib_name });
 
     // Try to load the game library from the dev directory first.
-    opt_dyn_lib = try flint.os.loadLibrary(lib_path, allocator);
+    opt_dyn_lib = flint.os.loadLibrary(lib_path, allocator) catch null;
 
     if (opt_dyn_lib == null) {
         lib_path = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ "./", lib_name });
-        opt_dyn_lib = try flint.os.loadLibrary(lib_path, allocator);
+        opt_dyn_lib = flint.os.loadLibrary(lib_path, allocator) catch null;
     }
 
     if (opt_dyn_lib == null) {
         lib_path = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ "./lib/", lib_name });
-        opt_dyn_lib = try flint.os.loadLibrary(lib_path, allocator);
+        opt_dyn_lib = flint.os.loadLibrary(lib_path, allocator) catch null;
     }
 
     if (opt_dyn_lib) |*dyn_lib| {
