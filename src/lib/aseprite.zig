@@ -11,12 +11,10 @@ pub fn openInAseprite(sprite_asset: *AsepriteAsset, allocator: std.mem.Allocator
     if (flint.fs.getFilePathRelative(io, sprite_asset.path, allocator)) |path| {
         defer allocator.free(path);
 
-        const process_args = if (PLATFORM == .windows) [_][]const u8{
-            "Aseprite.exe",
-            path,
-        } else [_][]const u8{
-            "open",
-            path,
+        const process_args = switch (PLATFORM) {
+            .windows => [_][]const u8{ "Aseprite.exe", path },
+            .macos => [_][]const u8{ "open", path },
+            else => [_][]const u8{ "aseprite", path },
         };
 
         _ = std.process.spawn(io, .{ .argv = &process_args }) catch |err| {
