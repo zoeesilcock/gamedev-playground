@@ -408,7 +408,7 @@ pub export fn draw(state_ptr: GameLib.GameStatePtr) void {
 
     // Draw to texture.
     var command_buffer: ?*sdl.SDL_GPUCommandBuffer =
-        sdl_utils.panicIfNull(sdl.SDL_AcquireGPUCommandBuffer(state.device), "Failed to acquire GPU commmand buffer");
+        sdl_utils.panicIfNull(sdl.SDL_AcquireGPUCommandBuffer(state.device), "Failed to acquire GPU command buffer");
 
     var color_target_info: sdl.SDL_GPUColorTargetInfo = .{
         .texture = state.render_texture,
