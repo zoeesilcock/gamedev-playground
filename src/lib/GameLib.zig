@@ -119,34 +119,33 @@ processInput: *const fn (GameStatePtr) callconv(.c) bool = undefined,
 tick: *const fn (GameStatePtr, time: u64, delta_time: u64) callconv(.c) void = undefined,
 draw: *const fn (GameStatePtr) callconv(.c) void = undefined,
 
+/// Loads the function pointers to the game library being loaded.
 pub fn load(self: *@This(), dyn_lib: *os.LoadedLibrary) !void {
-    if (PLATFORM == .windows) {
-        self.getSettings = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "getSettings") orelse return error.LookupFail);
-        self.initMinimal = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "init") orelse return error.LookupFail);
-        self.initFull2D = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "init") orelse return error.LookupFail);
-        self.initFull3D = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "init") orelse return error.LookupFail);
+    const self_info = @typeInfo(@This()).@"struct";
+    inline for (self_info.fields) |struct_field| {
+        switch (@typeInfo(struct_field.type)) {
+            .pointer => |ptr_info| {
+                if (@typeInfo(ptr_info.child) == .@"fn") {
+                    const fn_ptr = &@field(self, struct_field.name);
+                    var lib_fn_name = struct_field.name;
 
-        self.deinit = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "deinit") orelse return error.LookupFail);
+                    if (std.mem.eql(u8, lib_fn_name, "initMinimal") or
+                        std.mem.eql(u8, lib_fn_name, "initFull2D") or
+                        std.mem.eql(u8, lib_fn_name, "initFull3D"))
+                    {
+                        lib_fn_name = "init";
+                    }
 
-        self.willReload = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "willReload") orelse return error.LookupFail);
-        self.reloaded = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "reloaded") orelse return error.LookupFail);
-
-        self.processInput = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "processInput") orelse return error.LookupFail);
-        self.tick = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "tick") orelse return error.LookupFail);
-        self.draw = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, "draw") orelse return error.LookupFail);
-    } else {
-        self.getSettings = dyn_lib.lookup(@TypeOf(self.getSettings), "getSettings") orelse return error.LookupFail;
-        self.initMinimal = dyn_lib.lookup(@TypeOf(self.initMinimal), "init") orelse return error.LookupFail;
-        self.initFull2D = dyn_lib.lookup(@TypeOf(self.initFull2D), "init") orelse return error.LookupFail;
-        self.initFull3D = dyn_lib.lookup(@TypeOf(self.initFull3D), "init") orelse return error.LookupFail;
-
-        self.deinit = dyn_lib.lookup(@TypeOf(self.deinit), "deinit") orelse return error.LookupFail;
-
-        self.willReload = dyn_lib.lookup(@TypeOf(self.willReload), "willReload") orelse return error.LookupFail;
-        self.reloaded = dyn_lib.lookup(@TypeOf(self.reloaded), "reloaded") orelse return error.LookupFail;
-
-        self.processInput = dyn_lib.lookup(@TypeOf(self.processInput), "processInput") orelse return error.LookupFail;
-        self.tick = dyn_lib.lookup(@TypeOf(self.tick), "tick") orelse return error.LookupFail;
-        self.draw = dyn_lib.lookup(@TypeOf(self.draw), "draw") orelse return error.LookupFail;
+                    if (PLATFORM == .windows) {
+                        fn_ptr.* = @ptrCast(os.windows.GetProcAddress(dyn_lib.*, lib_fn_name) orelse
+                            return error.LookupFail);
+                    } else {
+                        fn_ptr.* = dyn_lib.lookup(struct_field.type, lib_fn_name) orelse
+                            return error.LookupFail;
+                    }
+                }
+            },
+            else => {},
+        }
     }
 }
