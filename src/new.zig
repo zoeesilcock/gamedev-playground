@@ -8,6 +8,7 @@ const IGNORED_PATHS = [_][]const u8{
     ".zig-cache",
     "imgui.ini",
     "zig-out",
+    "zig-pkg",
 };
 
 const FILES_WITH_SUBSTITUTIONS = [_][]const u8{
@@ -17,37 +18,34 @@ const FILES_WITH_SUBSTITUTIONS = [_][]const u8{
     "README.md",
 };
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    const allocator = init.arena.allocator();
+
     var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     errdefer stdout.flush() catch undefined;
 
-    var arena_allocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    const allocator = arena_allocator.allocator();
-    defer arena_allocator.deinit();
-
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
-
+    const args = try init.minimal.args.toSlice(allocator);
     const has_specified_name: bool = (args.len == 4 and std.mem.eql(u8, args[2], "--name"));
 
     if ((args.len == 2 and args[1][0] != '-' and args[1][1] != '-') or has_specified_name) {
         const target_path = args[1];
-        const source_path = try std.fs.cwd().realpathAlloc(allocator, "examples/template");
+        const source_path = "examples/template";
 
         try stdout.print("\nWelcome to Flint! Let's get you started.\n\n", .{});
         try stdout.print("Generating new project in: {s}, based on: {s}.\n", .{ target_path, source_path });
         try stdout.flush();
 
         // Make sure that the target directory doesn't exist.
-        var target_dir: ?std.fs.Dir =
-            std.fs.cwd().openDir(target_path, .{ .access_sub_paths = false }) catch |err| switch (err) {
+        var target_dir: ?std.Io.Dir =
+            std.Io.Dir.cwd().openDir(io, target_path, .{ .access_sub_paths = false }) catch |err| switch (err) {
                 error.FileNotFound => null,
                 else => return error.UnexpectedError,
             };
         if (target_dir) |*dir| {
-            dir.close();
+            dir.close(io);
             try stdout.print("\nERROR: Target path already exists, please use a path that doesn't exist.\n", .{});
             try stdout.flush();
             return;
@@ -67,25 +65,24 @@ pub fn main() !void {
         var buffer: [64]u8 = undefined;
         try stdout.print("{s}Creating target directory: {s}.\n", .{ getDecoration(0, .Middle, &buffer), target_path });
         try stdout.flush();
-        try std.fs.cwd().makePath(target_path);
-        target_dir = try std.fs.cwd().openDir(target_path, .{ .access_sub_paths = false });
+        try std.Io.Dir.cwd().createDirPath(io, target_path);
+        target_dir = try std.Io.Dir.cwd().openDir(io, target_path, .{ .access_sub_paths = false });
 
         // Copy template files to target directory.
-        var source_dir = try std.fs.cwd().openDir(source_path, .{ .access_sub_paths = false, .iterate = true });
-        defer source_dir.close();
-        try copyDirectory(source_dir, target_dir.?, new_name, stdout, allocator, 0);
+        var source_dir =
+            try std.Io.Dir.cwd().openDir(io, "examples/template", .{ .access_sub_paths = false, .iterate = true });
+        defer source_dir.close(io);
+        try copyDirectory(io, source_dir, target_dir.?, new_name, stdout, allocator, 0);
 
         // Add the Flint dependency using `zig fetch`.
         try stdout.print("\nAdding Flint dependency.\n", .{});
         try stdout.flush();
 
-        var zig_fetch_process = initChildProcess(&.{
-            "zig",
-            "fetch",
-            "--save",
-            "git+https://github.com/zoeesilcock/flint.git#v0.10.0",
-        }, target_path, target_dir, allocator);
-        if (zig_fetch_process.spawnAndWait()) |_| {} else |err| {
+        var zig_fetch_process = try std.process.spawn(io, .{
+            .cwd = .{ .dir = target_dir.? },
+            .argv = &.{ "zig", "fetch", "--save", "git+https://github.com/zoeesilcock/flint.git#v0.10.0" },
+        });
+        if (zig_fetch_process.wait(io)) |_| {} else |err| {
             try stdout.print(
                 "ERROR: Failed to run `zig fetch` (error: {t}), make sure Zig is on the path.\n",
                 .{err},
@@ -96,16 +93,24 @@ pub fn main() !void {
         try stdout.print("\nInitializing git repo.\n", .{});
         try stdout.flush();
 
-        var git_init_proccess = initChildProcess(&.{ "git", "init" }, target_path, target_dir, allocator);
-        if (git_init_proccess.spawnAndWait()) |_| {
-            git_init_proccess = initChildProcess(&.{ "git", "add", "." }, target_path, target_dir, allocator);
-            if (git_init_proccess.spawnAndWait()) |_| {} else |err| {
+        var git_init_proccess = try std.process.spawn(io, .{
+            .cwd = .{ .dir = target_dir.? },
+            .argv = &.{ "git", "init" },
+        });
+        if (git_init_proccess.wait(io)) |_| {
+            git_init_proccess = try std.process.spawn(io, .{
+                .cwd = .{ .dir = target_dir.? },
+                .argv = &.{ "git", "add", "." },
+            });
+            if (git_init_proccess.wait(io)) |_| {} else |err| {
                 try stdout.print("ERROR: Failed to run `git add .` (error: {t}).", .{err});
             }
 
-            git_init_proccess =
-                initChildProcess(&.{ "git", "commit", "-m", "Initial commit" }, target_path, target_dir, allocator);
-            if (git_init_proccess.spawnAndWait()) |_| {} else |err| {
+            git_init_proccess = try std.process.spawn(io, .{
+                .cwd = .{ .dir = target_dir.? },
+                .argv = &.{ "git", "commit", "-m", "Initial commit" },
+            });
+            if (git_init_proccess.wait(io)) |_| {} else |err| {
                 try stdout.print("ERROR: Failed to run `git commit` (error: {t}).", .{err});
             }
         } else |err| {
@@ -122,21 +127,6 @@ pub fn main() !void {
     }
 
     try stdout.flush(); // Don't forget to flush!
-}
-
-fn initChildProcess(
-    command: []const []const u8,
-    target_path: []const u8,
-    target_dir: ?std.fs.Dir,
-    allocator: std.mem.Allocator,
-) std.process.Child {
-    var process = std.process.Child.init(command, allocator);
-    if (PLATFORM == .windows) {
-        process.cwd = target_path;
-    } else {
-        process.cwd_dir = target_dir;
-    }
-    return process;
 }
 
 const Decoration = enum {
@@ -173,8 +163,9 @@ fn getDecoration(level: u32, decoration_type: Decoration, buffer: []u8) []const 
 }
 
 fn copyDirectory(
-    source_dir: std.fs.Dir,
-    target_dir: std.fs.Dir,
+    io: std.Io,
+    source_dir: std.Io.Dir,
+    target_dir: std.Io.Dir,
     new_name: []const u8,
     stdout: *std.Io.Writer,
     allocator: std.mem.Allocator,
@@ -184,8 +175,8 @@ fn copyDirectory(
     defer walker.deinit();
 
     var buffer: [64]u8 = undefined;
-    while (try walker.next()) |entry| {
-        if (!isPathIgnored(entry.path) and entry.dir.fd == source_dir.fd) {
+    while (try walker.next(io)) |entry| {
+        if (!isPathIgnored(entry.path) and entry.dir.handle == source_dir.handle) {
             if (entry.kind == .file) {
                 try stdout.print(
                     "{s}Copying file: {s}.\n",
@@ -193,9 +184,9 @@ fn copyDirectory(
                 );
                 try stdout.flush();
                 if (fileHasSubstitutions(entry.path)) {
-                    try copyFileWithSubstitutions(source_dir, target_dir, entry.path, new_name);
+                    try copyFileWithSubstitutions(io, source_dir, target_dir, entry.path, new_name);
                 } else {
-                    try entry.dir.copyFile(entry.path, target_dir, entry.path, .{});
+                    try entry.dir.copyFile(entry.path, target_dir, entry.path, io, .{});
                 }
             } else if (entry.kind == .directory) {
                 try stdout.print(
@@ -203,16 +194,16 @@ fn copyDirectory(
                     .{ getDecoration(level, .Middle, &buffer), entry.path },
                 );
                 try stdout.flush();
-                try target_dir.makeDir(entry.path);
+                try target_dir.createDir(io, entry.path, .default_dir);
 
-                var source_sub_dir: std.fs.Dir =
-                    try source_dir.openDir(entry.path, .{ .access_sub_paths = false, .iterate = true });
-                defer source_sub_dir.close();
+                var source_sub_dir: std.Io.Dir =
+                    try source_dir.openDir(io, entry.path, .{ .access_sub_paths = false, .iterate = true });
+                defer source_sub_dir.close(io);
 
-                var target_sub_dir: std.fs.Dir = try target_dir.openDir(entry.path, .{ .access_sub_paths = false });
-                defer target_sub_dir.close();
+                var target_sub_dir: std.Io.Dir = try target_dir.openDir(io, entry.path, .{ .access_sub_paths = false });
+                defer target_sub_dir.close(io);
 
-                try copyDirectory(source_sub_dir, target_sub_dir, new_name, stdout, allocator, level + 1);
+                try copyDirectory(io, source_sub_dir, target_sub_dir, new_name, stdout, allocator, level + 1);
             }
         }
     }
@@ -221,21 +212,22 @@ fn copyDirectory(
 }
 
 fn copyFileWithSubstitutions(
-    source_dir: std.fs.Dir,
-    target_dir: std.fs.Dir,
+    io: std.Io,
+    source_dir: std.Io.Dir,
+    target_dir: std.Io.Dir,
     file_name: []const u8,
     new_name: []const u8,
 ) !void {
-    const source_file: std.fs.File = try source_dir.openFile(file_name, .{ .mode = .read_only });
-    defer source_file.close();
+    const source_file: std.Io.File = try source_dir.openFile(io, file_name, .{ .mode = .read_only });
+    defer source_file.close(io);
     var read_buffer: [1024]u8 = undefined;
-    var file_reader = source_file.reader(&read_buffer);
+    var file_reader = source_file.reader(io, &read_buffer);
     const reader: *std.Io.Reader = &file_reader.interface;
 
-    const dest_file: std.fs.File = try target_dir.createFile(file_name, .{});
-    defer dest_file.close();
+    const dest_file: std.Io.File = try target_dir.createFile(io, file_name, .{});
+    defer dest_file.close(io);
     var write_buffer: [1024]u8 = undefined;
-    var file_writer = dest_file.writer(&write_buffer);
+    var file_writer = dest_file.writer(io, &write_buffer);
     const writer = &file_writer.interface;
 
     var string_buffer: [1024]u8 = undefined;
