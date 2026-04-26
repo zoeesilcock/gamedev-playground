@@ -216,14 +216,16 @@ pub const MemoryUsageWindow = struct {
 /// This window is used to print out arbitrary data at any point. Use the `print` and `printStruct` functions to append
 /// to the output and then call the `draw` function in your imgui draw function.
 pub const DebugOutputWindow = struct {
+    allocator: *std.mem.Allocator,
     arena: std.heap.ArenaAllocator,
     data: std.ArrayList([]const u8),
     size: imgui.ImVec2,
     position: imgui.ImVec2,
 
-    pub fn init(self: *DebugOutputWindow) void {
+    pub fn init(self: *DebugOutputWindow, allocator: *std.mem.Allocator) void {
         self.* = .{
-            .arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
+            .allocator = allocator,
+            .arena = std.heap.ArenaAllocator.init(allocator.*),
             .data = .empty,
             .size = .{ .x = 300, .y = 50 },
             .position = .{ .x = 10, .y = 40 },
@@ -255,7 +257,7 @@ pub const DebugOutputWindow = struct {
         }
 
         self.deinit();
-        self.init();
+        self.init(self.allocator);
     }
 
     /// Print out a string using the familiar fmt + args approach.

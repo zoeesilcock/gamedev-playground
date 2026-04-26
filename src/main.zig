@@ -125,7 +125,7 @@ pub fn main(init: std.process.Init) !void {
                 @panic("Failed to allocate MemoryUsageWindow."),
         };
 
-        internal_dependencies.output.init();
+        internal_dependencies.output.init(&internal_allocator);
         internal_dependencies.fps_window.init(sdl.SDL_GetPerformanceFrequency());
 
         internal_dependencies.memory_usage_window.init();
