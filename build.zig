@@ -164,6 +164,7 @@ pub fn addFlintExecutable(
     const exe = b.addExecutable(.{
         .name = name,
         .root_module = module,
+        .use_llvm = true,
     });
 
     if (target.result.os.tag.isDarwin()) {

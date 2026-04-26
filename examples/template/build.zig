@@ -32,6 +32,7 @@ pub fn build(b: *std.Build) void {
         .name = name,
         .linkage = .dynamic,
         .root_module = module,
+        .use_llvm = true,
     });
     b.getInstallStep().dependOn(&b.addInstallArtifact(lib, .{}).step);
 
