@@ -216,13 +216,13 @@ pub const MemoryUsageWindow = struct {
 /// This window is used to print out arbitrary data at any point. Use the `print` and `printStruct` functions to append
 /// to the output and then call the `draw` function in your imgui draw function.
 pub const DebugOutputWindow = struct {
-    allocator: *std.mem.Allocator,
+    allocator: *const std.mem.Allocator,
     arena: std.heap.ArenaAllocator,
     data: std.ArrayList([]const u8),
     size: imgui.ImVec2,
     position: imgui.ImVec2,
 
-    pub fn init(self: *DebugOutputWindow, allocator: *std.mem.Allocator) void {
+    pub fn init(self: *DebugOutputWindow, allocator: *const std.mem.Allocator) void {
         self.* = .{
             .allocator = allocator,
             .arena = std.heap.ArenaAllocator.init(allocator.*),
@@ -367,7 +367,7 @@ pub const DebugOutputWindow = struct {
 
 test "DebugOutputWindow can output a formatted string using the print function" {
     var output: DebugOutputWindow = undefined;
-    output.init();
+    output.init(&std.testing.allocator);
 
     output.print("This is a {s} that supports formatting: {d}", .{ "test", 0.5 });
 
@@ -380,7 +380,7 @@ test "DebugOutputWindow can output a formatted string using the print function" 
 
 test "DebugOutputWindow can output a text representation of an arbitrary struct using the printStruct function" {
     var output: DebugOutputWindow = undefined;
-    output.init();
+    output.init(&std.testing.allocator);
 
     output.printStruct("Title:", .{
         .string = "test",
@@ -406,7 +406,7 @@ test "DebugOutputWindow can output a text representation of an arbitrary struct 
 
 test "DebugOutputWindow.printStruct handles optional types" {
     var output: DebugOutputWindow = undefined;
-    output.init();
+    output.init(&std.testing.allocator);
 
     const ExampleStruct = struct {
         optional_string: ?[]const u8,
