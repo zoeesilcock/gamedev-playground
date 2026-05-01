@@ -39,12 +39,12 @@ pub const Settings = extern struct {
 };
 
 /// List of dependency sets available to receive on startup.
-pub const DependenciesType = enum(u32) {
+pub const DependencySet = enum(u32) {
     Minimal,
     Full2D,
     Full3D,
 
-    pub fn batteriesIncluded(self: DependenciesType) bool {
+    pub fn batteriesIncluded(self: DependencySet) bool {
         return self == .Full2D or self == .Full3D;
     }
 };
@@ -125,7 +125,7 @@ tick: *const fn (GameStatePtr, time: u64, delta_time: u64) callconv(.c) void = u
 draw: *const fn (GameStatePtr) callconv(.c) void = undefined,
 
 /// Returns the type of dependencies expected by the game based on which init function is defined.
-pub fn getDependcyType(self: GameLib) !DependenciesType {
+pub fn getDependcyType(self: GameLib) !DependencySet {
     return if (self.initMinimal != null)
         .Minimal
     else if (self.initFull2D != null)

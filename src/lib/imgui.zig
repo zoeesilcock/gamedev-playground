@@ -49,7 +49,7 @@ extern fn ImGui_ImplSDLGPU3_RenderDrawData(draw_data: ?*c.ImDrawData, command_bu
 pub var context: ?*ImGuiContext = null;
 var backend: Backend = .Renderer;
 
-/// Set the imgui context and backend, this is needed when using the dependency types that manage imgui the imgui
+/// Set the imgui context and backend, this is needed when using the dependency sets that manage the imgui
 /// lifecycle for you (all but `GameLib.Dependencies.Minimal`).
 pub fn setup(imgui_context: ?*ImGuiContext, imgui_backend: Backend) void {
     backend = imgui_backend;
