@@ -78,12 +78,13 @@ pub fn main(init: std.process.Init) !void {
     var memory_usage_window: ?*flint.internal.MemoryUsageWindow = null;
 
     // Prepare dependencies.
+    const dependencies_type: GameLib.DependenciesType = try game.getDependcyType();
     const game_gpa = backing_allocator.create(GameLib.DebugAllocator) catch
         @panic("Failed to initialize game allocator.");
     game_gpa.* = .init;
     var game_allocator: std.mem.Allocator = game_gpa.allocator();
 
-    switch (game_settings.dependencies) {
+    switch (dependencies_type) {
         .Minimal => {
             // Nothing needs to be done here.
         },
@@ -109,7 +110,7 @@ pub fn main(init: std.process.Init) !void {
         },
     }
 
-    if (INTERNAL and game_settings.dependencies.batteriesIncluded()) {
+    if (INTERNAL and dependencies_type.batteriesIncluded()) {
         const internal_gpa = (backing_allocator.create(GameLib.DebugAllocator) catch
             @panic("Failed to initialize game allocator."));
         internal_gpa.* = .init;
@@ -137,9 +138,9 @@ pub fn main(init: std.process.Init) !void {
     }
 
     // Init game with the requested dependencies.
-    switch (game_settings.dependencies) {
+    switch (dependencies_type) {
         .Minimal => {
-            state = game.initMinimal(.{
+            state = game.initMinimal.?(.{
                 .window = window.?,
             });
         },
@@ -152,7 +153,7 @@ pub fn main(init: std.process.Init) !void {
                 .internal = internal_dependencies,
             };
 
-            state = game.initFull2D(dependencies);
+            state = game.initFull2D.?(dependencies);
         },
         .Full3D => {
             const dependencies: GameLib.Dependencies.Full3D = .{
@@ -163,7 +164,7 @@ pub fn main(init: std.process.Init) !void {
                 .internal = internal_dependencies,
             };
 
-            state = game.initFull3D(dependencies);
+            state = game.initFull3D.?(dependencies);
         },
     }
 

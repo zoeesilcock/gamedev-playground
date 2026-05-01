@@ -22,6 +22,7 @@ The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 * [Breaking] Refactored how Flint is integrated into the build.zig of projects that use it. Instead of importing the flint module and passing it to `linkSDL` we provide a function called `getFlintModule` which returns the module with SDL already linked.
 * [Breaking] Adjusted the order of parameters for the `buildExecutable` build function to align with `getFlintModule`.
 * Moved C translation of SDL and Imgui from `@cImport`/`@cDefine`/`@cInclude` in zig files to using `b.addTranslateC` in the build.zig file.
+* [Breaking] Changed the naming of the init functions in game libraries to match the type of dependency that they will receive. So what was previously always `init` is now either `initMinimal`, `initFull2D` or `initFull3D`. This makes the library code clearer and inline with the GameLib documentation. It also removes the need to specify the dependency type in `GameSettings`.
 ### Fixed
 * Fixed installation of the SDL library artifact when using `linkSDL`. That function now needs the client_b so it can install SDL in the right location.
 ### Removed

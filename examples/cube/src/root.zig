@@ -249,14 +249,13 @@ const FragmentUniforms = struct {
 
 var settings: GameLib.Settings = .{
     .title = "Cube",
-    .dependencies = .Full3D,
 };
 
 pub export fn getSettings() GameLib.Settings {
     return settings;
 }
 
-pub export fn init(dependencies: GameLib.Dependencies.Full3D) GameLib.GameStatePtr {
+pub export fn initFull3D(dependencies: GameLib.Dependencies.Full3D) GameLib.GameStatePtr {
     var allocator = dependencies.allocator;
 
     if (INTERNAL and LOG_ALLOCATIONS) {

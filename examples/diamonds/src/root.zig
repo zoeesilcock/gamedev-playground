@@ -341,14 +341,13 @@ pub const Assets = struct {
 
 pub var settings: GameLib.Settings = .{
     .title = "Diamonds",
-    .dependencies = .Full2D,
 };
 
 pub export fn getSettings() GameLib.Settings {
     return settings;
 }
 
-pub export fn init(dependencies: GameLib.Dependencies.Full2D) GameLib.GameStatePtr {
+pub export fn initFull2D(dependencies: GameLib.Dependencies.Full2D) GameLib.GameStatePtr {
     var allocator: *std.mem.Allocator = dependencies.allocator;
 
     if (INTERNAL and LOG_ALLOCATIONS) {
@@ -385,7 +384,7 @@ pub fn restart(state: *State) void {
         *State,
         @ptrCast(
             @alignCast(
-                init(state.dependencies),
+                initFull2D(state.dependencies),
             ),
         ),
     ).*;

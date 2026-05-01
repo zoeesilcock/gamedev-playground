@@ -1,7 +1,7 @@
 //! This is the "flint" module that is exposed by flint which contains various building blocks that
 //! can be imported into your game to serve as a basis for your game engine.
 //!
-//! ## Integrating
+//! ## Build integration
 //! * Add flint as a dependency in your `build.zig.zon` file by running:
 //! ```
 //! zig fetch --save git+https://github.com/zoeesilcock/flint.git#v0.10.0
@@ -57,13 +57,21 @@
 //!     .build_options = build_options,
 //! });
 //! ```
+//!
 //! * The `internal` option decides if things like inspectors, editors, debug visualizations,
 //!   and such will be included in the build. This aims to be the main way of defining whether
 //!   a build is meant for internal testing or for release. Import it into your own code like this:
-//!     ```
-//!     const INTERNAL: bool = @import("build_options").internal;
-//!     ```
+//! ```
+//! const INTERNAL: bool = @import("build_options").internal;
+//! ```
+//!
 //! * See `src/examples/template/build.zig` for a complete example.
+//!
+//! ## Game library
+//! Flint expects you to create a library which exposes specific functions that will get called at various points in
+//! your games life cycle, this is where you will write your game. See the [GameLib](#docs.GameLib) struct for a list
+//! of functions and their signatures. The Template example has a minimal example of using the Full2D dependency set
+//! in `src/examples/template/root.src`.
 pub const sdl = @import("sdl.zig");
 pub const fs = @import("fs.zig");
 pub const os = @import("os.zig");

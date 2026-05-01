@@ -63,14 +63,13 @@ const State = struct {
 
 const settings: GameLib.Settings = .{
     .title = "Template",
-    .dependencies = .Full2D,
 };
 
 pub export fn getSettings() GameLib.Settings {
     return settings;
 }
 
-pub export fn init(dependencies: GameLib.Dependencies.Full2D) GameLib.GameStatePtr {
+pub export fn initFull2D(dependencies: GameLib.Dependencies.Full2D) GameLib.GameStatePtr {
     const state: *State = State.create(dependencies) catch @panic("Failed to create game state.");
 
     loadAssets(state);
