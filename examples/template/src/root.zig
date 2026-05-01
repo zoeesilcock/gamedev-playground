@@ -181,13 +181,19 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
         }
     }
 
-    if (state.left_mouse_pressed) {
-        if (state.time - state.left_mouse_last_pressed_time < 300) {
-            // TODO: Check where the double click happened so we know which sprite to open.
-            aseprite.openInAseprite(&state.welcome_sprite.?, state.dependencies.allocator.*, state.dependencies.io.*);
-        }
+    if (INTERNAL) {
+        if (state.left_mouse_pressed) {
+            if (state.time - state.left_mouse_last_pressed_time < 300) {
+                // TODO: Check where the double click happened so we know which sprite to open.
+                aseprite.openInAseprite(
+                    &state.welcome_sprite.?,
+                    state.dependencies.allocator.*,
+                    state.dependencies.io.*,
+                );
+            }
 
-        state.left_mouse_last_pressed_time = state.time;
+            state.left_mouse_last_pressed_time = state.time;
+        }
     }
 
     return continue_running;
