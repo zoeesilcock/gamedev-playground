@@ -186,7 +186,7 @@ pub fn main(init: std.process.Init) !void {
 
             if (code_changed) {
                 std.log.info("Code changed, rebuilding game library...", .{});
-                _ = try std.process.spawn(init.io, .{ .argv = &.{ "zig", "build", "-Dlib_only" } });
+                _ = try std.process.spawn(init.io, .{ .argv = &.{ "zig", "build", "-Dlib_only", "-fincremental" } });
             }
 
             if (dll_changed or assets_changed) {
