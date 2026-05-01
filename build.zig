@@ -29,11 +29,11 @@ pub fn build(b: *std.Build) !void {
     // Tests.
     const test_step = b.step("test", "Run unit tests");
 
-    const exe_tests = b.addTest(.{ .root_module = exe.root_module });
+    const exe_tests = b.addTest(.{ .root_module = exe.root_module, .use_llvm = true });
     const run_exe_tests = b.addRunArtifact(exe_tests);
     test_step.dependOn(&run_exe_tests.step);
 
-    const lib_tests = b.addTest(.{ .root_module = flint_mod });
+    const lib_tests = b.addTest(.{ .root_module = flint_mod, .use_llvm = true });
     const run_lib_tests = b.addRunArtifact(lib_tests);
     test_step.dependOn(&run_lib_tests.step);
 
