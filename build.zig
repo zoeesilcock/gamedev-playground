@@ -1,5 +1,9 @@
 const std = @import("std");
 
+const examples = [_][]const u8{
+    "examples/template",
+};
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -37,6 +41,19 @@ pub fn build(b: *std.Build) !void {
     const run_lib_tests = b.addRunArtifact(lib_tests);
     test_step.dependOn(&run_lib_tests.step);
 
+    // Build all examples.
+    const build_examples_step = b.step("examples", "Builds all permutations of the examples for testing purposes.");
+    for (examples) |example_path| {
+        const build_example_cmd = b.addSystemCommand(&.{
+            "zig",
+            "build",
+            "all",
+            "--build-file",
+            b.fmt("{s}/build.zig", .{example_path}),
+        });
+        build_examples_step.dependOn(&build_example_cmd.step);
+    }
+
     // Docs.
     const docs_mod = b.addModule("docs", .{
         .root_source_file = b.path("src/lib/docs.zig"),
@@ -67,6 +84,7 @@ pub const IntegrateOptions = struct {
     internal: bool = true,
     name: []const u8 = "game",
     lib_only: bool = false,
+    disable_run: bool = false,
 };
 
 pub const IntegrateResult = struct {
@@ -103,13 +121,15 @@ pub fn integrate(b: *std.Build, options: IntegrateOptions) IntegrateResult {
             options.name,
         );
 
-        const run_step = b.step("run", "Run the game");
-        const run_cmd = b.addRunArtifact(exe.?);
-        run_cmd.step.dependOn(b.getInstallStep());
-        if (b.args) |args| {
-            run_cmd.addArgs(args);
+        if (!options.disable_run) {
+            const run_step = b.step("run", "Run the game");
+            const run_cmd = b.addRunArtifact(exe.?);
+            run_cmd.step.dependOn(b.getInstallStep());
+            if (b.args) |args| {
+                run_cmd.addArgs(args);
+            }
+            run_step.dependOn(&run_cmd.step);
         }
-        run_step.dependOn(&run_cmd.step);
     }
 
     return .{
