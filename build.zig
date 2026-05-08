@@ -24,7 +24,7 @@ pub fn build(b: *std.Build) !void {
     b.default_step = build_all_step;
 
     // Flint module.
-    const flint_mod = addFlintModule(b, b, target, optimize, build_all_step, build_options_mod, internal);
+    const flint_mod = addFlintModule(b, b, target, optimize, build_all_step, build_options_mod, internal, .default);
 
     // Main executable.
     const exe = addFlintExecutable(b, target, optimize, exe_build_options_mod, flint_mod, "flint");
@@ -85,6 +85,8 @@ pub const IntegrateOptions = struct {
     name: []const u8 = "game",
     lib_only: bool = false,
     disable_run: bool = false,
+    install_step: *std.Build.Step,
+    dest_dir: std.Build.Step.InstallArtifact.Options.Dir,
 };
 
 pub const IntegrateResult = struct {
@@ -105,9 +107,10 @@ pub fn integrate(b: *std.Build, options: IntegrateOptions) IntegrateResult {
         b,
         options.target,
         options.optimize,
-        b.getInstallStep(),
+        options.install_step,
         build_options_mod,
         options.internal,
+        options.dest_dir,
     );
 
     var exe: ?*std.Build.Step.Compile = null;
@@ -147,6 +150,7 @@ pub fn addFlintModule(
     install_step: *std.Build.Step,
     build_options_mod: *std.Build.Module,
     internal: bool,
+    dest_dir: std.Build.Step.InstallArtifact.Options.Dir,
 ) *std.Build.Module {
     const flint_mod = b.addModule("flint", .{
         .root_source_file = b.path("src/lib/flint.zig"),
@@ -160,7 +164,7 @@ pub fn addFlintModule(
     if (internal) {
         linkImgui(b, flint_mod, target, optimize, install_step);
     }
-    linkSDL(b, client_b, flint_mod, target, optimize, install_step);
+    linkSDL(b, client_b, flint_mod, target, optimize, install_step, dest_dir);
     return flint_mod;
 }
 
@@ -205,6 +209,7 @@ fn linkSDL(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     install_step: *std.Build.Step,
+    dest_dir: std.Build.Step.InstallArtifact.Options.Dir,
 ) void {
     if (getSDL(b, target, optimize)) |sdl_lib| {
         const translate_c = b.addTranslateC(.{
@@ -218,7 +223,7 @@ fn linkSDL(
         module.addImport("sdl_c", translate_c.createModule());
 
         module.linkLibrary(sdl_lib);
-        install_step.dependOn(&client_b.addInstallArtifact(sdl_lib, .{}).step);
+        install_step.dependOn(&client_b.addInstallArtifact(sdl_lib, .{ .dest_dir = dest_dir }).step);
     }
 }
 

@@ -9,11 +9,22 @@ pub fn build(b: *std.Build) void {
     const lib_only = b.option(bool, "lib_only", "only build the shared library") orelse false;
 
     // Build game.
-    const result = buildGame(b, target, optimize, name, internal, lib_only, false);
+    const flint_options: flint.IntegrateOptions = .{
+        .dependency = b.dependency("flint", .{ .target = target, .optimize = optimize }),
+        .target = target,
+        .optimize = optimize,
+        .build_options = b.addOptions(),
+        .name = name,
+        .internal = internal,
+        .lib_only = lib_only,
+        .install_step = b.getInstallStep(),
+        .dest_dir = .default,
+    };
+    const result = buildGame(b, flint_options);
 
     // Build all.
     const build_all_step = b.step("all", "Builds all permutations of the game for testing purposes.");
-    buildMatrix(b, name, build_all_step);
+    buildMatrix(b, build_all_step, flint_options);
 
     // Install executable.
     if (result.exe) |exe| {
@@ -46,36 +57,22 @@ const BuildResult = struct {
 
 fn buildGame(
     b: *std.Build,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    name: []const u8,
-    internal: bool,
-    lib_only: bool,
-    disbable_run: bool,
+    integrate_options: flint.IntegrateOptions,
 ) BuildResult {
     // Integrate Flint.
-    const result = flint.integrate(b, .{
-        .dependency = b.dependency("flint", .{ .target = target, .optimize = optimize }),
-        .target = target,
-        .optimize = optimize,
-        .build_options = b.addOptions(),
-        .name = name,
-        .internal = internal,
-        .lib_only = lib_only,
-        .disable_run = disbable_run,
-    });
+    const result = flint.integrate(b, integrate_options);
 
     // Game library.
     const module = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
+        .target = integrate_options.target,
+        .optimize = integrate_options.optimize,
     });
     module.addImport("build_options", result.build_options_mod);
     module.addImport("flint", result.flint_mod);
 
     const lib = b.addLibrary(.{
-        .name = name,
+        .name = integrate_options.name,
         .linkage = .dynamic,
         .root_module = module,
         .use_llvm = true,
@@ -92,30 +89,38 @@ const targets = [_]std.Target.Query{
 const optimize_modes = [_]std.builtin.OptimizeMode{ .Debug, .ReleaseFast };
 const internal_modes = [_]bool{ true, false };
 
-fn buildMatrix(b: *std.Build, name: []const u8, step: *std.Build.Step) void {
+fn buildMatrix(b: *std.Build, step: *std.Build.Step, options: flint.IntegrateOptions) void {
     for (targets) |target_query| {
         const target = b.resolveTargetQuery(target_query);
         for (optimize_modes) |optimize| {
             for (internal_modes) |internal| {
-                const result = buildGame(b, target, optimize, name, internal, false, true);
-                const dest = b.fmt("builds/template-{s}-{s}-{s}-{s}", .{
+                const dest_path: []const u8 = b.fmt("builds/{s}-{s}-{s}-{s}-{s}", .{
+                    options.name,
                     @tagName(target_query.os_tag.?),
                     @tagName(target_query.cpu_arch.?),
                     @tagName(optimize),
                     if (internal) "internal" else "release",
                 });
+                const dest_dir: std.Build.Step.InstallArtifact.Options.Dir = .{ .override = .{ .custom = dest_path } };
+                const result = buildGame(b, .{
+                    .dependency = options.dependency,
+                    .target = target,
+                    .optimize = optimize,
+                    .build_options = b.addOptions(),
+                    .name = options.name,
+                    .internal = internal,
+                    .disable_run = true,
+                    .install_step = step,
+                    .dest_dir = dest_dir,
+                });
 
                 // Executable.
                 if (result.exe) |exe| {
-                    step.dependOn(&b.addInstallArtifact(exe, .{
-                        .dest_dir = .{ .override = .{ .custom = dest } },
-                    }).step);
+                    step.dependOn(&b.addInstallArtifact(exe, .{ .dest_dir = dest_dir }).step);
                 }
 
                 // Game library.
-                step.dependOn(&b.addInstallArtifact(result.lib, .{ .dest_dir = .{
-                    .override = .{ .custom = dest },
-                } }).step);
+                step.dependOn(&b.addInstallArtifact(result.lib, .{ .dest_dir = dest_dir }).step);
             }
         }
     }
