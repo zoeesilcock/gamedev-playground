@@ -84,9 +84,9 @@ pub const IntegrateOptions = struct {
     internal: bool = true,
     name: []const u8 = "game",
     lib_only: bool = false,
-    disable_run: bool = false,
+    skip_run_step: bool = false,
     install_step: *std.Build.Step,
-    dest_dir: std.Build.Step.InstallArtifact.Options.Dir,
+    dest_dir: std.Build.Step.InstallArtifact.Options.Dir = .default,
 };
 
 pub const IntegrateResult = struct {
@@ -124,7 +124,7 @@ pub fn integrate(b: *std.Build, options: IntegrateOptions) IntegrateResult {
             options.name,
         );
 
-        if (!options.disable_run) {
+        if (!options.skip_run_step) {
             const run_step = b.step("run", "Run the game");
             const run_cmd = b.addRunArtifact(exe.?);
             run_cmd.step.dependOn(b.getInstallStep());
@@ -183,7 +183,7 @@ pub fn buildMatrix(
                     .build_options = b.addOptions(),
                     .name = options.name,
                     .internal = internal,
-                    .disable_run = true,
+                    .skip_run_step = true,
                     .install_step = step,
                     .dest_dir = dest_dir,
                 });
