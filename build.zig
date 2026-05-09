@@ -142,6 +142,73 @@ pub fn integrate(b: *std.Build, options: IntegrateOptions) IntegrateResult {
     };
 }
 
+// The buildGame function called by the buildMatrix for each permutation of the matrix.
+const BuildGameFnType = *const fn (b: *std.Build, integrate_options: IntegrateOptions) BuildResult;
+
+// The result expected back from the buildGame function.
+pub const BuildResult = struct {
+    exe: ?*std.Build.Step.Compile,
+    lib: *std.Build.Step.Compile,
+    assets_path: ?std.Build.LazyPath,
+};
+
+/// This allows building various permutations of your game for testing purposes. The results will be placed in the
+/// ./zig-out/builds directory of your project. The buildGame function is called on each permutation, that function is
+/// where you place all the build logic your game needs.
+pub fn buildMatrix(
+    b: *std.Build,
+    step: *std.Build.Step,
+    options: IntegrateOptions,
+    buildGame: BuildGameFnType,
+    targets: []const std.Target.Query,
+    optimize_modes: []const std.builtin.OptimizeMode,
+    internal_modes: []const bool,
+) void {
+    for (targets) |target_query| {
+        const target = b.resolveTargetQuery(target_query);
+        for (optimize_modes) |optimize| {
+            for (internal_modes) |internal| {
+                const dest_path: []const u8 = b.fmt("builds/{s}-{s}-{s}-{s}-{s}", .{
+                    options.name,
+                    @tagName(target_query.os_tag.?),
+                    @tagName(target_query.cpu_arch.?),
+                    @tagName(optimize),
+                    if (internal) "internal" else "release",
+                });
+                const dest_dir: std.Build.Step.InstallArtifact.Options.Dir = .{ .override = .{ .custom = dest_path } };
+                const result = buildGame(b, .{
+                    .dependency = options.dependency,
+                    .target = target,
+                    .optimize = optimize,
+                    .build_options = b.addOptions(),
+                    .name = options.name,
+                    .internal = internal,
+                    .disable_run = true,
+                    .install_step = step,
+                    .dest_dir = dest_dir,
+                });
+
+                // Install executable.
+                if (result.exe) |exe| {
+                    step.dependOn(&b.addInstallArtifact(exe, .{ .dest_dir = dest_dir }).step);
+                }
+
+                // Install game library.
+                step.dependOn(&b.addInstallArtifact(result.lib, .{ .dest_dir = dest_dir }).step);
+
+                // Install game assets.
+                if (result.assets_path) |assets_path| {
+                    step.dependOn(&b.addInstallDirectory(.{
+                        .source_dir = assets_path,
+                        .install_dir = .{ .custom = dest_path },
+                        .install_subdir = "assets",
+                    }).step);
+                }
+            }
+        }
+    }
+}
+
 pub fn addFlintModule(
     b: *std.Build,
     client_b: *std.Build,

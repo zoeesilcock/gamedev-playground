@@ -1,6 +1,14 @@
 const std = @import("std");
 const flint = @import("flint");
 
+const TARGETS = [_]std.Target.Query{
+    .{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .gnu },
+    .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
+    // .{ .cpu_arch = .aarch64, .os_tag = .macos },
+};
+const OPTIMIZE_MODES = [_]std.builtin.OptimizeMode{ .Debug, .ReleaseFast };
+const INTERNAL_MODES = [_]bool{ true, false };
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -22,9 +30,9 @@ pub fn build(b: *std.Build) void {
     };
     const result = buildGame(b, flint_options);
 
-    // Build all.
+    // Build all variations.
     const build_all_step = b.step("all", "Builds all permutations of the game for testing purposes.");
-    buildMatrix(b, build_all_step, flint_options);
+    flint.buildMatrix(b, build_all_step, flint_options, &buildGame, &TARGETS, &OPTIMIZE_MODES, &INTERNAL_MODES);
 
     // Install executable.
     if (result.exe) |exe| {
@@ -50,15 +58,10 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_lib_tests.step);
 }
 
-const BuildResult = struct {
-    exe: ?*std.Build.Step.Compile,
-    lib: *std.Build.Step.Compile,
-};
-
 fn buildGame(
     b: *std.Build,
     integrate_options: flint.IntegrateOptions,
-) BuildResult {
+) flint.BuildResult {
     // Integrate Flint.
     const result = flint.integrate(b, integrate_options);
 
@@ -78,57 +81,5 @@ fn buildGame(
         .use_llvm = true,
     });
 
-    return .{ .exe = result.exe, .lib = lib };
-}
-
-const targets = [_]std.Target.Query{
-    .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
-    // .{ .cpu_arch = .aarch64, .os_tag = .macos },
-    .{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .gnu },
-};
-const optimize_modes = [_]std.builtin.OptimizeMode{ .Debug, .ReleaseFast };
-const internal_modes = [_]bool{ true, false };
-
-fn buildMatrix(b: *std.Build, step: *std.Build.Step, options: flint.IntegrateOptions) void {
-    for (targets) |target_query| {
-        const target = b.resolveTargetQuery(target_query);
-        for (optimize_modes) |optimize| {
-            for (internal_modes) |internal| {
-                const dest_path: []const u8 = b.fmt("builds/{s}-{s}-{s}-{s}-{s}", .{
-                    options.name,
-                    @tagName(target_query.os_tag.?),
-                    @tagName(target_query.cpu_arch.?),
-                    @tagName(optimize),
-                    if (internal) "internal" else "release",
-                });
-                const dest_dir: std.Build.Step.InstallArtifact.Options.Dir = .{ .override = .{ .custom = dest_path } };
-                const result = buildGame(b, .{
-                    .dependency = options.dependency,
-                    .target = target,
-                    .optimize = optimize,
-                    .build_options = b.addOptions(),
-                    .name = options.name,
-                    .internal = internal,
-                    .disable_run = true,
-                    .install_step = step,
-                    .dest_dir = dest_dir,
-                });
-
-                // Install executable.
-                if (result.exe) |exe| {
-                    step.dependOn(&b.addInstallArtifact(exe, .{ .dest_dir = dest_dir }).step);
-                }
-
-                // Install game library.
-                step.dependOn(&b.addInstallArtifact(result.lib, .{ .dest_dir = dest_dir }).step);
-
-                // Install game assets.
-                step.dependOn(&b.addInstallDirectory(.{
-                    .source_dir = b.path("assets"),
-                    .install_dir = .{ .custom = dest_path },
-                    .install_subdir = "assets",
-                }).step);
-            }
-        }
-    }
+    return .{ .exe = result.exe, .lib = lib, .assets_path = b.path("assets") };
 }
