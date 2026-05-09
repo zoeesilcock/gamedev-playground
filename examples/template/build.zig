@@ -114,13 +114,20 @@ fn buildMatrix(b: *std.Build, step: *std.Build.Step, options: flint.IntegrateOpt
                     .dest_dir = dest_dir,
                 });
 
-                // Executable.
+                // Install executable.
                 if (result.exe) |exe| {
                     step.dependOn(&b.addInstallArtifact(exe, .{ .dest_dir = dest_dir }).step);
                 }
 
-                // Game library.
+                // Install game library.
                 step.dependOn(&b.addInstallArtifact(result.lib, .{ .dest_dir = dest_dir }).step);
+
+                // Install game assets.
+                step.dependOn(&b.addInstallDirectory(.{
+                    .source_dir = b.path("assets"),
+                    .install_dir = .{ .custom = dest_path },
+                    .install_subdir = "assets",
+                }).step);
             }
         }
     }
