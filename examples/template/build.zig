@@ -60,22 +60,22 @@ pub fn build(b: *std.Build) void {
 
 fn buildGame(
     b: *std.Build,
-    integrate_options: flint.IntegrateOptions,
+    flint_options: flint.IntegrateOptions,
 ) flint.BuildResult {
     // Integrate Flint.
-    const result = flint.integrate(b, integrate_options);
+    const result = flint.integrate(b, flint_options);
 
     // Game library.
     const module = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
-        .target = integrate_options.target,
-        .optimize = integrate_options.optimize,
+        .target = flint_options.target,
+        .optimize = flint_options.optimize,
     });
     module.addImport("build_options", result.build_options_mod);
     module.addImport("flint", result.flint_mod);
 
     const lib = b.addLibrary(.{
-        .name = integrate_options.name,
+        .name = flint_options.name,
         .linkage = .dynamic,
         .root_module = module,
         .use_llvm = true,

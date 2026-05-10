@@ -143,7 +143,7 @@ pub fn integrate(b: *std.Build, options: IntegrateOptions) IntegrateResult {
 }
 
 // The buildGame function called by the buildMatrix for each permutation of the matrix.
-const BuildGameFnType = *const fn (b: *std.Build, integrate_options: IntegrateOptions) BuildResult;
+const BuildGameFnType = *const fn (b: *std.Build, flint_options: IntegrateOptions) BuildResult;
 
 // The result expected back from the buildGame function.
 pub const BuildResult = struct {
