@@ -6,6 +6,7 @@ const EXAMPLE_PATHS = [_][]const u8{
     "examples/cube",
 };
 const PLATFORM = @import("builtin").os.tag;
+const PLATFORM_CPU = @import("builtin").target.cpu;
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -174,6 +175,9 @@ pub fn buildMatrix(
             continue;
         }
 
+        // If we are building for the same OS and CPU as the build is running on we consider it a native build.
+        const use_native_query = (target_query.os_tag == PLATFORM and target_query.cpu_arch == PLATFORM_CPU.arch);
+
         const target = b.resolveTargetQuery(target_query);
         for (optimize_modes) |optimize| {
             for (internal_modes) |internal| {
@@ -187,7 +191,11 @@ pub fn buildMatrix(
                 const dest_dir: std.Build.Step.InstallArtifact.Options.Dir = .{ .override = .{ .custom = dest_path } };
                 const result = buildGame(b, .{
                     .dependency = options.dependency,
-                    .target = target,
+                    // Workaround for the fact that zig build system considers any values in the target query to be
+                    // non-native even if they match the build machine. Without this the SDL build.zig will complain
+                    // about missing --sysroot even when we are running on MacOS and don't actually need to specify it.
+                    // By passing a the default target in this case the target will be considered native.
+                    .target = if (use_native_query) options.target else target,
                     .optimize = optimize,
                     .build_options = b.addOptions(),
                     .name = options.name,
