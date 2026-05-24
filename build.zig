@@ -1,7 +1,9 @@
 const std = @import("std");
 
-const examples = [_][]const u8{
+const EXAMPLE_PATHS = [_][]const u8{
     "examples/template",
+    "examples/diamonds",
+    "examples/cube",
 };
 const PLATFORM = @import("builtin").os.tag;
 
@@ -44,7 +46,7 @@ pub fn build(b: *std.Build) !void {
 
     // Build all examples.
     const build_examples_step = b.step("examples", "Builds all permutations of the examples for testing purposes.");
-    for (examples) |example_path| {
+    for (EXAMPLE_PATHS) |example_path| {
         const build_example_cmd = b.addSystemCommand(&.{
             "zig",
             "build",
