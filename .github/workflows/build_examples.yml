@@ -1,0 +1,32 @@
+name: Build examples
+on: [push]
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+jobs:
+  build:
+    # Cross compiling for MacOS is technically not allowed by Apple, so we use a MacOS runner for this.
+    # In the future we may need to do something else here since certain platforms probably can't be built from MacOS.
+    runs-on: macos-latest
+    name: Build examples
+    steps:
+      - uses: actions/checkout@v6
+      - uses: mlugg/setup-zig@v2
+        with:
+            version: 0.16.0
+
+      - name: Build
+        run: zig build examples
+
+      - name: Upload artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          find examples -mindepth 4 -maxdepth 4 -type d -path "*/zig-out/builds/*" | while IFS= read -r dir; do
+            name=$(basename "$dir")
+            echo "Uploading $dir as $name..."
+            curl -sS -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Content-Type: application/zip" \
+              "https://uploads.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts?name=${name}" \
+              --data-binary @<(cd "$dir" && zip -r - .)
+          done
