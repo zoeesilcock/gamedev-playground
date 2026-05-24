@@ -3,6 +3,7 @@ const std = @import("std");
 const examples = [_][]const u8{
     "examples/template",
 };
+const PLATFORM = @import("builtin").os.tag;
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -165,6 +166,12 @@ pub fn buildMatrix(
     internal_modes: []const bool,
 ) void {
     for (targets) |target_query| {
+        // Skip MacOS when on a different platform without specifying the sysroot which is required for SDL.
+        if (b.sysroot == null and target_query.os_tag == .macos and target_query.os_tag != PLATFORM) {
+            std.log.info("MacOS skipped since --sysroot was not specified, the Apple SDKs are required for cross compiling to this target.", .{});
+            continue;
+        }
+
         const target = b.resolveTargetQuery(target_query);
         for (optimize_modes) |optimize| {
             for (internal_modes) |internal| {
