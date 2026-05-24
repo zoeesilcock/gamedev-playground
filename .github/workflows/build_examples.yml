@@ -17,16 +17,38 @@ jobs:
       - name: Build
         run: zig build examples
 
+      - name: Install @actions/artifact
+        run: npm install @actions/artifact
+
+      - name: Extract runtime variables
+        uses: actions/github-script@v9
+        with:
+          script: |
+            core.exportVariable('ACTIONS_RESULTS_URL', process.env['ACTIONS_RESULTS_URL'])
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env['ACTIONS_RUNTIME_TOKEN'])
+
       - name: Upload artifacts
+        shell: node {0}
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_PATH: ${{ github.workspace }}/node_modules
+          WORKSPACE: ${{ github.workspace }}
         run: |
-          find examples -mindepth 4 -maxdepth 4 -type d -path "*/zig-out/builds/*" | while IFS= read -r dir; do
-            name=$(basename "$dir")
-            echo "Uploading $dir as $name..."
-            curl -sS -X POST \
-              -H "Authorization: Bearer $GH_TOKEN" \
-              -H "Content-Type: application/zip" \
-              "https://uploads.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts?name=${name}" \
-              --data-binary @<(cd "$dir" && zip -r - .)
-          done
+          import { execSync } from 'child_process';
+          import { join, basename } from 'path';
+
+          const workspace = process.env.WORKSPACE;
+          const { DefaultArtifactClient } = await import(
+            join(workspace, 'node_modules/@actions/artifact/lib/artifact.js')
+          );
+
+          const client = new DefaultArtifactClient();
+          const dirs = execSync(
+            `find ${workspace}/examples -mindepth 4 -maxdepth 4 -type d -path '*/zig-out/builds/*'`
+          ).toString().trim().split('\n');
+
+          for (const dir of dirs) {
+            const name = basename(dir);
+            const files = execSync(`find ${dir} -type f`).toString().trim().split('\n');
+            console.log(`Uploading ${dir} as ${name}...`);
+            await client.uploadArtifact(name, files, dir);
+          }
