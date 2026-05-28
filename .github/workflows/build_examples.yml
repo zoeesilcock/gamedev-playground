@@ -17,38 +17,17 @@ jobs:
       - name: Build
         run: zig build examples
 
-      - name: Install @actions/artifact
-        run: npm install @actions/artifact
-
-      - name: Extract runtime variables
-        uses: actions/github-script@v9
+      - uses: actions/upload-artifact@v7
         with:
-          script: |
-            core.exportVariable('ACTIONS_RESULTS_URL', process.env['ACTIONS_RESULTS_URL'])
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env['ACTIONS_RUNTIME_TOKEN'])
+          name: flint-example-template
+          path: examples/template/zig-out/builds/
 
-      - name: Upload artifacts
-        shell: node {0}
-        env:
-          NODE_PATH: ${{ github.workspace }}/node_modules
-          WORKSPACE: ${{ github.workspace }}
-        run: |
-          import { execSync } from 'child_process';
-          import { join, basename } from 'path';
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flint-example-diamonds
+          path: examples/diamonds/zig-out/builds/
 
-          const workspace = process.env.WORKSPACE;
-          const { DefaultArtifactClient } = await import(
-            join(workspace, 'node_modules/@actions/artifact/lib/artifact.js')
-          );
-
-          const client = new DefaultArtifactClient();
-          const dirs = execSync(
-            `find ${workspace}/examples -mindepth 4 -maxdepth 4 -type d -path '*/zig-out/builds/*'`
-          ).toString().trim().split('\n');
-
-          for (const dir of dirs) {
-            const name = basename(dir);
-            const files = execSync(`find ${dir} -type f`).toString().trim().split('\n');
-            console.log(`Uploading ${dir} as ${name}...`);
-            await client.uploadArtifact(name, files, dir);
-          }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flint-example-cube
+          path: examples/cube/zig-out/builds/
