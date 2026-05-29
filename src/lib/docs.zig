@@ -52,7 +52,8 @@
 //!
 //!     // Build all variations.
 //!     const build_all_step = b.step("all", "Builds all permutations of the game for testing purposes.");
-//!     flint.buildMatrix(b, build_all_step, flint_options, &buildGame, &TARGETS, &OPTIMIZE_MODES, &INTERNAL_MODES);
+//!     const build_matrix = flint.BuildMatrixStep.create(b, .{ .options = flint_options, .buildGame = &buildGame });
+//!     build_all_step.dependOn(&build_matrix.step);
 //!
 //!     // Install executable.
 //!     if (result.exe) |exe| {
@@ -127,3 +128,6 @@ pub const imgui = @import("imgui.zig");
 pub const internal = @import("internal.zig");
 
 pub const GameLib = @import("GameLib.zig");
+
+pub const integration = @import("build/integration.zig");
+pub const BuildMatrixStep = @import("build/MatrixStep.zig");

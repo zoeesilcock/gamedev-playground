@@ -1,14 +1,6 @@
 const std = @import("std");
 const flint = @import("flint");
 
-const TARGETS = [_]std.Target.Query{
-    .{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .gnu },
-    .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
-    .{ .cpu_arch = .aarch64, .os_tag = .macos },
-};
-const OPTIMIZE_MODES = [_]std.builtin.OptimizeMode{ .Debug, .ReleaseFast };
-const INTERNAL_MODES = [_]bool{ true, false };
-
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -32,7 +24,8 @@ pub fn build(b: *std.Build) void {
 
     // Build all variations.
     const build_all_step = b.step("all", "Builds all permutations of the game for testing purposes.");
-    flint.buildMatrix(b, build_all_step, flint_options, &buildGame, &TARGETS, &OPTIMIZE_MODES, &INTERNAL_MODES);
+    const build_matrix = flint.BuildMatrixStep.create(b, .{ .options = flint_options, .buildGame = &buildGame });
+    build_all_step.dependOn(&build_matrix.step);
 
     // Install executable.
     if (result.exe) |exe| {
