@@ -24,7 +24,7 @@
 //! const TARGETS = [_]std.Target.Query{
 //!     .{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .gnu },
 //!     .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
-//!     // .{ .cpu_arch = .aarch64, .os_tag = .macos },
+//!     .{ .cpu_arch = .aarch64, .os_tag = .macos },
 //! };
 //! const OPTIMIZE_MODES = [_]std.builtin.OptimizeMode{ .Debug, .ReleaseFast };
 //! const INTERNAL_MODES = [_]bool{ true, false };
