@@ -1,4 +1,21 @@
 const std = @import("std");
+const integration = @import("src/lib/build/integration.zig");
+const MatrixStep = @import("src/lib/build/MatrixStep.zig");
+
+// Types.
+pub const IntegrateOptions = integration.IntegrateOptions;
+pub const IntegrateResult = integration.IntegrateResult;
+pub const BuildMatrixStep = MatrixStep;
+pub const BuildGameFnType = MatrixStep.BuildGameFnType;
+pub const BuildResult = MatrixStep.BuildResult;
+
+const EXAMPLE_PATHS = [_][]const u8{
+    "examples/template",
+    "examples/diamonds",
+    "examples/cube",
+};
+const PLATFORM = @import("builtin").os.tag;
+const PLATFORM_CPU = @import("builtin").target.cpu;
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -20,7 +37,7 @@ pub fn build(b: *std.Build) !void {
     b.default_step = build_all_step;
 
     // Flint module.
-    const flint_mod = addFlintModule(b, b, target, optimize, build_all_step, build_options_mod, internal);
+    const flint_mod = addFlintModule(b, b, target, optimize, build_all_step, build_options_mod, internal, .default);
 
     // Main executable.
     const exe = addFlintExecutable(b, target, optimize, exe_build_options_mod, flint_mod, "flint");
@@ -36,6 +53,19 @@ pub fn build(b: *std.Build) !void {
     const lib_tests = b.addTest(.{ .root_module = flint_mod, .use_llvm = true });
     const run_lib_tests = b.addRunArtifact(lib_tests);
     test_step.dependOn(&run_lib_tests.step);
+
+    // Build all examples.
+    const build_examples_step = b.step("examples", "Builds all permutations of the examples for testing purposes.");
+    for (EXAMPLE_PATHS) |example_path| {
+        const build_example_cmd = b.addSystemCommand(&.{
+            "zig",
+            "build",
+            "all",
+            "--build-file",
+            b.fmt("{s}/build.zig", .{example_path}),
+        });
+        build_examples_step.dependOn(&build_example_cmd.step);
+    }
 
     // Docs.
     const docs_mod = b.addModule("docs", .{
@@ -59,22 +89,6 @@ pub fn build(b: *std.Build) !void {
     buildNewExecutable(b, exe_build_options_mod, target);
 }
 
-pub const IntegrateOptions = struct {
-    dependency: *std.Build.Dependency,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    build_options: *std.Build.Step.Options,
-    internal: bool = true,
-    name: []const u8 = "game",
-    lib_only: bool = false,
-};
-
-pub const IntegrateResult = struct {
-    flint_mod: *std.Build.Module,
-    exe: ?*std.Build.Step.Compile,
-    build_options_mod: *std.Build.Module,
-};
-
 pub fn integrate(b: *std.Build, options: IntegrateOptions) IntegrateResult {
     const flint_b = options.dependency.builder;
 
@@ -87,9 +101,10 @@ pub fn integrate(b: *std.Build, options: IntegrateOptions) IntegrateResult {
         b,
         options.target,
         options.optimize,
-        b.getInstallStep(),
+        options.install_step,
         build_options_mod,
         options.internal,
+        options.dest_dir,
     );
 
     var exe: ?*std.Build.Step.Compile = null;
@@ -103,13 +118,15 @@ pub fn integrate(b: *std.Build, options: IntegrateOptions) IntegrateResult {
             options.name,
         );
 
-        const run_step = b.step("run", "Run the game");
-        const run_cmd = b.addRunArtifact(exe.?);
-        run_cmd.step.dependOn(b.getInstallStep());
-        if (b.args) |args| {
-            run_cmd.addArgs(args);
+        if (!options.skip_run_step) {
+            const run_step = b.step("run", "Run the game");
+            const run_cmd = b.addRunArtifact(exe.?);
+            run_cmd.step.dependOn(b.getInstallStep());
+            if (b.args) |args| {
+                run_cmd.addArgs(args);
+            }
+            run_step.dependOn(&run_cmd.step);
         }
-        run_step.dependOn(&run_cmd.step);
     }
 
     return .{
@@ -127,6 +144,7 @@ pub fn addFlintModule(
     install_step: *std.Build.Step,
     build_options_mod: *std.Build.Module,
     internal: bool,
+    dest_dir: std.Build.Step.InstallArtifact.Options.Dir,
 ) *std.Build.Module {
     const flint_mod = b.addModule("flint", .{
         .root_source_file = b.path("src/lib/flint.zig"),
@@ -140,7 +158,7 @@ pub fn addFlintModule(
     if (internal) {
         linkImgui(b, flint_mod, target, optimize, install_step);
     }
-    linkSDL(b, client_b, flint_mod, target, optimize, install_step);
+    linkSDL(b, client_b, flint_mod, target, optimize, install_step, dest_dir);
     return flint_mod;
 }
 
@@ -185,6 +203,7 @@ fn linkSDL(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     install_step: *std.Build.Step,
+    dest_dir: std.Build.Step.InstallArtifact.Options.Dir,
 ) void {
     if (getSDL(b, target, optimize)) |sdl_lib| {
         const translate_c = b.addTranslateC(.{
@@ -198,7 +217,7 @@ fn linkSDL(
         module.addImport("sdl_c", translate_c.createModule());
 
         module.linkLibrary(sdl_lib);
-        install_step.dependOn(&client_b.addInstallArtifact(sdl_lib, .{}).step);
+        install_step.dependOn(&client_b.addInstallArtifact(sdl_lib, .{ .dest_dir = dest_dir }).step);
     }
 }
 

@@ -1,0 +1,35 @@
+name: Build examples
+on:
+  push:
+    branches: [master]
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+jobs:
+  build:
+    # Cross compiling for MacOS is technically not allowed by Apple, so we use a MacOS runner for this.
+    # In the future we may need to do something else here since certain platforms probably can't be built from MacOS.
+    runs-on: macos-latest
+    name: Build examples
+    steps:
+      - uses: actions/checkout@v6
+      - uses: mlugg/setup-zig@v2
+        with:
+            version: 0.16.0
+
+      - name: Build
+        run: zig build examples
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flint-example-template
+          path: examples/template/zig-out/builds/
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flint-example-diamonds
+          path: examples/diamonds/zig-out/builds/
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flint-example-cube
+          path: examples/cube/zig-out/builds/

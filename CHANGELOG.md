@@ -13,6 +13,7 @@ The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 * Added RPath entries to Linux/Mac builds so the executable can find libraries in the executable directory and in ./lib. This allows for packaging the executable with the libraries. On Windows it will follow the normal DLL search order, so it's easiest to place the libraries in the same directory as the executable.
 * Added a module with utilities for dealing with the file system, to begin with it covers Flints own needs.
 * [Breaking] Added a simpler way to integrate the Flint build into a project build.zig by providing a single function that returns both the module and executable. See the Template example for the new suggested setup.
+* Added the ability to define a build matrix that allows automating building of all permutations of your game that you want. It supports three dimensions: target platform, optimize mode, and internal/release builds. This gives a fast way to catch any compilation errors that aren't happening on the native target or in release mode for example. This also includes basic packaging by copying assets, executable, and libraries into the same directory which provides an easy way to test all permutations of the game.
 ### Changed
 * [Breaking] Updated minimum Zig version to 0.16.0.
 * Updated SDL to version 3.4.8.
