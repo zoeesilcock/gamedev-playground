@@ -4,6 +4,10 @@ const sdl = flint.sdl.c;
 const GameLib = flint.GameLib;
 const imgui = if (INTERNAL) flint.imgui else struct {};
 
+pub const std_options: std.Options = .{
+    .log_level = if (INTERNAL) .info else .err,
+};
+
 const INTERNAL: bool = @import("build_options").internal;
 const PLATFORM = @import("builtin").os.tag;
 const LIB_BASE_NAME = @import("build_options").name;
