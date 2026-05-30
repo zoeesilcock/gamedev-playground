@@ -356,24 +356,20 @@ fn loadDll(io: std.Io, allocator: std.mem.Allocator) !void {
         }
     }
 
-    var buffer: [1024]u8 = undefined;
-    var lib_path: []const u8 = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ LIB_DEV_DIRECTORY, lib_name });
-
-    // Try to load the game library from the dev directory first.
-    opt_dyn_lib = flint.os.loadLibrary(lib_path, allocator) catch null;
-
-    if (opt_dyn_lib == null) {
-        lib_path = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ "./", lib_name });
+    if (INTERNAL) {
+        var buffer: [1024]u8 = undefined;
+        const lib_path: []const u8 = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ LIB_DEV_DIRECTORY, lib_name });
+        // Try to load the game library from the dev directory first.
         opt_dyn_lib = flint.os.loadLibrary(lib_path, allocator) catch null;
     }
 
     if (opt_dyn_lib == null) {
-        lib_path = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ "./lib/", lib_name });
-        opt_dyn_lib = flint.os.loadLibrary(lib_path, allocator) catch null;
+        // If not found leave it up to the RPath/DLL search order.
+        opt_dyn_lib = flint.os.loadLibrary(lib_name, allocator) catch null;
     }
 
     if (opt_dyn_lib) |*dyn_lib| {
-        std.log.info("Loading game library ({s}).", .{lib_path});
+        std.log.info("Loading game library.", .{});
         try game.load(dyn_lib);
     } else {
         return error.LibraryNotFound;
