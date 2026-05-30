@@ -864,9 +864,10 @@ fn loadShader(
     }
 
     var buf: [128]u8 = undefined;
-    const file_name: []u8 = std.fmt.bufPrintZ(&buf, "assets/shaders/{s}{s}", .{ name, extension }) catch "";
+    const path: []u8 = std.fmt.bufPrintZ(&buf, "assets/shaders/{s}{s}", .{ name, extension }) catch "";
+    const relative_path = flint.fs.getFilePathRelative(state.dependencies.io.*, path, state.allocator) catch "";
     var code_size: usize = 0;
-    if (sdl.SDL_LoadFile(file_name.ptr, &code_size)) |code| {
+    if (sdl.SDL_LoadFile(relative_path.ptr, &code_size)) |code| {
         const shader_info: sdl.SDL_GPUShaderCreateInfo = .{
             .code = @ptrCast(code),
             .code_size = code_size,
@@ -880,7 +881,7 @@ fn loadShader(
         };
         shader = sdl.SDL_CreateGPUShader(state.device, &shader_info);
     } else {
-        std.log.info("Failed to load shader file: {s}", .{file_name});
+        std.log.info("Failed to load shader file: {s}", .{relative_path});
     }
 
     return shader;
