@@ -77,11 +77,6 @@ fn buildGame(
         .target = flint_options.target,
         .optimize = flint_options.optimize,
     });
-    const logging_allocator_mod = b.createModule(.{
-        .root_source_file = b.path("../logging_allocator.zig"),
-        .target = flint_options.target,
-        .optimize = flint_options.optimize,
-    });
     const math_mod = b.createModule(.{
         .root_source_file = b.path("../math.zig"),
         .target = flint_options.target,
@@ -92,7 +87,6 @@ fn buildGame(
     });
     module.addImport("build_options", result.build_options_mod);
     module.addImport("flint", result.flint_mod);
-    module.addImport("logging_allocator", logging_allocator_mod);
     module.addImport("math", math_mod);
 
     const lib = b.addLibrary(.{

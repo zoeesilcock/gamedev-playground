@@ -29,6 +29,7 @@ The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 * Fixed installation of the SDL library artifact when using `linkSDL`. That function now needs the client_b so it can install SDL in the right location.
 ### Removed
 * [Breaking] Removed the custom log function exposed at `GameLib.logFn` since it isn't needed anymore, the default log function works from dynamic libraries since zig 0.16.0. Remove any uses of it.
+* Removed the LoggingAllocator from examples as it hasn't been of any use and just adds extra complexity.
 
 
 ## [0.10.0]

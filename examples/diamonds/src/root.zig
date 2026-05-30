@@ -8,7 +8,6 @@ const math = @import("math");
 const imgui = flint.imgui;
 const internal = if (INTERNAL) @import("internal.zig") else struct {};
 
-const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
 pub const std_options: std.Options = .{
     .log_level = if (INTERNAL) .warn else .err,
 };
@@ -348,17 +347,6 @@ pub export fn getSettings() GameLib.Settings {
 }
 
 pub export fn initFull2D(dependencies: GameLib.Dependencies.Full2D) GameLib.GameStatePtr {
-    var allocator: *std.mem.Allocator = dependencies.allocator;
-
-    if (INTERNAL and LOG_ALLOCATIONS) {
-        const logging_allocator = loggingAllocator(allocator);
-        var backing_allocator = std.heap.page_allocator;
-        var logging_allocator_ptr = (backing_allocator.create(@TypeOf(logging_allocator)) catch
-            @panic("Failed to initialize logging allocator."));
-        logging_allocator_ptr.* = logging_allocator;
-        allocator = logging_allocator_ptr.allocator();
-    }
-
     const state: *State = State.create(dependencies) catch @panic("Failed to create game state.");
 
     if (INTERNAL) {

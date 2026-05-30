@@ -4,10 +4,8 @@ const sdl_utils = flint.sdl;
 const sdl = flint.sdl.c;
 const imgui = flint.imgui;
 const math = @import("math");
-const loggingAllocator = if (INTERNAL) @import("logging_allocator").loggingAllocator else undefined;
 
 const INTERNAL: bool = @import("build_options").internal;
-const LOG_ALLOCATIONS: bool = @import("build_options").log_allocations;
 
 pub const std_options: std.Options = .{
     .log_level = if (INTERNAL) .info else .err,
@@ -257,15 +255,6 @@ pub export fn getSettings() GameLib.Settings {
 
 pub export fn initFull3D(dependencies: GameLib.Dependencies.Full3D) GameLib.GameStatePtr {
     var allocator = dependencies.allocator;
-
-    if (INTERNAL and LOG_ALLOCATIONS) {
-        const logging_allocator = loggingAllocator(dependencies.allocator);
-        var backing_allocator = std.heap.page_allocator;
-        var logging_allocator_ptr =
-            backing_allocator.create(@TypeOf(logging_allocator)) catch @panic("Failed to initialize logging allocator.");
-        logging_allocator_ptr.* = logging_allocator;
-        allocator = logging_allocator_ptr.allocator();
-    }
 
     var state: *State = allocator.create(State) catch @panic("Out of memory.");
     state.* = .{
