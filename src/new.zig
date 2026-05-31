@@ -80,7 +80,7 @@ pub fn main(init: std.process.Init) !void {
 
         var zig_fetch_process = try std.process.spawn(io, .{
             .cwd = .{ .dir = target_dir.? },
-            .argv = &.{ "zig", "fetch", "--save", "git+https://github.com/zoeesilcock/flint.git#v0.10.0" },
+            .argv = &.{ "zig", "fetch", "--save", "git+https://github.com/zoeesilcock/flint.git#v0.11.0" },
         });
         if (zig_fetch_process.wait(io)) |_| {} else |err| {
             try stdout.print(

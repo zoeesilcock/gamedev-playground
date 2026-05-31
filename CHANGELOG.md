@@ -8,12 +8,13 @@ but until we reach 1.0 we are shifting the numbers so that we stay on 0.x.x.
 The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 
 
-## [Unreleased]
+## [0.11.0] - 2026-05-31
+
 ### Added
 * Added RPath entries to Linux/Mac builds so the executable can find libraries in the executable directory and in ./lib. This allows for packaging the executable with the libraries. On Windows it will follow the normal DLL search order, so it's easiest to place the libraries in the same directory as the executable.
 * Added a module with utilities for dealing with the file system, to begin with it covers Flints own needs.
-* [Breaking] Added a simpler way to integrate the Flint build into a project build.zig by providing a single function that returns both the module and executable. See the Template example for the new suggested setup.
 * Added the ability to define a build matrix that allows automating building of all permutations of your game that you want. It supports three dimensions: target platform, optimize mode, and internal/release builds. This gives a fast way to catch any compilation errors that aren't happening on the native target or in release mode for example. This also includes basic packaging by copying assets, executable, and libraries into the same directory which provides an easy way to test all permutations of the game.
+
 ### Changed
 * [Breaking] Updated minimum Zig version to 0.16.0.
 * Updated SDL to version 3.4.8.
@@ -21,18 +22,19 @@ The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 * Changed where we look for the game library to make the executable more portable. The order is now: zig-out if internal build, same directory as executable, and finally a directory called "lib" in the same directory as the executable.
 * The workaround to deal with building the game library while it is open on Windows is now only applied if the library is found in the dev directory (zig-out/bin), otherwise we skip it. This allows internal builds to be portable.
 * Changed where we look for assets to make the executable more portable. Previously the asset paths only worked relative to the current working directory, now we have a fallback which looks relative to the executable directory if not found in the current directory.
-* [Breaking] Refactored how Flint is integrated into the build.zig of projects that use it. Instead of importing the flint module and passing it to `linkSDL` we provide a function called `getFlintModule` which returns the module with SDL already linked.
-* [Breaking] Adjusted the order of parameters for the `buildExecutable` build function to align with `getFlintModule`.
+* [Breaking] Refactored how Flint is integrated into the build.zig of projects that use it. Now there is a single function called `integrate` that can be imported in `build.zig`, it returns a struct containing the executable, the Flint module and the build options module. The modules can then be included in your game library as you wish. See the Template example for the new suggested setup.
 * Moved C translation of SDL and Imgui from `@cImport`/`@cDefine`/`@cInclude` in zig files to using `b.addTranslateC` in the build.zig file.
-* [Breaking] Changed the naming of the init functions in game libraries to match the type of dependency that they will receive. So what was previously always `init` is now either `initMinimal`, `initFull2D` or `initFull3D`. This makes the library code clearer and inline with the GameLib documentation. It also removes the need to specify the dependency set used by the game in the `GameSettings`.
+* [Breaking] Changed the naming of the init functions in game libraries to match the type of dependency that they will receive. So what was previously always `init` is now either `initMinimal`, `initFull2D` or `initFull3D`. This makes the library code clearer and in line with the GameLib documentation. It also removes the need to specify the dependency set used by the game in the `GameSettings`.
+
 ### Fixed
-* Fixed installation of the SDL library artifact when using `linkSDL`. That function now needs the client_b so it can install SDL in the right location.
+* Fixed a mistake that caused the SDL library artifact to not be installed to the build directory.
+
 ### Removed
 * [Breaking] Removed the custom log function exposed at `GameLib.logFn` since it isn't needed anymore, the default log function works from dynamic libraries since zig 0.16.0. Remove any uses of it.
 * Removed the LoggingAllocator from examples as it hasn't been of any use and just adds extra complexity.
 
 
-## [0.10.0]
+## [0.10.0] - 2026-04-04
 
 ### Added
 * Renamed project to Flint to better reflect what the project has turned into.
