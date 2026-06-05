@@ -319,6 +319,7 @@ fn createImGuiModule(
 
             const imgui_sources: []const std.Build.LazyPath = &.{
                 dear_bindings_dep.path("dcimgui.cpp"),
+                dear_bindings_dep.path("dcimgui_internal.cpp"),
                 imgui_dep.path("imgui.cpp"),
                 imgui_dep.path("imgui_demo.cpp"),
                 imgui_dep.path("imgui_draw.cpp"),

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 but until we reach 1.0 we are shifting the numbers so that we stay on 0.x.x.
 The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 
+## [Future]
+### Added
+### Changed
+### Fixed
+### Removed
+
+
+## [Unreleased]
+### Added
+* Added access to internal Imgui functions via `imgui.internal`. Use these functions sparingly as the API may change in future versions of Imgui.
+### Changed
+### Fixed
+### Removed
+
 
 ## [0.11.0] - 2026-05-31
 
