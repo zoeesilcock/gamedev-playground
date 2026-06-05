@@ -37,8 +37,7 @@ const DOUBLE_CLICK_THRESHOLD: u64 = 300;
 const MAX_MEMORY_USAGE_COUNT: u32 = 1000;
 const MEMORY_USAGE_RECORD_INTERVAL: u64 = 16;
 const LEVEL_NAME_BUFFER_SIZE = game.LEVEL_NAME_BUFFER_SIZE;
-const WINDOW_WIDTH_ADDITIONAL = 300;
-var initial_window_width: u32 = 0;
+pub const WINDOW_WIDTH_ADDITIONAL = 300;
 
 pub const InternalState = struct {
     allocator: std.mem.Allocator,
@@ -205,17 +204,15 @@ pub fn updateWindowSize(state: *State) void {
     var height: c_int = 0;
     const show_sidebar: bool = state.internal.show_sidebar;
 
-    if (initial_window_width == 0) initial_window_width = game.settings.window_width;
-
     if (sdl.SDL_GetWindowPosition(state.window, &x, &y)) {
         if (sdl.SDL_GetWindowSize(state.window, &width, &height)) {
             var needs_change: bool = false;
 
-            if (show_sidebar and width == game.settings.window_width) {
+            if (show_sidebar and width == game.WINDOW_WIDTH) {
                 needs_change = true;
                 x -= WINDOW_WIDTH_ADDITIONAL;
                 width += WINDOW_WIDTH_ADDITIONAL;
-            } else if (!show_sidebar and width > initial_window_width) {
+            } else if (!show_sidebar and width > game.WINDOW_WIDTH) {
                 needs_change = true;
                 x += WINDOW_WIDTH_ADDITIONAL;
                 width -= WINDOW_WIDTH_ADDITIONAL;

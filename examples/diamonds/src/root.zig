@@ -45,6 +45,8 @@ pub const DebugAllocator = std.heap.DebugAllocator(.{
 const INTERNAL: bool = @import("build_options").internal;
 const LOG_ALLOCATIONS: bool = @import("build_options").log_allocations;
 const MAX_ENTITY_COUNT = entities.MAX_ENTITY_COUNT;
+pub const WINDOW_WIDTH: u32 = if (INTERNAL) 800 else 1600;
+pub const WINDOW_HEIGHT: u32 = if (INTERNAL) 600 else 1200;
 const WORLD_WIDTH: u32 = 200;
 const WORLD_HEIGHT: u32 = 150;
 const BALL_VELOCITY: f32 = 64;
@@ -340,6 +342,8 @@ pub const Assets = struct {
 
 pub var settings: GameLib.Settings = .{
     .title = "Diamonds",
+    .window_width = WINDOW_WIDTH + if (INTERNAL) internal.WINDOW_WIDTH_ADDITIONAL else 0,
+    .window_height = WINDOW_HEIGHT,
 };
 
 pub export fn getSettings() GameLib.Settings {
