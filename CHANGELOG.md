@@ -20,6 +20,7 @@ The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 ### Changed
 ### Fixed
 ### Removed
+* [Breaking] Removed automatic generation of root dock space from `imgui.newFrame` since any pre-defined dock spaces need to happen between `newFrame` and `ImGui_DockSpace` or `ImGui_DockSpaceOverViewport`. If you want to use docking you need to call one of those functions yourself, before outputting windows.
 
 
 ## [0.11.0] - 2026-05-31

@@ -173,8 +173,6 @@ pub fn newFrame() void {
     }
     ImGui_ImplSDL3_NewFrame();
     c.ImGui_NewFrame();
-
-    _ = c.ImGui_DockSpaceOverViewportEx(0, c.ImGui_GetMainViewport(), c.ImGuiDockNodeFlags_PassthruCentralNode, null);
 }
 
 /// Draws Imgui windows to the screen, call this after all your Imgui windows.
