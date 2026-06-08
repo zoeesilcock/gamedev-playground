@@ -139,6 +139,7 @@ pub const State = struct {
         if (INTERNAL) {
             state.internal = internal.InternalState.init(dependencies) catch
                 @panic("Failed to init internal state.");
+            state.dependencies.internal.memory_usage_window.visible = true;
         }
 
         return state;
