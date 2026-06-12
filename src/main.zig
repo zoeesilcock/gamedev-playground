@@ -139,6 +139,9 @@ pub fn main(init: std.process.Init) !void {
         manage_imgui_lifecycle = true;
         initImgui(window.?, game_renderer, game_gpu_device, game_settings);
         internal_dependencies.imgui_context = imgui.context.?;
+
+        const ini_filename = try flint.fs.getFilePathAbsolute(init.io, "imgui.ini", internal_allocator);
+        imgui.setIniFilename(@ptrCast(ini_filename));
     }
 
     // Init game with the requested dependencies.

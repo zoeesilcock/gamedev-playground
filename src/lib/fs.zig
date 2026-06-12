@@ -41,11 +41,17 @@ pub fn getFilePathRelative(io: std.Io, sub_path: []const u8, allocator: std.mem.
     if (fileExists(io, sub_path)) {
         return try std.fmt.allocPrint(allocator, "{s}", .{sub_path});
     } else {
-        var buffer: [1024]u8 = undefined;
-        const path_length = try std.process.executableDirPath(io, &buffer);
-        const exe_path = buffer[0..path_length];
-        return try std.fs.path.join(allocator, &.{ exe_path, sub_path });
+        return getFilePathAbsolute(io, sub_path, allocator);
     }
+}
+
+/// Takes a executable relative path and returns an absolute path to it.
+/// Allocates memory for the result, which must be freed by the caller.
+pub fn getFilePathAbsolute(io: std.Io, sub_path: []const u8, allocator: std.mem.Allocator) ![]const u8 {
+    var buffer: [1024]u8 = undefined;
+    const path_length = try std.process.executableDirPath(io, &buffer);
+    const exe_path = buffer[0..path_length];
+    return try std.fs.path.join(allocator, &.{ exe_path, sub_path });
 }
 
 /// Checks if a file exists.

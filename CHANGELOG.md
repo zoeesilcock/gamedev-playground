@@ -19,6 +19,7 @@ The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 * Added access to internal Imgui functions via `imgui.internal`. Use these functions sparingly as the API may change in future versions of Imgui.
 ### Changed
 * Updated SDL to version 3.4.10.
+* The imgui.ini is now placed in the same directory as the executable, regardless of where it was launched from.
 ### Fixed
 ### Removed
 * [Breaking] Removed automatic generation of root dock space from `imgui.newFrame` since any pre-defined dock spaces need to happen between `newFrame` and `ImGui_DockSpace` or `ImGui_DockSpaceOverViewport`. If you want to use docking you need to call one of those functions yourself, before outputting windows.

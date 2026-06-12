@@ -1,15 +1,16 @@
 //! Exposes the Imgui C API as well as backend support fo SDL3 Renderer and SDL3 GPU.
 //!
-//! Note that importing this module without the INTERNAL build_option set to true will give an empty struct that only
-//! contains a fake ImGuiContext type since that is needed for function signatures. The point of this is to make it a
+//! Note that importing this module without the `INTERNAL` build_option set to true will give an empty struct that only
+//! contains a fake `ImGuiContext` type since that is needed for function signatures. The point of this is to make it a
 //! compile time error to use any internal functions in a release version. This is implemented in `flint.zig`.
 
 /// The Imgui C API, generated using dear_bindings.
 pub const c = @import("imgui_c");
 const sdl = @import("sdl.zig").c;
+const fs = @import("fs.zig");
 
-/// The ImGuiContext type is used in function signatures. When INTERNAL is set to false the library exposes a fake
-/// version of this in the form of an anyopaque since the type is needed for function signatures.
+/// The ImGuiContext type is used in function signatures. When `INTERNAL` is set to false the library exposes a fake
+/// version of this in the form of an `anyopaque` since the type is needed for function signatures.
 pub const ImGuiContext = c.ImGuiContext;
 
 const Backend = enum {
@@ -134,6 +135,13 @@ pub fn initGPU(window: *sdl.SDL_Window, device: *sdl.SDL_GPUDevice, width: f32, 
     };
     _ = ImGui_ImplSDL3_InitForSDLGPU(window);
     _ = ImGui_ImplSDLGPU3_Init(&init_info);
+}
+
+/// Changes the path and name of the imgui.ini file which saves the imgui layout for internal builds. This needs to
+/// be called after `imgui.setup` as it requires the imgui context to be in place.
+pub fn setIniFilename(name: [*c]const u8) void {
+    var im_io: *c.ImGuiIO = @ptrCast(c.ImGui_GetIO());
+    im_io.IniFilename = name;
 }
 
 /// Shutdown the imgui backend.
