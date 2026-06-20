@@ -864,7 +864,7 @@ fn loadShader(
     }
 
     var buf: [128]u8 = undefined;
-    const path: []u8 = std.fmt.bufPrintZ(&buf, "assets/shaders/{s}{s}", .{ name, extension }) catch "";
+    const path: []u8 = std.fmt.bufPrintSentinel(&buf, "assets/shaders/{s}{s}", .{ name, extension }, 0) catch "";
     const relative_path = flint.fs.getFilePathRelative(state.dependencies.io.*, path, state.allocator) catch "";
     var code_size: usize = 0;
     if (sdl.SDL_LoadFile(relative_path.ptr, &code_size)) |code| {

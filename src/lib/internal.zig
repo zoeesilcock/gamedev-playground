@@ -197,7 +197,7 @@ pub const MemoryUsageWindow = struct {
                 }
             }
             var buf: [100]u8 = undefined;
-            const min_text = std.fmt.bufPrintZ(&buf, "min: {d}", .{min_value}) catch "";
+            const min_text = std.fmt.bufPrintSentinel(&buf, "min: {d}", .{min_value}, 0) catch "";
             imgui.ImGui_PlotHistogramEx(
                 "##MemoryUsageGraph",
                 &memory_usage,

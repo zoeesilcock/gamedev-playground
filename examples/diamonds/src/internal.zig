@@ -88,7 +88,7 @@ pub const InternalState = struct {
             .output = dependencies.internal.output,
         };
 
-        _ = try std.fmt.bufPrintZ(&state.current_level_name, "level1", .{});
+        _ = try std.fmt.bufPrintSentinel(&state.current_level_name, "level1", .{}, 0);
 
         return state;
     }
@@ -514,10 +514,11 @@ fn inputCustomTypes(
         EntityId => {
             const entity_id: *EntityId = @ptrCast(field_ptr);
             var buf: [64]u8 = undefined;
-            const id = std.fmt.bufPrintZ(
+            const id = std.fmt.bufPrintSentinel(
                 &buf,
                 "{d} ({d})",
                 .{ entity_id.index, entity_id.generation },
+                0,
             ) catch "";
             imgui.c.ImGui_LabelText("EntityId", id);
         },
