@@ -37,11 +37,11 @@ pub const FPSWindow = struct {
 
     /// Cycle through the display modes, see `FPSWindow.FPSDisplayMode`.
     pub fn cycleMode(self: *FPSWindow) void {
-        var mode: u32 = @intFromEnum(self.display_mode) + 1;
+        var mode: u32 = @backingInt(self.display_mode) + 1;
         if (mode >= @typeInfo(FPSDisplayMode).@"enum".field_names.len) {
             mode = 0;
         }
-        self.display_mode = @enumFromInt(mode);
+        self.display_mode = @fromBackingInt(@intCast(mode));
     }
 
     fn getPreviousFrameIndex(frame_index: u32) u32 {
@@ -976,9 +976,9 @@ pub fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
     imgui.ImGui_PushIDPtr(value);
     defer imgui.ImGui_PopID();
 
-    var current_item: i32 = @intCast(@intFromEnum(value.*));
+    var current_item: i32 = @intCast(@backingInt(value.*));
     if (imgui.ImGui_ComboCharEx(heading, &current_item, &items, count, 0)) {
-        value.* = @enumFromInt(current_item);
+        value.* = @fromBackingInt(@intCast(current_item));
     }
 }
 
