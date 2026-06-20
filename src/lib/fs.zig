@@ -20,7 +20,7 @@ pub fn openDirRelative(io: std.Io, sub_path: []const u8, args: std.Io.Dir.OpenOp
 
 /// Opens a file relative to the current working directory.
 /// Falls back to the executable directory if the file isn't found in the current working directory.
-pub fn openFileRelative(io: std.Io, sub_path: []const u8, flags: std.Io.File.OpenFlags) !std.Io.File {
+pub fn openFileRelative(io: std.Io, sub_path: []const u8, flags: std.Io.Dir.OpenFileOptions) !std.Io.File {
     if (std.Io.Dir.cwd().openFile(io, sub_path, flags)) |file| {
         return file;
     } else |_| {
