@@ -29,7 +29,7 @@ pub const FPSWindow = struct {
     pub fn init(self: *FPSWindow, frequency: u64) void {
         self.current_frame_index = 0;
         self.performance_frequency = frequency;
-        self.frame_times = [1]u64{0} ** MAX_FRAME_TIME_COUNT;
+        self.frame_times = @splat(0);
         self.average = 0;
         self.display_mode = .Number;
         self.position = imgui.ImVec2{ .x = 5, .y = 5 };
@@ -104,7 +104,7 @@ pub const FPSWindow = struct {
             );
 
             if (self.display_mode == .NumberAndGraph) {
-                var timings: [MAX_FRAME_TIME_COUNT]f32 = [1]f32{0} ** MAX_FRAME_TIME_COUNT;
+                var timings: [MAX_FRAME_TIME_COUNT]f32 = @splat(0);
                 var max_value: f32 = 0;
                 for (0..MAX_FRAME_TIME_COUNT) |i| {
                     timings[i] = self.getFrameTime(@intCast(i));
@@ -143,7 +143,7 @@ pub const MemoryUsageWindow = struct {
 
     pub fn init(self: *MemoryUsageWindow) void {
         self.* = .{
-            .memory_usage = [1]u64{0} ** MAX_MEMORY_USAGE_COUNT,
+            .memory_usage = @splat(0),
             .memory_usage_current_index = 0,
             .memory_usage_last_collected_at = 0,
             .visible = false,
@@ -184,7 +184,7 @@ pub const MemoryUsageWindow = struct {
                 self.memory_usage[self.memory_usage_current_index],
             );
 
-            var memory_usage: [MAX_MEMORY_USAGE_COUNT]f32 = [1]f32{0} ** MAX_MEMORY_USAGE_COUNT;
+            var memory_usage: [MAX_MEMORY_USAGE_COUNT]f32 = @splat(0);
             var max_value: f32 = 0;
             var min_value: f32 = std.math.floatMax(f32);
             for (0..MAX_MEMORY_USAGE_COUNT) |i| {
@@ -968,7 +968,7 @@ pub fn inputU64(heading: ?[*:0]const u8, value: *u64, config: InputConfig) void 
 pub fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
     const field_info = @typeInfo(@TypeOf(value.*));
     const count: u32 = field_info.@"enum".fields.len;
-    var items: [count][*:0]const u8 = [1][*:0]const u8{undefined} ** count;
+    var items: [count][*:0]const u8 = undefined;
     inline for (field_info.@"enum".fields, 0..) |enum_field, i| {
         items[i] = enum_field.name;
     }

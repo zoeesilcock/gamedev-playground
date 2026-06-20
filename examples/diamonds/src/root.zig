@@ -129,7 +129,7 @@ pub const State = struct {
             .level_index = 0,
             .lives_remaining = MAX_LIVES,
 
-            .entities = [1]Entity{.{}} ** MAX_ENTITY_COUNT,
+            .entities = @splat(.{}),
             .next_free_entity_index = 0,
 
             .ball_id = null,
