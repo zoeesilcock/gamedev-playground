@@ -354,7 +354,7 @@ pub export fn processInput(state_ptr: GameLib.GameStatePtr) bool {
                 },
                 sdl.SDLK_E => {
                     var next_effect = @intFromEnum(state.screen_effect) + 1;
-                    if (next_effect >= @typeInfo(ScreenEffect).@"enum".fields.len) {
+                    if (next_effect >= @typeInfo(ScreenEffect).@"enum".field_names.len) {
                         next_effect = 0;
                     }
 
@@ -888,7 +888,7 @@ fn loadShader(
 }
 
 fn inputCustomTypes(
-    struct_field: std.builtin.Type.StructField,
+    struct_field_name: [:0]const u8,
     field_ptr: anytype,
 ) bool {
     var handled: bool = true;
@@ -898,13 +898,13 @@ fn inputCustomTypes(
             imgui.c.ImGui_PushIDPtr(field_ptr);
             defer imgui.c.ImGui_PopID();
 
-            _ = imgui.c.ImGui_InputFloat2Ex(struct_field.name, @ptrCast(field_ptr), "%.2f", 0);
+            _ = imgui.c.ImGui_InputFloat2Ex(struct_field_name, @ptrCast(field_ptr), "%.2f", 0);
         },
         Vector3 => {
             imgui.c.ImGui_PushIDPtr(field_ptr);
             defer imgui.c.ImGui_PopID();
 
-            _ = imgui.c.ImGui_InputFloat3Ex(struct_field.name, @ptrCast(field_ptr), "%.2f", 0);
+            _ = imgui.c.ImGui_InputFloat3Ex(struct_field_name, @ptrCast(field_ptr), "%.2f", 0);
         },
         else => handled = false,
     }

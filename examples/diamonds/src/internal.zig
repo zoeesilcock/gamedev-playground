@@ -162,7 +162,7 @@ pub fn processInputEvent(state: *State, event: sdl.SDL_Event) void {
             },
             sdl.SDLK_E => {
                 var next_mode: u32 = @intFromEnum(state.internal.mode) + 1;
-                if (next_mode > @typeInfo(@TypeOf(state.internal.mode)).@"enum".fields.len - 1) {
+                if (next_mode > @typeInfo(@TypeOf(state.internal.mode)).@"enum".field_names.len - 1) {
                     next_mode = 0;
                 }
                 state.internal.mode = @enumFromInt(next_mode);
@@ -484,7 +484,7 @@ pub fn drawDebugUI(state: *State) void {
 }
 
 fn inputCustomTypes(
-    struct_field: std.builtin.Type.StructField,
+    struct_field_name: [:0]const u8,
     field_ptr: anytype,
 ) bool {
     var handled: bool = true;
@@ -494,14 +494,14 @@ fn inputCustomTypes(
             imgui.c.ImGui_PushIDPtr(field_ptr);
             defer imgui.c.ImGui_PopID();
 
-            _ = imgui.c.ImGui_InputFloat2Ex(struct_field.name, @ptrCast(field_ptr), "%.2f", 0);
+            _ = imgui.c.ImGui_InputFloat2Ex(struct_field_name, @ptrCast(field_ptr), "%.2f", 0);
         },
         Color => {
             imgui.c.ImGui_PushIDPtr(field_ptr);
             defer imgui.c.ImGui_PopID();
 
             _ = imgui.c.ImGui_InputScalarNEx(
-                struct_field.name,
+                struct_field_name,
                 imgui.c.ImGuiDataType_U8,
                 @ptrCast(field_ptr),
                 4,
@@ -522,8 +522,8 @@ fn inputCustomTypes(
             imgui.c.ImGui_LabelText("EntityId", id);
         },
         EntityFlagsType => {
-            if (std.mem.eql(u8, struct_field.name, "flags")) {
-                flint.internal.inputFlagsU32(struct_field.name, field_ptr, EntityFlags);
+            if (std.mem.eql(u8, struct_field_name, "flags")) {
+                flint.internal.inputFlagsU32(struct_field_name, field_ptr, EntityFlags);
                 handled = true;
             } else {
                 handled = false;

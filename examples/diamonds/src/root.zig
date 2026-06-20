@@ -637,9 +637,9 @@ pub export fn tick(state_ptr: GameLib.GameStatePtr, time: u64, delta_time_int: u
 
                 const type_info = @typeInfo(Entity);
                 if (state.getEntity(entity.tween_target)) |target| {
-                    inline for (type_info.@"struct".fields) |entity_field_info| {
-                        if (std.mem.eql(u8, entity_field_info.name, entity.tween_target_field)) {
-                            const current_value = &@field(target, entity_field_info.name);
+                    inline for (type_info.@"struct".field_names) |entity_field_name| {
+                        if (std.mem.eql(u8, entity_field_name, entity.tween_target_field)) {
+                            const current_value = &@field(target, entity_field_name);
                             switch (@TypeOf(current_value)) {
                                 *f32 => {
                                     current_value.* = math.lerp(entity.tween_start_value.f32, entity.tween_end_value.f32, t);

@@ -38,7 +38,7 @@ pub const FPSWindow = struct {
     /// Cycle through the display modes, see `FPSWindow.FPSDisplayMode`.
     pub fn cycleMode(self: *FPSWindow) void {
         var mode: u32 = @intFromEnum(self.display_mode) + 1;
-        if (mode >= @typeInfo(FPSDisplayMode).@"enum".fields.len) {
+        if (mode >= @typeInfo(FPSDisplayMode).@"enum".field_names.len) {
             mode = 0;
         }
         self.display_mode = @enumFromInt(mode);
@@ -299,11 +299,11 @@ pub const DebugOutputWindow = struct {
 
         switch (type_info) {
             .@"struct" => |struct_info| {
-                inline for (struct_info.fields, 0..) |struct_field, i| {
-                    try writer.print("{s}: ", .{struct_field.name});
-                    try self.writeValue(@field(value, struct_field.name), writer);
+                inline for (struct_info.field_names, 0..) |struct_field_name, i| {
+                    try writer.print("{s}: ", .{struct_field_name});
+                    try self.writeValue(@field(value, struct_field_name), writer);
 
-                    if (i < struct_info.fields.len - 1) {
+                    if (i < struct_info.field_names.len - 1) {
                         try writer.print(", ", .{});
                     }
                 }
@@ -571,7 +571,7 @@ fn getFieldConfig(
 /// Allows you to generate custom imgui inputs for any types or fields. If you return true from this function the
 /// inspector won't generate it's own input for the field.
 pub const handleCustomTypesFn = ?*const fn (
-    struct_field: std.builtin.Type.StructField,
+    struct_field_name: [:0]const u8,
     field_ptr: anytype,
 ) bool;
 
@@ -606,11 +606,11 @@ fn inspectStructInternal(
     const struct_info = @typeInfo(@TypeOf(struct_ptr.*));
     switch (struct_info) {
         .@"struct" => {
-            inline for (struct_info.@"struct".fields) |struct_field| {
+            inline for (struct_info.@"struct".field_names) |struct_field_name| {
                 comptime var skip_field = false;
                 comptime {
                     for (ignored_fields) |ignored| {
-                        if (std.mem.eql(u8, ignored, struct_field.name)) {
+                        if (std.mem.eql(u8, ignored, struct_field_name)) {
                             skip_field = true;
                             break;
                         }
@@ -618,15 +618,15 @@ fn inspectStructInternal(
                 }
 
                 if (!skip_field) {
-                    const field_ptr = &@field(struct_ptr, struct_field.name);
+                    const field_ptr = &@field(struct_ptr, struct_field_name);
                     const field_ptr_info = @typeInfo(@TypeOf(field_ptr.*));
                     switch (field_ptr_info) {
                         .pointer => |p| {
-                            if (p.is_const) {
-                                displayConst(struct_field, field_ptr);
+                            if (p.attrs.@"const") {
+                                displayConst(struct_field_name, field_ptr);
                             } else {
                                 inputStruct(
-                                    struct_field,
+                                    struct_field_name,
                                     field_ptr,
                                     ignored_fields,
                                     expand_sections,
@@ -637,7 +637,7 @@ fn inspectStructInternal(
                         },
                         else => {
                             inputStruct(
-                                struct_field,
+                                struct_field_name,
                                 field_ptr,
                                 ignored_fields,
                                 expand_sections,
@@ -654,7 +654,7 @@ fn inspectStructInternal(
 }
 
 fn inputStruct(
-    struct_field: std.builtin.Type.StructField,
+    comptime struct_field_name: [:0]const u8,
     field_ptr: anytype,
     comptime ignored_fields: []const []const u8,
     expand_sections: bool,
@@ -663,27 +663,27 @@ fn inputStruct(
 ) void {
     var handled: bool = false;
     if (opt_handle_custom_types) |handleCustomTypes| {
-        handled = handleCustomTypes(struct_field, field_ptr);
+        handled = handleCustomTypes(struct_field_name, field_ptr);
     }
     if (!handled) {
         switch (@TypeOf(field_ptr.*)) {
             bool => {
-                inputBool(struct_field.name, field_ptr);
+                inputBool(struct_field_name, field_ptr);
             },
             f32 => {
-                inputF32(struct_field.name, field_ptr, getFieldConfig(f32, field_configs, struct_field.name));
+                inputF32(struct_field_name, field_ptr, getFieldConfig(f32, field_configs, struct_field_name));
             },
             f64 => {
-                inputF32(struct_field.name, field_ptr, getFieldConfig(f64, field_configs, struct_field.name));
+                inputF32(struct_field_name, field_ptr, getFieldConfig(f64, field_configs, struct_field_name));
             },
             u32 => {
-                inputU32(struct_field.name, field_ptr, getFieldConfig(u32, field_configs, struct_field.name));
+                inputU32(struct_field_name, field_ptr, getFieldConfig(u32, field_configs, struct_field_name));
             },
             i32 => {
-                inputI32(struct_field.name, field_ptr, getFieldConfig(i32, field_configs, struct_field.name));
+                inputI32(struct_field_name, field_ptr, getFieldConfig(i32, field_configs, struct_field_name));
             },
             u64 => {
-                inputU64(struct_field.name, field_ptr, getFieldConfig(u64, field_configs, struct_field.name));
+                inputU64(struct_field_name, field_ptr, getFieldConfig(u64, field_configs, struct_field_name));
             },
             else => {
                 const field_info = @typeInfo(@TypeOf(field_ptr.*));
@@ -696,14 +696,14 @@ fn inputStruct(
                                     if (field_ptr.*) |inner| {
                                         inputStructSection(
                                             inner,
-                                            struct_field.name,
+                                            struct_field_name,
                                             ignored_fields,
                                             expand_sections,
                                             field_configs,
                                             opt_handle_custom_types,
                                         );
                                     } else {
-                                        displayNull(struct_field.name);
+                                        displayNull(struct_field_name);
                                     }
                                 }
                             },
@@ -712,14 +712,14 @@ fn inputStruct(
                                     var mutable_inner = inner;
                                     inputStructSection(
                                         &mutable_inner,
-                                        struct_field.name,
+                                        struct_field_name,
                                         ignored_fields,
                                         expand_sections,
                                         field_configs,
                                         opt_handle_custom_types,
                                     );
                                 } else {
-                                    displayNull(struct_field.name);
+                                    displayNull(struct_field_name);
                                 }
                             },
                         }
@@ -731,7 +731,7 @@ fn inputStruct(
                                 .@"struct" => {
                                     inputStructSection(
                                         field_ptr.*,
-                                        struct_field.name,
+                                        struct_field_name,
                                         ignored_fields,
                                         expand_sections,
                                         field_configs,
@@ -743,12 +743,12 @@ fn inputStruct(
                         }
                     },
                     .@"enum" => {
-                        inputEnum(struct_field.name, field_ptr);
+                        inputEnum(struct_field_name, field_ptr);
                     },
                     .@"struct" => {
                         inputStructSection(
                             field_ptr,
-                            struct_field.name,
+                            struct_field_name,
                             ignored_fields,
                             expand_sections,
                             field_configs,
@@ -967,10 +967,10 @@ pub fn inputU64(heading: ?[*:0]const u8, value: *u64, config: InputConfig) void 
 /// Generate an imgui dropdown field based on an enum pointer.
 pub fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
     const field_info = @typeInfo(@TypeOf(value.*));
-    const count: u32 = field_info.@"enum".fields.len;
+    const count: u32 = field_info.@"enum".field_names.len;
     var items: [count][*:0]const u8 = undefined;
-    inline for (field_info.@"enum".fields, 0..) |enum_field, i| {
-        items[i] = enum_field.name;
+    inline for (field_info.@"enum".field_names, 0..) |enum_field_name, i| {
+        items[i] = enum_field_name;
     }
 
     imgui.ImGui_PushIDPtr(value);
@@ -985,29 +985,30 @@ pub fn inputEnum(heading: ?[*:0]const u8, value: anytype) void {
 /// Generate a set of imgui checkboxes based on a u32 pointer and an enum type which describes the flags.
 pub fn inputFlagsU32(heading: ?[*:0]const u8, value: *u32, FlagsEnumType: type) void {
     if (imgui.ImGui_CollapsingHeaderBoolPtr(heading, null, imgui.ImGuiTreeNodeFlags_None)) {
-        inline for (@typeInfo(FlagsEnumType).@"enum".fields) |flag| {
-            var bool_value: bool = (value.* & flag.value) != 0;
+        inline for (@typeInfo(FlagsEnumType).@"enum".field_names, 0..) |flag_name, i| {
+            const flag_value = @typeInfo(FlagsEnumType).@"enum".field_values[i];
+            var bool_value: bool = (value.* & flag_value) != 0;
 
             imgui.ImGui_PushIDPtr(&bool_value);
             defer imgui.ImGui_PopID();
 
-            if (imgui.ImGui_Checkbox(flag.name, &bool_value)) {
-                value.* ^= flag.value;
+            if (imgui.ImGui_Checkbox(flag_name, &bool_value)) {
+                value.* ^= flag_value;
             }
         }
     }
 }
 
 fn displayConst(
-    struct_field: std.builtin.Type.StructField,
+    struct_field_name: [:0]const u8,
     field_ptr: anytype,
 ) void {
     switch (@TypeOf(field_ptr.*)) {
         []const u8 => {
-            imgui.ImGui_LabelText(struct_field.name, field_ptr.ptr);
+            imgui.ImGui_LabelText(struct_field_name, field_ptr.ptr);
         },
         else => {
-            imgui.ImGui_LabelText(struct_field.name, "unknown const");
+            imgui.ImGui_LabelText(struct_field_name, "unknown const");
         },
     }
 }

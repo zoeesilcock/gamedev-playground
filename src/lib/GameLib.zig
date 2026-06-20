@@ -179,14 +179,13 @@ pub fn getDependcyType(self: GameLib) !DependencySet {
 pub fn load(self: *GameLib, dyn_lib: *os.LoadedLibrary) !void {
     var init_function_found: bool = false;
     const self_info = @typeInfo(GameLib).@"struct";
-    inline for (self_info.fields) |struct_field| {
+    inline for (self_info.field_names, 0..) |lib_fn_name, i| {
         var fn_found: bool = false;
-        const lib_fn_name = struct_field.name;
 
-        switch (@typeInfo(struct_field.type)) {
+        switch (@typeInfo(self_info.field_types[i])) {
             .pointer => |ptr_info| {
                 if (@typeInfo(ptr_info.child) == .@"fn") {
-                    fn_found = try self.lookupFunction(dyn_lib, lib_fn_name, struct_field.type);
+                    fn_found = try self.lookupFunction(dyn_lib, lib_fn_name, self_info.field_types[i]);
                 }
             },
             .optional => |optional_info| {
