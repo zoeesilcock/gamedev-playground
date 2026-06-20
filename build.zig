@@ -122,9 +122,7 @@ pub fn integrate(b: *std.Build, options: IntegrateOptions) IntegrateResult {
             const run_step = b.step("run", "Run the game");
             const run_cmd = b.addRunArtifact(exe.?);
             run_cmd.step.dependOn(b.getInstallStep());
-            if (b.args) |args| {
-                run_cmd.addArgs(args);
-            }
+            run_cmd.addPassthruArgs();
             run_step.dependOn(&run_cmd.step);
         }
     }
@@ -383,9 +381,7 @@ fn buildNewExecutable(
     const run_step = b.step("new", "Run the new project generator");
     const run_cmd = b.addRunArtifact(new_exe);
     run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    run_cmd.addPassthruArgs();
     run_step.dependOn(&run_cmd.step);
     run_step.dependOn(&b.addInstallArtifact(new_exe, .{}).step);
 }
