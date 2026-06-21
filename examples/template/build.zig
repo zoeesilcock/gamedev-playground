@@ -10,7 +10,7 @@ pub fn build(b: *std.Build) void {
 
     // Build game.
     const flint_options: flint.IntegrateOptions = .{
-        .dependency = b.dependency("flint", .{ .target = target, .optimize = optimize }),
+        .dependency = b.dependency("flint", .{ .target = target, .optimize = optimize, .internal = internal }),
         .target = target,
         .optimize = optimize,
         .build_options = b.addOptions(),
