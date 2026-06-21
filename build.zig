@@ -144,11 +144,16 @@ pub fn addFlintModule(
     internal: bool,
     dest_dir: std.Build.Step.InstallArtifact.Options.Dir,
 ) *std.Build.Module {
-    const flint_mod = b.addModule("flint", .{
+    const module_opts: std.Build.Module.CreateOptions = .{
         .root_source_file = b.path("src/lib/flint.zig"),
         .target = target,
         .optimize = optimize,
-    });
+    };
+    const flint_mod = if (b == client_b)
+        b.addModule("flint", module_opts)
+    else
+        b.createModule(module_opts);
+
     flint_mod.addImport("build_options", build_options_mod);
     if (getSDLIncludePath(b, target, optimize)) |sdl_include_path| {
         flint_mod.addIncludePath(sdl_include_path);
