@@ -1,13 +1,4 @@
 const std = @import("std");
-const integration = @import("src/lib/build/integration.zig");
-const MatrixStep = @import("src/lib/build/MatrixStep.zig");
-
-// Types.
-pub const IntegrateOptions = integration.IntegrateOptions;
-pub const IntegrateResult = integration.IntegrateResult;
-pub const BuildMatrixStep = MatrixStep;
-pub const BuildGameFnType = MatrixStep.BuildGameFnType;
-pub const BuildResult = MatrixStep.BuildResult;
 
 const EXAMPLE_PATHS = [_][]const u8{
     "examples/template",
@@ -16,6 +7,34 @@ const EXAMPLE_PATHS = [_][]const u8{
 };
 const PLATFORM = @import("builtin").os.tag;
 const PLATFORM_CPU = @import("builtin").target.cpu;
+const DEFAULT_TARGETS = [_]std.Target.Query{
+    .{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .gnu },
+    .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
+    .{ .cpu_arch = .aarch64, .os_tag = .macos },
+};
+const DEFAULT_OPTIMIZE_MODES = [_]std.builtin.OptimizeMode{ .Debug, .ReleaseFast };
+const DEFAULT_INTERNAL_MODES = [_]bool{ true, false };
+
+/// This struct defines the options that need to be passed to the `integrate` function.
+pub const IntegrateOptions = struct {
+    dependency: *std.Build.Dependency,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    build_options: *std.Build.Step.Options,
+    internal: bool = true,
+    name: []const u8 = "game",
+    lib_only: bool = false,
+    skip_run_step: bool = false,
+    install_step: *std.Build.Step,
+    dest_dir: std.Build.Step.InstallArtifact.Options.Dir = .default,
+};
+
+/// This struct contains the results of the `integrate` function.
+pub const IntegrateResult = struct {
+    flint_mod: *std.Build.Module,
+    exe: ?*std.Build.Step.Compile,
+    build_options_mod: *std.Build.Module,
+};
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -57,13 +76,8 @@ pub fn build(b: *std.Build) !void {
     // Build all examples.
     const build_examples_step = b.step("examples", "Builds all permutations of the examples for testing purposes.");
     for (EXAMPLE_PATHS) |example_path| {
-        const build_example_cmd = b.addSystemCommand(&.{
-            "zig",
-            "build",
-            "all",
-            "--build-file",
-            b.fmt("{s}/build.zig", .{example_path}),
-        });
+        const build_example_cmd = b.addSystemCommand(&.{ "zig", "build", "all" });
+        build_example_cmd.setCwd(.{ .cwd_relative = b.fmt("{f}/{s}", .{ b.root, example_path }) });
         build_examples_step.dependOn(&build_example_cmd.step);
     }
 
@@ -132,6 +146,72 @@ pub fn integrate(b: *std.Build, options: IntegrateOptions) IntegrateResult {
         .exe = exe,
         .build_options_mod = build_options_mod,
     };
+}
+
+pub fn buildMatrixDefault(
+    b: *std.Build,
+    step: *std.Build.Step,
+    name: []const u8,
+    opt_assets_path: ?std.Build.LazyPath,
+) void {
+    buildMatrix(b, step, name, opt_assets_path, &DEFAULT_TARGETS, &DEFAULT_OPTIMIZE_MODES, &DEFAULT_INTERNAL_MODES);
+}
+
+pub fn buildMatrix(
+    b: *std.Build,
+    step: *std.Build.Step,
+    name: []const u8,
+    opt_assets_path: ?std.Build.LazyPath,
+    comptime targets: []const std.Target.Query,
+    comptime optimize_modes: []const std.builtin.OptimizeMode,
+    comptime internal_modes: []const bool,
+) void {
+    inline for (targets) |target_query| {
+        // Skip MacOS when on a different platform.
+        if (target_query.os_tag == .macos and target_query.os_tag != PLATFORM) {
+            continue;
+        }
+        inline for (optimize_modes) |optimize| {
+            inline for (internal_modes) |internal| {
+                const dest_path: []const u8 = b.fmt("builds/{s}-{s}-{s}-{s}-{s}", .{
+                    name,
+                    @tagName(target_query.os_tag.?),
+                    @tagName(target_query.cpu_arch.?),
+                    @tagName(optimize),
+                    if (internal) "internal" else "release",
+                });
+                const prefix_dir: []const u8 = b.fmt("zig-out/{s}", .{dest_path});
+                const build_cmd = b.addSystemCommand(&.{
+                    "zig",
+                    "build",
+                    "-Dtarget=" ++
+                        @tagName(target_query.cpu_arch.?) ++
+                        "-" ++
+                        @tagName(target_query.os_tag.?) ++
+                        if (target_query.abi) |abi| "-" ++ @tagName(abi) else "",
+                    "-Doptimize=" ++
+                        @tagName(optimize),
+                    "-Dinternal=" ++
+                        if (internal) "true" else "false",
+                    "--prefix-lib-dir",
+                    prefix_dir,
+                    "--prefix-exe-dir",
+                    prefix_dir,
+                });
+
+                // Install game assets.
+                if (opt_assets_path) |assets_path| {
+                    step.dependOn(&b.addInstallDirectory(.{
+                        .source_dir = assets_path,
+                        .install_dir = .{ .custom = dest_path },
+                        .install_subdir = b.fmt("{f}", .{assets_path}),
+                    }).step);
+                }
+
+                step.dependOn(&build_cmd.step);
+            }
+        }
+    }
 }
 
 pub fn addFlintModule(

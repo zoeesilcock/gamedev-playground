@@ -43,7 +43,6 @@ pub const DebugAllocator = std.heap.DebugAllocator(.{
 });
 
 const INTERNAL: bool = @import("build_options").internal;
-const LOG_ALLOCATIONS: bool = @import("build_options").log_allocations;
 const MAX_ENTITY_COUNT = entities.MAX_ENTITY_COUNT;
 pub const WINDOW_WIDTH: u32 = if (INTERNAL) 800 else 1600;
 pub const WINDOW_HEIGHT: u32 = if (INTERNAL) 600 else 1200;

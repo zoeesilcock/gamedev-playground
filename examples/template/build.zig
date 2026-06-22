@@ -8,7 +8,7 @@ pub fn build(b: *std.Build) void {
     const internal = b.option(bool, "internal", "include debug interface") orelse true;
     const lib_only = b.option(bool, "lib_only", "only build the shared library") orelse false;
 
-    // Build game.
+    // Integrate Flint.
     const flint_options: flint.IntegrateOptions = .{
         .dependency = b.dependency("flint", .{ .target = target, .optimize = optimize, .internal = internal }),
         .target = target,
@@ -20,43 +20,12 @@ pub fn build(b: *std.Build) void {
         .install_step = b.getInstallStep(),
         .dest_dir = .default,
     };
-    const result = buildGame(b, flint_options);
-
-    // Build all variations.
-    const build_all_step = b.step("all", "Builds all permutations of the game for testing purposes.");
-    const build_matrix = flint.BuildMatrixStep.create(b, .{ .options = flint_options, .buildGame = &buildGame });
-    build_all_step.dependOn(&build_matrix.step);
+    const result = flint.integrate(b, flint_options);
 
     // Install executable.
     if (result.exe) |exe| {
         b.getInstallStep().dependOn(&b.addInstallArtifact(exe, .{}).step);
     }
-
-    // Install library.
-    b.getInstallStep().dependOn(&b.addInstallArtifact(result.lib, .{}).step);
-
-    // Check library.
-    const lib_check = b.addLibrary(.{
-        .name = name,
-        .linkage = .dynamic,
-        .root_module = result.lib.root_module,
-    });
-    const check = b.step("check", "Check if it compiles");
-    check.dependOn(&lib_check.step);
-
-    // Tests.
-    const test_step = b.step("test", "Run unit tests");
-    const lib_tests = b.addTest(.{ .root_module = result.lib.root_module });
-    const run_lib_tests = b.addRunArtifact(lib_tests);
-    test_step.dependOn(&run_lib_tests.step);
-}
-
-fn buildGame(
-    b: *std.Build,
-    flint_options: flint.IntegrateOptions,
-) flint.BuildResult {
-    // Integrate Flint.
-    const result = flint.integrate(b, flint_options);
 
     // Game library.
     const module = b.createModule(.{
@@ -74,5 +43,25 @@ fn buildGame(
         .use_llvm = true,
     });
 
-    return .{ .exe = result.exe, .lib = lib, .assets_path = b.path("assets") };
+    // Install library.
+    b.getInstallStep().dependOn(&b.addInstallArtifact(lib, .{}).step);
+
+    // Check library.
+    const lib_check = b.addLibrary(.{
+        .name = name,
+        .linkage = .dynamic,
+        .root_module = lib.root_module,
+    });
+    const check = b.step("check", "Check if it compiles");
+    check.dependOn(&lib_check.step);
+
+    // Tests.
+    const test_step = b.step("test", "Run unit tests");
+    const lib_tests = b.addTest(.{ .root_module = lib.root_module });
+    const run_lib_tests = b.addRunArtifact(lib_tests);
+    test_step.dependOn(&run_lib_tests.step);
+
+    // Build all variations.
+    const build_all_step = b.step("all", "Builds all permutations of the game for testing purposes.");
+    flint.buildMatrixDefault(b, build_all_step, name, b.path("assets"));
 }
