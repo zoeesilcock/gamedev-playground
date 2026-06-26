@@ -35,7 +35,46 @@ pub const Settings = extern struct {
     window_floating: bool = INTERNAL,
     window_on_top: bool = INTERNAL,
     fullscreen: bool = !INTERNAL,
-    target_frame_rate: u32 = 120,
+    frame_rate: FrameRateSetting = .vsync(1),
+};
+
+/// The type of frame rate that the executable applies. The `vsync` setting can fail, in that case it will  fall back
+/// to `fixed` if a `target_frame_rate` has been specified, otherwise it will fall back to `unconstrained`.
+///
+/// * `vsync` uses `vsync_interval`, see `SDL_SetRenderVSync` for details on the values.
+/// * `fixed` uses `target_frame_rate`.
+/// * `unconstrained` applies no limit, this is useful if you want to control frame pacing manually.
+const FrameRateSettingType = enum(u32) {
+    vsync,
+    fixed,
+    unconstrained,
+};
+
+/// Used to configure the frame rate that the executable applies.
+pub const FrameRateSetting = extern struct {
+    type: FrameRateSettingType,
+    vsync_interval: u32 = 0,
+    target_frame_rate: u32 = 0,
+
+    pub fn vsync(vsync_interval: u32) FrameRateSetting {
+        return .{ .type = .vsync, .vsync_interval = vsync_interval };
+    }
+
+    pub fn vsyncOrUnconstrained(vsync_interval: u32) FrameRateSetting {
+        return vsync(vsync_interval);
+    }
+
+    pub fn vsyncOrFixed(vsync_interval: u32, target_frame_rate: u32) FrameRateSetting {
+        return .{ .type = .vsync, .vsync_interval = vsync_interval, .target_frame_rate = target_frame_rate };
+    }
+
+    pub fn fixed(target: u32) FrameRateSetting {
+        return .{ .type = .fixed, .target_frame_rate = target };
+    }
+
+    pub fn unconstrained() FrameRateSetting {
+        return .{ .type = .unconstrained };
+    }
 };
 
 /// List of dependency sets available to receive on startup.

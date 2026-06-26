@@ -40,8 +40,7 @@ pub fn main(init: std.process.Init) !void {
         return err;
     };
 
-    const game_settings: GameLib.Settings = game.getSettings();
-    const target_frame_time: u64 = @trunc(1000 / @as(f32, @floatFromInt(game_settings.target_frame_rate)));
+    var game_settings: GameLib.Settings = game.getSettings();
 
     if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO | sdl.SDL_INIT_EVENTS)) {
         @panic("SDL_Init failed.");
@@ -179,6 +178,27 @@ pub fn main(init: std.process.Init) !void {
         initChangeTimes(allocator, init.io);
     }
 
+    // Setup frame rate.
+    if (game_settings.frame_rate.type == .vsync) {
+        if (sdl.SDL_SetRenderVSync(game_renderer, @intCast(game_settings.frame_rate.vsync_interval)) == false) {
+            std.log.info("Failed to enabled VSync: {s}", .{sdl.SDL_GetError()});
+            if (game_settings.frame_rate.target_frame_rate > 0) {
+                game_settings.frame_rate.type = .fixed;
+                std.log.info(
+                    "Frame rate type fallback: {t} at {d} fps",
+                    .{ game_settings.frame_rate.type, game_settings.frame_rate.target_frame_rate },
+                );
+            } else {
+                game_settings.frame_rate.type = .unconstrained;
+                std.log.info("Frame rate type fallback: {t}", .{game_settings.frame_rate.type});
+            }
+        }
+    }
+    const target_frame_time: u64 = if (game_settings.frame_rate.type == .fixed)
+        @trunc(1000 / @as(f32, @floatFromInt(game_settings.frame_rate.target_frame_rate)))
+    else
+        0;
+
     var previous_frame_start_time: u64 = 0;
     var frame_start_time: u64 = 0;
     var frame_elapsed_time: u64 = 0;
@@ -236,7 +256,7 @@ pub fn main(init: std.process.Init) !void {
 
         frame_elapsed_time = sdl.SDL_GetTicks() - frame_start_time;
 
-        if (!INTERNAL) {
+        if (game_settings.frame_rate.type == .fixed) {
             if (frame_elapsed_time < target_frame_time) {
                 sdl.SDL_Delay(@intCast(target_frame_time - frame_elapsed_time));
             }
