@@ -19,7 +19,7 @@ The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 * Added access to internal Imgui functions via `imgui.internal`. Use these functions sparingly as the API may change in future versions of Imgui.
 * Added the ability to configure the frame rate by including a `GameLib.FrameRateSetting` in the `GameLib.Settings`. It allows picking between vsync (with fallback since it can fail), fixed and unconstrained.
 ### Changed
-* Updated SDL to version 3.4.10.
+* Updated SDL to version 3.4.12.
 * The imgui.ini is now placed in the same directory as the executable, regardless of where it was launched from.
 * The default setting for frame rate is now vsync on every frame, previously it was unconstrained in internal builds and fixed to 120 FPS in non-internal builds.
 ### Fixed
