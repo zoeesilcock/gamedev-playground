@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const Translator = @import("translate_c").Translator;
+
 const EXAMPLE_PATHS = [_][]const u8{
     "examples/template",
     "examples/diamonds",
@@ -289,15 +291,17 @@ fn linkSDL(
     dest_dir: std.Build.Step.InstallArtifact.Options.Dir,
 ) void {
     if (getSDL(b, target, optimize)) |sdl_lib| {
-        const translate_c = b.addTranslateC(.{
-            .root_source_file = b.path("src/lib/sdl.h"),
+        const translate_c = b.dependency("translate_c", .{});
+        const t: Translator = .init(translate_c, .{
+            .c_source_file = b.path("src/lib/sdl.h"),
             .target = target,
             .optimize = optimize,
+            .default_init = true,
         });
         if (getSDLIncludePath(b, target, optimize)) |sdl_include_path| {
-            translate_c.addIncludePath(sdl_include_path);
+            t.addIncludePath(sdl_include_path);
         }
-        module.addImport("sdl_c", translate_c.createModule());
+        module.addImport("sdl_c", t.mod);
 
         module.linkLibrary(sdl_lib);
         install_step.dependOn(&client_b.addInstallArtifact(sdl_lib, .{ .dest_dir = dest_dir }).step);
@@ -426,15 +430,16 @@ fn createImGuiModule(
 
             install_step.dependOn(&b.addInstallArtifact(dcimgui_sdl, .{}).step);
 
-            const translate_c = b.addTranslateC(.{
-                .root_source_file = b.path("src/lib/imgui.h"),
+            const translate_c = b.dependency("translate_c", .{});
+            const t: Translator = .init(translate_c, .{
+                .c_source_file = b.path("src/lib/imgui.h"),
                 .target = target,
                 .optimize = optimize,
             });
-            translate_c.addIncludePath(dear_bindings_dep.path(""));
-            translate_c.addIncludePath(imgui_dep.path("."));
+            t.addIncludePath(dear_bindings_dep.path(""));
+            t.addIncludePath(imgui_dep.path("."));
 
-            imgui_mod = translate_c.createModule();
+            imgui_mod = t.mod;
             imgui_mod.?.linkLibrary(dcimgui_sdl);
         }
     }

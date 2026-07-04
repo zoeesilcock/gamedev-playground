@@ -19,6 +19,10 @@
             .hash = "N-V-__8AAGoBZQQ8m53uq8K_fEHmzU67Xj4Khn3n2IFidY5-",
             .lazy = true,
         },
+        .translate_c = .{
+            .url = "git+https://codeberg.org/ziglang/translate-c#3da873cacdd7e9190fe1cf40372ddf5387c970ea",
+            .hash = "translate_c-0.0.0-Q_BUWktLBwBO7VLbmrOKUcAMRtE5fmOxI35189X5XbJs",
+        },
     },
     .paths = .{
         "build.zig",
