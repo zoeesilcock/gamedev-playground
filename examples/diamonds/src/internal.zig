@@ -459,7 +459,7 @@ pub fn drawDebugUI(state: *State) void {
             _ = imgui.c.ImGui_Begin("Game state", null, imgui.c.ImGuiWindowFlags_NoFocusOnAppearing);
             defer imgui.c.ImGui_End();
 
-            flint.internal.inspectStruct(state, &.{ "io", "allocator", "arena" }, false, &inputCustomTypes);
+            flint.internal.inspectStruct(state, &.{ "io", "allocator", "arena" }, false, &.{}, &inputCustomTypes);
         }
 
         {
@@ -474,7 +474,7 @@ pub fn drawDebugUI(state: *State) void {
             defer imgui.c.ImGui_End();
 
             const selected_entity: ?*Entity = state.getEntity(state.internal.selected_entity_id);
-            flint.internal.inspectStruct(selected_entity, &.{"is_in_use"}, true, &inputCustomTypes);
+            flint.internal.inspectStruct(selected_entity, &.{"is_in_use"}, true, &.{}, &inputCustomTypes);
         }
 
         state.dependencies.internal.memory_usage_window.draw();
