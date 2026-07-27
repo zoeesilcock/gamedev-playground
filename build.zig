@@ -447,15 +447,10 @@ fn buildNewExecutable(
     build_options_mod: *std.Build.Module,
     target: std.Build.ResolvedTarget,
 ) void {
-    const new_optimize = b.option(
-        std.builtin.OptimizeMode,
-        "new_optimize",
-        "optimization mode for the new project generator (default: ReleaseSafe)",
-    ) orelse .ReleaseSafe;
     const module = b.createModule(.{
         .root_source_file = b.path("src/new.zig"),
         .target = target,
-        .optimize = new_optimize,
+        .optimize = .safe,
     });
     module.addImport("build_options", build_options_mod);
     const new_exe = b.addExecutable(.{
