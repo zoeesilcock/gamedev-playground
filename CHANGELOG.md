@@ -18,6 +18,7 @@ The format is roughly speaking 0.MAJOR.MINOR.PATCH.
 ### Added
 * Added access to internal Imgui functions via `imgui.internal`. Use these functions sparingly as the API may change in future versions of Imgui.
 * Added the ability to configure the frame rate by including a `GameLib.FrameRateSetting` in the `GameLib.Settings`. It allows picking between vsync (with fallback since it can fail), fixed and unconstrained.
+* Added a wrapper around `std.Io.Dir.createFile` to allow creating files relative to the location of the executable.
 ### Changed
 * Updated SDL to version 3.4.12.
 * The imgui.ini is now placed in the same directory as the executable, regardless of where it was launched from.

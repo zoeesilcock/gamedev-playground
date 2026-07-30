@@ -896,6 +896,11 @@ pub fn loadLevel(state: *State, name: []const u8) !void {
     var buf: [LEVEL_NAME_BUFFER_SIZE * 2]u8 = undefined;
     const path = try std.fmt.bufPrint(&buf, "assets/{s}.lvl", .{name});
     const file = try flint.fs.openFileRelative(state.dependencies.io.*, path, .{ .mode = .read_only });
+    defer file.close(state.dependencies.io.*);
+
+    const test_path = try std.fmt.bufPrint(&buf, "assets/{s}_test.lvl", .{name});
+    const test_file = try flint.fs.createFileRelative(state.dependencies.io.*, test_path, .{});
+    defer test_file.close(state.dependencies.io.*);
 
     var reader_buf: [10 * 1024]u8 = undefined;
     var file_reader = file.reader(state.dependencies.io.*, &reader_buf);

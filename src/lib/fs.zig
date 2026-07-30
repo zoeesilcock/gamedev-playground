@@ -35,6 +35,23 @@ pub fn openFileRelative(io: std.Io, sub_path: []const u8, flags: std.Io.File.Ope
     }
 }
 
+/// Creates a file relative to the current working directory.
+/// Falls back to the executable directory if the sub_path isn't found in the current working directory.
+pub fn createFileRelative(io: std.Io, sub_path: []const u8, flags: std.Io.Dir.CreateFileOptions) !std.Io.File {
+    if (std.Io.Dir.cwd().createFile(io, sub_path, flags)) |file| {
+        return file;
+    } else |_| {
+        var buffer: [1024]u8 = undefined;
+        const path_length = try std.process.executableDirPath(io, &buffer);
+        const exe_path = buffer[0..path_length];
+
+        var exe_dir = try std.Io.Dir.cwd().openDir(io, exe_path, .{});
+        defer exe_dir.close(io);
+
+        return try exe_dir.createFile(io, sub_path, flags);
+    }
+}
+
 /// Returns the provided path if it exists relative to the current working directory, otherwise it returns the path
 /// relative to the executable directory. Allocates memory for the result, which must be freed by the caller.
 pub fn getFilePathRelative(io: std.Io, sub_path: []const u8, allocator: std.mem.Allocator) ![]const u8 {
