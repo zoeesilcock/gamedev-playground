@@ -10,13 +10,13 @@
             .lazy = true,
         },
         .imgui = .{
-            .url = "git+https://github.com/ocornut/imgui.git#v1.92.8-docking",
-            .hash = "N-V-__8AAKmrgQA-iEFHovAwDtF8olu0VkgmKg_3T15wRPzJ",
+            .url = "git+https://github.com/ocornut/imgui.git#v1.92.9b-docking",
+            .hash = "N-V-__8AAMiwhADTFf225fEZAyMZ0m0uy3MKKpZbqgX5260R",
             .lazy = true,
         },
         .dear_bindings = .{
-            .url = "https://github.com/dearimgui/dear_bindings/releases/download/DearBindings_v0.21_ImGui_v1.92.8-docking/DearBindings_v0.21_ImGui_v1.92.8-docking.zip",
-            .hash = "N-V-__8AAHjIWwRO78zqgyaTG2ySwMVTr8uoNcPQRwY6NHKC",
+            .url = "https://github.com/dearimgui/dear_bindings/releases/download/DearBindings_v0.21_ImGui_v1.92.9b-docking/DearBindings_v0.21_ImGui_v1.92.9b-docking.zip",
+            .hash = "N-V-__8AAGoBZQQ8m53uq8K_fEHmzU67Xj4Khn3n2IFidY5-",
             .lazy = true,
         },
     },
